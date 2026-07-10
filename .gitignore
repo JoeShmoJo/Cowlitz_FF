@@ -1,5 +1,5 @@
 
 RFC_ARCHIVE/data/*
-!RFC_ARCHIVE/data/.gitkeep
+!RFC_ARCHIVE/data/README.txt
 RFC_ARCHIVE/output/*
-!RFC_ARCHIVE/output/.gitkeep
+!RFC_ARCHIVE/output/README.txt
