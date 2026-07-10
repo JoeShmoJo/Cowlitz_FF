@@ -1,0 +1,5 @@
+
+RFC_ARCHIVE/data/*
+!RFC_ARCHIVE/data/.gitkeep
+RFC_ARCHIVE/output/*
+!RFC_ARCHIVE/output/.gitkeep
