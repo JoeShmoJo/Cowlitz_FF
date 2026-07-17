@@ -103,6 +103,23 @@ def read_dss_paths(dss_path, pathnames):
     return results
 
 
+def _interval_to_minutes(interval):
+    """pydsstools wants tsc.interval as integer minutes; accept either an
+    int or a DSS E-part style string like '1Hour', '15Minute', '1Day'."""
+    if isinstance(interval, (int, np.integer, float)):
+        return int(interval)
+    import re
+    m = re.match(r"(\d+)\s*([A-Za-z]+)", str(interval).strip())
+    if not m:
+        raise ValueError(f"Unrecognized interval: {interval!r}")
+    n, unit = int(m.group(1)), m.group(2).upper().rstrip("S")
+    per = {"MIN": 1, "MINUTE": 1, "HOUR": 60, "DAY": 1440,
+           "WEEK": 10080, "MON": 43200, "MONTH": 43200, "YEAR": 525600}
+    if unit not in per:
+        raise ValueError(f"Unrecognized interval unit: {interval!r}")
+    return n * per[unit]
+
+
 def write_regular_ts(dss_path, pathname, series, interval, units=None, dtype=None):
     """
     Write a regular-interval pandas Series to a DSS file.
@@ -134,7 +151,7 @@ def write_regular_ts(dss_path, pathname, series, interval, units=None, dtype=Non
     tsc.numberValues = len(series)
     tsc.units = units
     tsc.type = dtype
-    tsc.interval = interval
+    tsc.interval = _interval_to_minutes(interval)
     tsc.values = series.values.astype(float)
 
     with HecDss.Open(dss_path) as fid:
