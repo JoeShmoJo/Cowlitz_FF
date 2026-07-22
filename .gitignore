@@ -8,3 +8,5 @@ ProjectTemplate/data/*
 !ProjectTemplate/data/README.txt
 ProjectTemplate/output/*
 !ProjectTemplate/output/README.txt
+__pycache__/
+*.pyc
