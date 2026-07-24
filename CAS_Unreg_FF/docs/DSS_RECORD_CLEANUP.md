@@ -14,7 +14,8 @@ space (and remnants of old renames) until the file is squeezed.
 
 | Record | Used by |
 |---|---|
-| //MOS/ELEV//1HOUR/CWMS-CLEAN/ | Build_Hourly_Holdout_Unreg, PeakDiff_Storage_Regression, Unreg_Durations_MassBalance (daily mean). HAND-EDITED, irreplaceable. |
+| //MOS/ELEV//1HOUR/CWMS-CLEAN/ | Build_Hourly_Holdout_Unreg (gated day-by-day by the STOR-COUNT screen + overrides). HAND-EDITED, irreplaceable. |
+| //MOS/ELEV//1DAY/USGS/ | Daily MOS elevation -- Unreg_Durations_MassBalance and PeakDiff_Storage_Regression dS predictors |
 | //MOS/STOR//1HOUR/CWMS/ | Holdout QC count, MOS_STOR_RECORD_COUNT, Reg_Unreg inflow calc |
 | //MOS/ELEV//1HOUR/CWMS/ | Raw source the hand-cleaning started from; re-downloadable but cheap provenance — keep |
 | /COWLITZ RIVER AT CASTLE ROCK, WA/14243000/FLOW//1HOUR/USGS/ | Holdout, WY_Peak_Records, Reg_Unreg |

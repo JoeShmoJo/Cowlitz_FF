@@ -50,9 +50,13 @@ owns obsData.dss and the download script.
 - No record duplication across projects — cross-project reads instead.
 - `Cowlitz_FF_DataPrep/data/obsData.dss` (committed) = frozen memo-01
   snapshot; do not confuse with the live store.
-- Daily elevation for the regression + 3/5-day mass balance = daily
-  mean of hourly CWMS-CLEAN (legacy IRVZZAZD_CLEANED daily record is
-  retired; deletion list in CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md).
+- Daily MOS elevation for the regression + daily mass balance =
+  //MOS/ELEV//1DAY/USGS/ (separate daily record, NOT derived from
+  hourly). Hourly CWMS-CLEAN is used ONLY in the holdout workflow,
+  gated day-by-day by STOR-COUNT + overrides -- much of the post-1974
+  hourly record is unusable at hourly resolution. Legacy
+  IRVZZAZD_CLEANED daily record retired; deletion list in
+  CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md.
 - data/ref_in = source records only; output/ref_out = everything
   scripts write (final products included).
 - Planned, not implemented: derive MOS inflows for ResSim from the

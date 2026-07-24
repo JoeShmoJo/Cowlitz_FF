@@ -56,8 +56,12 @@ observed data into this file. Backup accordingly.
    Applies the fit to gap WYs that have a good regulated peak (hourly
    or USGS peak record) but no holdout-based unreg peak.
 4. `Unreg_Durations_MassBalance.py` -- daily mass-balance unreg
-   (CAS + daily MOS holdout), 1/3/5-day WY maxima. Used for the 3- and
-   5-day durations; no routing needed at daily resolution.
+   (CAS daily + dS from the daily MOS elevation record
+   //MOS/ELEV//1DAY/USGS/), 1/3/5-day WY maxima. Used for the 3- and
+   5-day durations; no routing needed at daily resolution. The daily
+   record is separate from -- not derived from -- the hourly
+   CWMS-CLEAN, which is used only in the holdout workflow under its
+   STOR-COUNT day-by-day screen.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
    and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
    table `wy_record_ssp.csv`. Source rules: pre-1968, Peak from the

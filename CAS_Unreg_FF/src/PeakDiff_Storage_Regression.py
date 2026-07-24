@@ -6,9 +6,9 @@ WY_Peak_Records.py) against the daily storage change at Mossyrock, and
 apply the winning regression to estimate an unregulated peak for WYs
 that have a good regulated peak but no usable hourly holdout.
 
-Storage-change predictors are computed from a CLEAN DAILY MOS elevation
-record (much cleaner than the hourly record), converted to storage with
-the official 2014 rating. For each WY, within a window around the
+Storage-change predictors are computed from the daily MOS elevation
+record (//MOS/ELEV//1DAY/USGS/ -- much cleaner than the hourly
+telemetry), converted to storage with the official 2014 rating. For each WY, within a window around the
 regulated peak date, several candidate metrics are computed:
 
     dS_1day   max 1-day storage increase
@@ -68,16 +68,16 @@ from Build_Hourly_Holdout_Unreg import elev_to_stor  # noqa: E402
 DSS_OBS = os.path.join(root_dir, "obsData.dss")
 PEAKS_CSV = os.path.join(peaks_dir, "wy_peak_records.csv")
 
-# Daily MOS elevation source for the storage-change predictors.
-#   Default: daily mean of the hand-cleaned hourly record (CWMS-CLEAN) --
-#   the record actually maintained under the current methodology.
-#   If a separate, cleaner pre-computed DAILY record is designated later,
-#   set PATH_MOS_ELEV_DAILY and flip DAILY_FROM_HOURLY_CLEAN to False.
-#   (The legacy //MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/ record is
-#   retired and slated for deletion -- do not point here.)
-DAILY_FROM_HOURLY_CLEAN = True
+# Daily MOS elevation for the storage-change predictors: the daily
+# USGS record -- a separate, cleaner record, NOT derived from the
+# hourly CWMS-CLEAN telemetry (much of the post-1974 hourly record is
+# not usable at hourly resolution; CWMS-CLEAN is used only in the
+# holdout workflow, gated day-by-day by the STOR-COUNT screen and
+# manual overrides). The hourly-derived option remains available via
+# the flag for comparison runs only.
+DAILY_FROM_HOURLY_CLEAN = False
 PATH_MOS_ELEV_HOURLY_CLEAN = "//MOS/ELEV//1HOUR/CWMS-CLEAN/"
-PATH_MOS_ELEV_DAILY = ""  # only used when DAILY_FROM_HOURLY_CLEAN = False
+PATH_MOS_ELEV_DAILY = "//MOS/ELEV//1DAY/USGS/"
 
 # Optional fallback source of regulated peaks for gap WYs where the USGS
 # hourly record is not good either (USGS instantaneous annual peaks).
