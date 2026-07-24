@@ -271,23 +271,34 @@ def build_table(reg, unreg):
 
 
 def main():
+    # Guard BEFORE opening: pydsstools silently CREATES an empty DSS file
+    # at a missing path, and later runs then "successfully" read nothing.
+    if not os.path.isfile(DSS_OBS):
+        raise FileNotFoundError(
+            f"obsData.dss not found at {DSS_OBS}. If your local data is "
+            "still under Basic_CAS_Unreg\\data, move it to "
+            "CAS_Unreg_FF\\data. Delete any small stray obsData.dss a "
+            "failed run auto-created before copying the real file in.")
     print(f"Reading regulated hourly from {DSS_OBS}")
     reg = read_series(DSS_OBS, PATH_CAS_REG)
     print(f"  {len(reg)} values")
-    print(f"Reading unreg hourly from {DSS_UNREG}")
-    unreg = read_series(DSS_UNREG, PATH_CAS_UNREG)
-    print(f"  {len(unreg)} values")
+    if os.path.isfile(DSS_UNREG):
+        print(f"Reading unreg hourly from {DSS_UNREG}")
+        unreg = read_series(DSS_UNREG, PATH_CAS_UNREG)
+        print(f"  {len(unreg)} values")
+    else:
+        print(f"  NOTE: {DSS_UNREG} not found -- peaks will be reg-only; "
+              "run Build_Hourly_Holdout_Unreg.py first.")
+        unreg = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
 
     if reg.empty:
         raise RuntimeError(
-            f"Regulated record came back EMPTY: {PATH_CAS_REG} in {DSS_OBS}. "
-            "Verify obsData.dss actually lives there (did your local data "
-            "move from Basic_CAS_Unreg\\data to CAS_Unreg_FF\\data?) and "
-            "delete any small stray obsData.dss that a failed run "
-            "auto-created before copying the real file in.")
+            f"Regulated record came back EMPTY: {PATH_CAS_REG} in "
+            f"{DSS_OBS}. The file exists but does not contain that "
+            "pathname -- check the record label in DSSVue (F part, "
+            "spacing, station name) against PATH_CAS_REG.")
     if unreg.empty:
-        print("  NOTE: unreg record empty -- peaks will be reg-only; "
-              f"run Build_Hourly_Holdout_Unreg.py first ({DSS_UNREG})")
+        print("  NOTE: unreg record empty -- peaks will be reg-only.")
 
     if EXCLUDE_RANGES:
         print("Applying manual exclusion ranges...")
@@ -311,6 +322,7 @@ def main():
                          / 3600.0, 1)
         gaps["hrs_gap_to_peak"] = gaps.apply(_dist, axis=1)
         gaps = gaps.sort_values(["WY", "series", "gap_start"])
+    os.makedirs(os.path.dirname(OUT_GAPS_CSV), exist_ok=True)
     gaps.to_csv(OUT_GAPS_CSV, index=False)
     print(f"Missing-window report: {len(gaps)} gaps >= {MIN_GAP_HRS} hrs "
           f"-> {OUT_GAPS_CSV}")
@@ -337,6 +349,7 @@ def main():
         table = table.drop(index=dropped)
         print(f"OMITTED WYs (manual): {dropped}")
 
+    os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
     table.to_csv(OUT_CSV)
     print(f"Wrote {len(table)} WY rows -> {OUT_CSV}")
 
