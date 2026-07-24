@@ -32,7 +32,8 @@ Run order: `#DataDownload.py` -> `Build_Hourly_Holdout_Unreg.py`
 `WY_Peak_Records.py` -> `PeakDiff_Storage_Regression.py` (ADOPTED
 predictor: dS_2day) -> `Unreg_Durations_MassBalance.py` (3/5-day) ->
 `Write_SSP_Record.py` (final assembly -> output/CAS_Unreg_SSP.dss +
-wy_record_ssp.csv audit table). QC: `MOS_STOR_RECORD_COUNT.py`,
+wy_record_ssp.csv audit table; pre-reg WY<=1968 uses USGS peak record
++ durations straight from the USGS daily record). QC: `MOS_STOR_RECORD_COUNT.py`,
 `MOS_CASTLEROCK_PEAK_DATE_COMPARE.py`. CAS_Unreg_FF runs FIRST; it
 owns obsData.dss and the download script.
 

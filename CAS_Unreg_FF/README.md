@@ -59,9 +59,13 @@ observed data into this file. Backup accordingly.
    (CAS + daily MOS holdout), 1/3/5-day WY maxima. Used for the 3- and
    5-day durations; no routing needed at daily resolution.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
-   (hourly peaks + dS_2day regression fills + mass-balance durations,
-   with source tags) and write `output/CAS_Unreg_SSP.dss` for HEC-SSP,
-   plus the audit table `wy_record_ssp.csv`.
+   and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
+   table `wy_record_ssp.csv`. Pre-regulation WYs (<= 1968, before
+   Mossyrock closure): peaks from the USGS instantaneous peak record,
+   1/3/5-day computed directly from the USGS daily record (both
+   unregulated by definition pre-dam). Regulated era: hourly peaks +
+   dS_2day regression fills + mass-balance durations. Every value is
+   source-tagged.
 
 QC / reference:
 - `MOS_STOR_RECORD_COUNT.py` -- daily count of valid hourly STOR values

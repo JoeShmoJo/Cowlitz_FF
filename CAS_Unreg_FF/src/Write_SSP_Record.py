@@ -9,15 +9,23 @@ write it to a DSS file for import into HEC-SSP. Run this LAST, after:
     4. Unreg_Durations_MassBalance.py  (unreg_durations_massbalance.csv)
 
 Sources per duration:
-    Peak      unreg_peak_1hr from the hourly record (holdout WYs);
-              gap WYs filled from the adopted dS_2day regression
-              estimates (unreg_peak_estimates.csv). Source column tags
-              which is which.
-    One_day   unreg_peak_1day from the hourly record (holdout WYs only;
-              no regression fill is defined for 1-day).
-    Three_Day daily mass balance (CAS daily + daily MOS holdout from
-    Five_Day  the CWMS-CLEAN daily means), restricted to WYs whose
-              flood season is complete enough (MAX_SEASON_MISSING_DAYS).
+    Pre-regulation WYs (<= PRE_REG_LAST_WY, before Mossyrock closure):
+        Peak            USGS observed instantaneous annual peaks
+                        (unregulated by definition pre-dam)
+        One/Three/Five  rolling 1/3/5-day maxima computed directly from
+                        the USGS daily record, for WYs whose Oct-Mar
+                        season is complete enough
+    Regulated-era WYs:
+        Peak      unreg_peak_1hr from the hourly record (holdout WYs);
+                  gap WYs filled from the adopted dS_2day regression
+                  estimates (unreg_peak_estimates.csv). Source column
+                  tags which is which.
+        One_day   unreg_peak_1day from the hourly record (holdout WYs
+                  only; no regression fill is defined for 1-day).
+        Three_Day daily mass balance (CAS daily + daily MOS holdout from
+        Five_Day  the CWMS-CLEAN daily means), restricted to WYs whose
+                  flood season is complete enough
+                  (MAX_SEASON_MISSING_DAYS).
 
 Outputs:
     ../output/wy_record_ssp.csv    audit table (one row per WY, all
@@ -53,9 +61,22 @@ MASSBAL_CSV = os.path.join(output_dir, "unreg_durations_massbalance.csv")
 OUT_CSV = os.path.join(output_dir, "wy_record_ssp.csv")
 OUT_DSS = os.path.join(output_dir, "CAS_Unreg_SSP.dss")
 
-# WYs from the mass-balance table qualify for 3/5-day only if their
-# flood season has at most this many missing days.
+# WYs from the mass-balance table (and pre-reg WYs from the daily
+# record) qualify for durations only if their Oct-Mar flood season has
+# at most this many missing days.
 MAX_SEASON_MISSING_DAYS = 0
+
+# --- pre-regulation component (WY <= PRE_REG_LAST_WY) ---
+PRE_REG_LAST_WY = 1968  # last pre-regulation WY (Mossyrock closure Dec 1968;
+                        # WY1927-1968 treated as unregulated, matching the
+                        # 2009 study / archived Build_Simplified convention)
+# USGS observed instantaneous annual peaks (archived study data; cross-
+# project read -- unregulated by definition for the pre-dam years)
+PRE_REG_PEAKS_CSV = os.path.join(REPO_ROOT, "Cowlitz_FF_DataPrep", "data",
+                                 "CastleRock_USGS_peaks.csv")
+# USGS daily record at Castle Rock for the pre-reg 1/3/5-day durations
+DAILY_DSS = os.path.join(PROJECT_DIR, "data", "obsData.dss")
+PATH_CAS_DAILY = "/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW//1DAY/USGS/"
 
 # Screen for the hourly-derived peaks: require at least this Oct-Mar
 # coverage fraction in the unreg record (column from WY_Peak_Records).
@@ -71,9 +92,69 @@ PATH_TMPL = "//CASTLEROCK/FLOW-UNREG//IR-YEAR/{durf}-MOS-HOLDOUT/"
 # FUNCTION DEFINITIONS
 
 
-def assemble_record(peaks, estimates, massbal):
-    """Merge the three sources into one WY table with source tags."""
-    years = sorted(set(peaks.index) | set(estimates.index) | set(massbal.index))
+def read_daily():
+    """USGS daily flow at Castle Rock as a Series (sentinels dropped)."""
+    ts = None
+    with HecDss.Open(DAILY_DSS, version=6) as dss:
+        ts = dss.read_ts(PATH_CAS_DAILY)
+    s = pd.Series(ts.values, index=pd.to_datetime(ts.pytimes))
+    s = pd.to_numeric(s, errors="coerce")
+    s = s[s > -900]
+    s.index = s.index.normalize()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s
+
+
+def prereg_peaks():
+    """USGS instantaneous annual peaks for pre-regulation WYs."""
+    if not os.path.exists(PRE_REG_PEAKS_CSV):
+        print(f"  WARNING: {PRE_REG_PEAKS_CSV} not found; "
+              "no pre-reg peaks will be written")
+        return pd.Series(dtype=float)
+    df = pd.read_csv(PRE_REG_PEAKS_CSV)
+    df = df[df["WY"] <= PRE_REG_LAST_WY]
+    return df.set_index("WY")["Peak_cfs"].astype(float)
+
+
+def prereg_durations(daily):
+    """1/3/5-day WY maxima from the USGS daily record for pre-reg WYs
+    with a complete-enough Oct-Mar season. Returns DataFrame indexed by
+    WY with One_day/Three_Day/Five_Day."""
+    wy = daily.index.year + (daily.index.month >= 10).astype(int)
+    rows = []
+    for y in sorted(set(wy)):
+        if y > PRE_REG_LAST_WY:
+            continue
+        grp = daily[wy == y]
+        season = pd.date_range(f"{y-1}-10-01", f"{y}-03-31", freq="1D")
+        missing = len(season) - grp.index.isin(season).sum()
+        if missing > MAX_SEASON_MISSING_DAYS:
+            print(f"    pre-reg WY{y}: {missing} flood-season days "
+                  "missing -- durations skipped")
+            continue
+        r = {"WY": y}
+        for label, win in (("One_day", 1), ("Three_Day", 3),
+                           ("Five_Day", 5)):
+            roll = grp.rolling(win, min_periods=win).mean()
+            r[label] = roll.max()
+        rows.append(r)
+    if not rows:
+        return pd.DataFrame(
+            columns=["One_day", "Three_Day", "Five_Day"]).rename_axis("WY")
+    return pd.DataFrame(rows).set_index("WY")
+
+
+def assemble_record(peaks, estimates, massbal,
+                    prereg_pk=None, prereg_dur=None):
+    """Merge all sources into one WY table with source tags."""
+    if prereg_pk is None:
+        prereg_pk = pd.Series(dtype=float)
+    if prereg_dur is None:
+        prereg_dur = pd.DataFrame(
+            columns=["One_day", "Three_Day", "Five_Day"]).rename_axis("WY")
+    years = sorted(set(peaks.index) | set(estimates.index)
+                   | set(massbal.index) | set(prereg_pk.index)
+                   | set(prereg_dur.index))
     rows = []
     for wy in years:
         r = {"WY": wy, "Peak": np.nan, "Peak_Source": "",
@@ -99,6 +180,22 @@ def assemble_record(peaks, estimates, massbal):
             if np.isfinite(e.get("unreg_peak_est", np.nan)):
                 r["Peak"] = e["unreg_peak_est"]
                 r["Peak_Source"] = "dS2day_regression"
+
+        # --- pre-regulation WYs: observed USGS peaks + daily durations ---
+        if wy <= PRE_REG_LAST_WY:
+            if wy in prereg_pk.index and np.isfinite(prereg_pk[wy]):
+                r["Peak"] = prereg_pk[wy]
+                r["Peak_Source"] = "usgs_peak_prereg"
+            if wy in prereg_dur.index:
+                d = prereg_dur.loc[wy]
+                for c in ("One_day", "Three_Day", "Five_Day"):
+                    if np.isfinite(d.get(c, np.nan)):
+                        r[c] = d[c]
+                r["One_day_Source"] = "usgs_daily_prereg" \
+                    if np.isfinite(r["One_day"]) else r["One_day_Source"]
+                r["Durations_Source"] = "usgs_daily_prereg"
+            rows.append(r)
+            continue
 
         # --- 3/5-day from daily mass balance ---
         if wy in massbal.index:
@@ -159,7 +256,15 @@ def main():
     print(f"Reading {MASSBAL_CSV}")
     massbal = pd.read_csv(MASSBAL_CSV, index_col="WY")
 
-    table = assemble_record(peaks, estimates, massbal)
+    print(f"Reading pre-reg peaks {PRE_REG_PEAKS_CSV}")
+    pre_pk = prereg_peaks()
+    print(f"  {len(pre_pk)} pre-reg USGS peaks (WY<= {PRE_REG_LAST_WY})")
+    print(f"Reading daily record for pre-reg durations from {DAILY_DSS}")
+    daily = read_daily()
+    pre_dur = prereg_durations(daily)
+    print(f"  {len(pre_dur)} pre-reg WYs with complete-season durations")
+
+    table = assemble_record(peaks, estimates, massbal, pre_pk, pre_dur)
     table.to_csv(OUT_CSV)
     print(f"\nAssembled {len(table)} WYs -> {OUT_CSV}")
     for col in ("Peak", "One_day", "Three_Day", "Five_Day"):
