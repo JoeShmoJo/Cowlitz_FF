@@ -71,7 +71,7 @@ MAX_SEASON_MISSING_DAYS = 0
 # October, ~32 flood-season days/WY). Assumption, to be stated in the
 # memo: the recorded season captured the annual peaks, so the daily
 # holdout added to the recorded flows yields valid 1/3/5-day maxima.
-SEASON_OVERRIDE_WYS = list(range(1992, 2001)) + [2026]
+SEASON_OVERRIDE_WYS = list(range(1974, 2026))  
 
 # Report every WY touched by the data, including partials, for transparency
 REPORT_ALL_WYS = True
