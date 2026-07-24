@@ -91,6 +91,12 @@ OUT_EST_CSV = os.path.join(output_dir, "unreg_peak_estimates.csv")
 OUT_PNG = os.path.join(diag_dir, "peakdiff_storage_regression.png")
 
 WINDOW_DAYS = 7            # +/- days around the reg peak date to search for dS
+MIN_UNREG_COVERAGE = 0.9   # matches Write_SSP_Record: hourly unreg peaks below
+                           # this Oct-Mar coverage are rejected there, so such
+                           # WYs are treated as GAPS here and filled by the
+                           # regression (they may still appear in the fit set;
+                           # see the memo's open item on that review)
+REG_FILL_FIRST_WY = 1969   # regression fill applies to the regulated era only
 DS_WINDOWS = [1, 2, 3, 4]  # storage-change window lengths, days
 MAX_PEAK_OFFSET_HRS = 72   # exclude WYs whose reg/unreg peaks are farther
                            # apart than this (likely different storms)
@@ -176,12 +182,14 @@ def fit_ols(x, y):
 
 
 def load_usgs_peaks():
-    """Optional USGS instantaneous annual peaks (WY, peak_cfs, date)."""
+    """USGS instantaneous annual peaks: DataFrame indexed by WY with
+    Peak_cfs and Peak_Date. The Peak_Date matters -- it centers the dS
+    search window for WYs that never enter the hourly peak table."""
     if USGS_PEAKS_CSV is None or not os.path.exists(USGS_PEAKS_CSV):
-        return pd.DataFrame()
-    df = pd.read_csv(USGS_PEAKS_CSV)
-    df.columns = [c.strip().lower() for c in df.columns]
-    return df
+        return pd.DataFrame(
+            columns=["Peak_cfs", "Peak_Date"]).rename_axis("WY")
+    df = pd.read_csv(USGS_PEAKS_CSV, parse_dates=["Peak_Date"])
+    return df.set_index("WY")[["Peak_cfs", "Peak_Date"]]
 
 
 def plot_panels(pairs, fits):
@@ -224,13 +232,24 @@ def main():
     print(f"Reading clean daily MOS elevation from {DSS_OBS}")
     stor = read_daily_stor()
 
-    # --- storage-change metrics for every WY with a reg peak date ---
-    metric_rows = {}
-    for wy, row in peaks.iterrows():
-        metric_rows[wy] = ds_metrics(stor, row.get("reg_peak_1hr_time"))
+    usgs = load_usgs_peaks()
+
+    # --- storage-change metrics for every WY with ANY peak date:
+    # hourly reg peak time where the hourly table has one, else the
+    # USGS peak-record date (regulated era only) ---
+    all_wys = sorted(set(peaks.index)
+                     | set(usgs.index[usgs.index >= REG_FILL_FIRST_WY]))
+    date_map = {}
+    for wy in all_wys:
+        t = peaks["reg_peak_1hr_time"].get(wy, pd.NaT) \
+            if wy in peaks.index else pd.NaT
+        if pd.isna(t) and wy in usgs.index:
+            t = usgs.loc[wy, "Peak_Date"]
+        date_map[wy] = t
+    metric_rows = {wy: ds_metrics(stor, date_map[wy]) for wy in all_wys}
     metrics = pd.DataFrame.from_dict(metric_rows, orient="index")
     metrics.index.name = "WY"
-    table = peaks.join(metrics)
+    table = peaks.join(metrics)  # fit uses hourly-table years only
 
     # --- fit dataset: WYs with both peaks, same-storm screen ---
     fitset = table.dropna(subset=["reg_minus_unreg_1hr"])
@@ -263,27 +282,51 @@ def main():
     print(f"\nApplying predictor {pred_name} "
           f"(R\u00b2={f['r2']:.3f}) to gap WYs")
 
-    gaps = table[table["unreg_peak_1hr"].isna()].copy()
-    usgs = load_usgs_peaks()
+    # gap universe (regulated era, WY >= REG_FILL_FIRST_WY):
+    #   no_unreg      hourly table row exists but no unreg peak
+    #   low_coverage  unreg peak exists but Oct-Mar coverage below the
+    #                 assembly's screen (Write_SSP_Record rejects it)
+    #   no_hourly     WY only in the USGS peak record (hourly record
+    #                 hasn't started / has no row) -- e.g. WY1975-1986
+    cov = table["unreg_coverage_octmar"] \
+        if "unreg_coverage_octmar" in table.columns \
+        else pd.Series(np.nan, index=table.index)
+    no_unreg = set(table.index[table["unreg_peak_1hr"].isna()])
+    low_cov = set(table.index[table["unreg_peak_1hr"].notna()
+                              & (cov < MIN_UNREG_COVERAGE)])
+    csv_only = set(usgs.index[usgs.index >= REG_FILL_FIRST_WY]) \
+        - set(table.index)
+    gap_wys = sorted(y for y in (no_unreg | low_cov | csv_only)
+                     if y >= REG_FILL_FIRST_WY)
+    print(f"  gap WYs: {len(no_unreg)} no-unreg, {len(low_cov)} "
+          f"low-coverage(<{MIN_UNREG_COVERAGE}), {len(csv_only)} "
+          "USGS-peak-record-only")
+
     est_rows = []
-    for wy, row in gaps.iterrows():
-        reg_peak = row.get("reg_peak_1hr", np.nan)
-        source = "hourly_1hr_max"
-        if not np.isfinite(reg_peak) and len(usgs):
-            hit = usgs[usgs.iloc[:, 0] == wy]  # first col assumed WY
-            if len(hit):
-                num_cols = hit.select_dtypes("number").columns
-                if len(num_cols) > 1:
-                    reg_peak = float(hit.iloc[0][num_cols[1]])
-                    source = "usgs_peak_record"
-        x = row.get(pred_name, np.nan)
+    for wy in gap_wys:
+        if wy in table.index \
+                and np.isfinite(table["reg_peak_1hr"].get(wy, np.nan)):
+            reg_peak = float(table.loc[wy, "reg_peak_1hr"])
+            source = "hourly_1hr_max"
+        elif wy in usgs.index \
+                and np.isfinite(usgs.loc[wy, "Peak_cfs"]):
+            reg_peak = float(usgs.loc[wy, "Peak_cfs"])
+            source = "usgs_peak_record"
+        else:
+            continue
+        x = metrics[pred_name].get(wy, np.nan)
         if not (np.isfinite(reg_peak) and np.isfinite(x)):
+            print(f"    WY{wy}: reg peak available but no dS predictor "
+                  "(daily elevation window empty) -- not filled")
             continue
         diff_pred = f["slope"] * x + f["intercept"]
+        reason = ("no_hourly" if wy in csv_only else
+                  "low_coverage" if wy in low_cov else "no_unreg_peak")
         est_rows.append({
             "WY": wy,
             "reg_peak": reg_peak,
             "reg_peak_source": source,
+            "gap_reason": reason,
             pred_name: x,
             "predicted_reg_minus_unreg": diff_pred,
             "unreg_peak_est": reg_peak - diff_pred,
