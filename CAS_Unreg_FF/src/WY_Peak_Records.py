@@ -96,16 +96,30 @@ MIN_ONE_DAY_VALID = 20                 # need >= this many valid hrs in the 24-h
 
 def read_series(dss_file, pathname):
     """Read one hourly series from DSS with sentinel handling; returns a
-    pandas Series indexed by datetime (may be empty)."""
+    pandas Series with a guaranteed naive DatetimeIndex (may be empty)."""
     dss = HecDss.open(dss_file)
     try:
         df = dss.readDF(pathname)
     finally:
         dss.close()
     if df.empty:
-        return pd.Series(dtype=float)
+        print(f"    WARNING: empty read for {pathname} in {dss_file}")
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     s = df["value"]
-    s.index = pd.to_datetime(s.index)  # utilsDSS may return a plain Index
+    print(f"    index type from readDF: {type(s.index).__name__}, "
+          f"first values: {list(s.index[:2])}")
+    # element-wise coercion: survives object dtype, mixed types, tz
+    idx = pd.DatetimeIndex(
+        [pd.Timestamp(t) if not pd.isna(pd.Timestamp(t)) else pd.NaT
+         for t in pd.to_datetime(s.index, errors="coerce")])
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    s = s.copy()
+    s.index = idx
+    bad = int(s.index.isna().sum())
+    if bad:
+        print(f"    dropped {bad} rows with unparseable timestamps")
+    s = s[~s.index.isna()]
     s = s.mask((s <= -900.0))
     s = s[~s.index.duplicated(keep="last")].sort_index()
     return s
@@ -124,9 +138,10 @@ def season_only(s):
 def wy_hourly_peak(s):
     """Per-WY 1-hr max and its timestamp. Returns DataFrame indexed by WY
     with columns [peak, peak_time]."""
-    s = season_only(s.dropna())
+    s = s.dropna()
     if s.empty:
         return pd.DataFrame(columns=["peak", "peak_time"])
+    s = season_only(s)
     wy = water_year(s.index)
     out = {}
     for y in np.unique(wy):
