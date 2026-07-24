@@ -60,6 +60,11 @@ QC / reference:
 
 - `data/` and `output/` are local (gitignored); `ref_data/ref_in|out`
   hold small committed samples.
+- Input/output rule: `data/`+`ref_in/` hold SOURCE records only
+  (observed downloads + the hand-cleaned store); `output/`+`ref_out/`
+  hold everything scripts write, intermediates and final products
+  alike. See docs/DSS_RECORD_CLEANUP.md for the record-level cleanup
+  list and the one Reg_Unreg exception.
 - `data/obsData.dss` is the canonical live observed-data store, shared
   with CAS_Reg_Unreg (its scripts point here). Don't duplicate records
   across projects -- cross-project reads are preferred.
@@ -73,3 +78,5 @@ QC / reference:
   offsets before accepting them into the fit.
 - Brief memo in docs/ describes the methodology; update with regression
   results once adopted.
+- Prune retired DSS records per docs/DSS_RECORD_CLEANUP.md, then
+  squeeze obsData.dss.

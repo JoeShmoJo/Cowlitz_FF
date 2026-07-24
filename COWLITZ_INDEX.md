@@ -43,6 +43,11 @@ for 3/5-day. QC: `MOS_STOR_RECORD_COUNT.py`,
 - No record duplication across projects — cross-project reads instead.
 - `Cowlitz_FF_DataPrep/data/obsData.dss` (committed) = frozen memo-01
   snapshot; do not confuse with the live store.
+- Daily elevation for the regression + 3/5-day mass balance = daily
+  mean of hourly CWMS-CLEAN (legacy IRVZZAZD_CLEANED daily record is
+  retired; deletion list in CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md).
+- data/ref_in = source records only; output/ref_out = everything
+  scripts write (final products included).
 - Planned, not implemented: derive MOS inflows for ResSim from the
   CWMS-CLEAN elevation instead of the raw inflow record.
 - data/ and output/ are local+gitignored; ref_data/ref_in|ref_out hold

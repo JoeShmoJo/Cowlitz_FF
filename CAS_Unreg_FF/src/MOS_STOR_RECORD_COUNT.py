@@ -37,15 +37,21 @@ PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
 
 if USE_REFERENCE_DATA:
     root_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_in")
+    output_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
 else:
     root_dir = os.path.join(PROJECT_DIR, "data")
+    output_dir = os.path.join(PROJECT_DIR, "output")
 
 sys.path.insert(0, REPO_ROOT)
 UTILS_DIR = os.path.join(PROJECT_DIR, "src", "Cowlitz_Unreg", "Cowlitz")
 sys.path.insert(0, UTILS_DIR)
 from utilsDSS import HecDss  # noqa: E402  (project DSS wrapper, handles gaps)
 
-DSS_IN = os.path.join(root_dir, "obsData.dss")  # count record is written back here
+DSS_IN = os.path.join(root_dir, "obsData.dss")
+# Convention: obsData.dss holds source records only (observed + hand-cleaned);
+# everything a script writes -- including this QC count -- goes to the output
+# DSS. Older runs wrote the count back into obsData; that copy can be deleted.
+DSS_OUT = os.path.join(output_dir, "MOS_Cleaned.dss")
 
 PATH_MOS_STOR = "//MOS/STOR//1HOUR/CWMS/"
 PATH_OUT_COUNT = "//MOS/STOR-COUNT//1DAY/CWMS/"
@@ -90,12 +96,12 @@ def daily_record_count(series):
 
 def write_count(counts):
     """
-    Write the daily count series to DSS_IN as PATH_OUT_COUNT, units Count.
+    Write the daily count series to DSS_OUT as PATH_OUT_COUNT, units Count.
     Uses type "PER-AVER" -- utilsDSS's VALID_TYPE_STR doesn't include
     "PER-CUM", and PER-AVER is the type Clean_MOS_Holdout.py already uses
     for its other 1DAY writes (quick_unreg_daily, local_daily).
     """
-    dss = HecDss.open(DSS_IN)
+    dss = HecDss.open(DSS_OUT)
     try:
         ok = dss.writeSeries(counts, PATH_OUT_COUNT, "Count", "PER-AVER")
         print(f"    wrote {PATH_OUT_COUNT}  ({len(counts)} values)"

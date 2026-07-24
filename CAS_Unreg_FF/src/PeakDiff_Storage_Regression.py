@@ -76,9 +76,16 @@ from Build_Hourly_Holdout_Unreg import elev_to_stor  # noqa: E402
 DSS_OBS = os.path.join(root_dir, "obsData.dss")
 PEAKS_CSV = os.path.join(peaks_dir, "wy_peak_records.csv")
 
-# <-- daily MOS elevation record (hand-cleaned; much cleaner than hourly).
-# Update the pathname to whatever label the cleaned daily record carries.
-PATH_MOS_ELEV_DAILY = "//MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/"
+# Daily MOS elevation source for the storage-change predictors.
+#   Default: daily mean of the hand-cleaned hourly record (CWMS-CLEAN) --
+#   the record actually maintained under the current methodology.
+#   If a separate, cleaner pre-computed DAILY record is designated later,
+#   set PATH_MOS_ELEV_DAILY and flip DAILY_FROM_HOURLY_CLEAN to False.
+#   (The legacy //MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/ record is
+#   retired and slated for deletion -- do not point here.)
+DAILY_FROM_HOURLY_CLEAN = True
+PATH_MOS_ELEV_HOURLY_CLEAN = "//MOS/ELEV//1HOUR/CWMS-CLEAN/"
+PATH_MOS_ELEV_DAILY = ""  # only used when DAILY_FROM_HOURLY_CLEAN = False
 
 # Optional fallback source of regulated peaks for gap WYs where the USGS
 # hourly record is not good either (USGS instantaneous annual peaks).
@@ -106,18 +113,27 @@ APPLY_PREDICTOR = None
 
 
 def read_daily_stor():
-    """Read the clean daily MOS elevation and convert to storage (ac-ft)."""
+    """Read the daily MOS elevation (either the daily mean of the
+    hand-cleaned hourly CWMS-CLEAN record, or a designated daily record)
+    and convert to storage (ac-ft)."""
+    path = PATH_MOS_ELEV_HOURLY_CLEAN if DAILY_FROM_HOURLY_CLEAN \
+        else PATH_MOS_ELEV_DAILY
+    if not path:
+        raise RuntimeError(
+            "PATH_MOS_ELEV_DAILY is empty -- set it, or set "
+            "DAILY_FROM_HOURLY_CLEAN = True to derive daily means from "
+            "the CWMS-CLEAN hourly record.")
     dss = HecDss.open(DSS_OBS)
     try:
-        df = dss.readDF(PATH_MOS_ELEV_DAILY)
+        df = dss.readDF(path)
     finally:
         dss.close()
     if df.empty:
-        raise RuntimeError(f"No data for {PATH_MOS_ELEV_DAILY} in {DSS_OBS}")
+        raise RuntimeError(f"No data for {path} in {DSS_OBS}")
     elev = df["value"]
     elev = elev.mask(elev <= -900.0)
     elev = elev[~elev.index.duplicated(keep="last")].sort_index()
-    elev = elev.resample("1D").mean()  # regular daily grid
+    elev = elev.resample("1D").mean()  # hourly -> daily mean; daily -> grid
     stor = elev_to_stor(elev)
     stor[elev.isna()] = np.nan
     print(f"  daily STOR: {stor.notna().sum()} valid days, "

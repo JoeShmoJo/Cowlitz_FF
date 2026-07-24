@@ -41,7 +41,20 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # =============================================================================
 IN_DSS = r"../data/obsData.dss"
 
-MOS_ELEV_PATH    = "//MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/"
+# Daily MOS elevation source.
+#   True  = daily mean of the hand-cleaned hourly record CWMS-CLEAN
+#           (current methodology; the legacy IRVZZAZD_CLEANED daily
+#           record is retired and slated for deletion from the live
+#           obsData.dss).
+#   False = read the legacy pre-computed daily record MOS_ELEV_PATH.
+#           Keep ONLY for reproducing the archived Cowlitz_FF_DataPrep
+#           memo-01 results -- run against the frozen obsData.dss in
+#           that archive, which still contains the record. Results
+#           under True will differ from the archived adopted CSV.
+USE_HOURLY_CLEAN = True
+MOS_ELEV_HOURLY_CLEAN_PATH = "//MOS/ELEV//1HOUR/CWMS-CLEAN/"
+
+MOS_ELEV_PATH    = "//MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/"  # legacy
 CASTLE_ROCK_PATH = "/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW//1DAY/USGS/"
 
 OUT_CSV = r"../output/unreg_durations_massbalance.csv"
@@ -181,9 +194,11 @@ if not os.path.isfile(IN_DSS):
         "Fix the path before running. If a previous run created a small "
         "stray obsData.dss at a wrong location, delete it.")
 
+_mos_path = MOS_ELEV_HOURLY_CLEAN_PATH if USE_HOURLY_CLEAN else MOS_ELEV_PATH
+
 with HecDss.Open(IN_DSS, version=6) as _dss:
     _catalog = _dss.getPathnameList("/*/*/*/*/*/*/", sort=1)
-for _p in (MOS_ELEV_PATH, CASTLE_ROCK_PATH):
+for _p in (_mos_path, CASTLE_ROCK_PATH):
     _pat = _p.upper().split("/")
     _hits = [c for c in _catalog
              if all(seg in c.upper() for seg in _pat if seg)]
@@ -193,7 +208,10 @@ for _p in (MOS_ELEV_PATH, CASTLE_ROCK_PATH):
             f"No record matching {_p} in {IN_DSS}.\n"
             f"First catalog entries:\n  {_preview}")
 
-mos = read_dss_record(IN_DSS, MOS_ELEV_PATH, "MOS_ELEV")
+mos = read_dss_record(IN_DSS, _mos_path, "MOS_ELEV")
+if USE_HOURLY_CLEAN:
+    # hourly hand-cleaned record -> daily mean elevation
+    mos = mos.resample("1D").mean().dropna()
 cr  = read_dss_record(IN_DSS, CASTLE_ROCK_PATH, "CASTLE_ROCK_FLOW")
 
 # Normalize to date resolution so joins are exact
