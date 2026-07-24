@@ -61,7 +61,12 @@ observed data into this file. Backup accordingly.
    5-day durations; no routing needed at daily resolution. The daily
    record is separate from -- not derived from -- the hourly
    CWMS-CLEAN, which is used only in the holdout workflow under its
-   STOR-COUNT day-by-day screen.
+   STOR-COUNT day-by-day screen. Admission: Season_Complete =
+   Oct-Mar completeness screen OR SEASON_OVERRIDE_WYS (WY1993-2000:
+   winter-only Castle Rock daily record; assumption that the recorded
+   season captured the annual peaks). Rolling windows run on a full
+   daily grid, so an N-day value always means N consecutive recorded
+   days.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
    and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
    table `wy_record_ssp.csv`. Source rules: pre-1968, Peak from the

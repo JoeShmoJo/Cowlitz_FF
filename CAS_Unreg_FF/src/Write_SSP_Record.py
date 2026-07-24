@@ -200,8 +200,14 @@ def assemble_record(peaks, estimates, massbal,
         # --- 1/3/5-day from the daily unreg (mass balance) ---
         if wy in massbal.index:
             m = massbal.loc[wy]
-            season_ok = m.get("flood_season_missing", np.inf) \
-                <= MAX_SEASON_MISSING_DAYS
+            # the mass-balance CSV's Season_Complete flag is the
+            # admission decision (it includes SEASON_OVERRIDE_WYS);
+            # fall back to the numeric screen for older CSVs
+            if "Season_Complete" in m.index:
+                season_ok = bool(m["Season_Complete"])
+            else:
+                season_ok = m.get("flood_season_missing", np.inf) \
+                    <= MAX_SEASON_MISSING_DAYS
             if season_ok:
                 for c in ("Three_Day", "Five_Day"):
                     if np.isfinite(m.get(c, np.nan)):

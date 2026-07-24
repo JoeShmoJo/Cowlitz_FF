@@ -61,12 +61,19 @@ CASTLE_ROCK_PATH = "/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW//1DAY/USGS/"
 OUT_CSV = r"../output/unreg_durations_massbalance.csv"
 
 # A WY qualifies for the record only if its Oct-Mar flood season has at
-# most this many missing days -- the SAME screen Write_SSP_Record.py
-# applies when consuming this CSV, so the Season_Complete column here
-# and the assembly's behavior always agree. (Replaces the hand-curated
-# ADOPT_WYS list from the archived memo-01 era, when this script only
-# filled WY1976-1979.)
+# most this many missing days -- Write_SSP_Record.py reads the resulting
+# Season_Complete column, so this flag IS the admission decision.
 MAX_SEASON_MISSING_DAYS = 0
+
+# WYs admitted DESPITE failing the season screen (analogous to
+# STOR_COUNT_OVERRIDES in the holdout logic). WY1993-2000: the Castle
+# Rock daily USGS record is winter-only (seasonal operation misses
+# October, ~32 flood-season days/WY). Assumption, to be stated in the
+# memo: the recorded season captured the annual peaks, so the daily
+# holdout added to the recorded flows yields valid 1/3/5-day maxima.
+# (WY1990-1992 and WY2001 show the same pattern -- extend this list if
+# the same assumption is judged to hold for them.)
+SEASON_OVERRIDE_WYS = list(range(1993, 2001))
 
 # Report every WY touched by the data, including partials, for transparency
 REPORT_ALL_WYS = True
@@ -358,13 +365,21 @@ for wy, grp in combined.groupby("WY"):
     }
 
     for label, window in DURATIONS.items():
-        roll = grp["UNREG_CFS"].rolling(window, min_periods=window).mean()
+        # reindex to a full daily grid first: with min_periods=window,
+        # any window containing a missing day returns NaN, so an N-day
+        # value always means N CONSECUTIVE recorded days (a count-based
+        # roll on the gappy index would silently straddle gaps)
+        grid = grp["UNREG_CFS"].reindex(
+            pd.date_range(wy_start, wy_end, freq="D"))
+        roll = grid.rolling(window, min_periods=window).mean()
         row[label] = roll.max()
         row[f"{label}_Date"] = roll.idxmax().date() if roll.notna().any() else None
 
     row["TableB1_OneDay"] = TABLE_B1_ONEDAY.get(wy, np.nan)
+    row["Season_Override"] = wy in SEASON_OVERRIDE_WYS
     row["Season_Complete"] = (
-        row["flood_season_missing"] <= MAX_SEASON_MISSING_DAYS)
+        row["flood_season_missing"] <= MAX_SEASON_MISSING_DAYS
+        or row["Season_Override"])
     rows.append(row)
 
 result = pd.DataFrame(rows).set_index("WY").sort_index()
@@ -382,7 +397,8 @@ if not REPORT_ALL_WYS:
 cols = ["days_present", "days_missing", "flood_season_missing",
         "One_day", "One_day_Date", "Three_Day", "Three_Day_Date",
         "Five_Day", "Five_Day_Date",
-        "TableB1_OneDay", "OneDay_vs_TableB1_pct", "Season_Complete"]
+        "TableB1_OneDay", "OneDay_vs_TableB1_pct",
+        "Season_Complete", "Season_Override"]
 
 print("\nWY duration maxima (cfs):")
 print(result[cols].to_string(float_format=lambda v: f"{v:,.0f}"))
@@ -393,6 +409,11 @@ if len(failed):
           "missing Oct-Mar days) -- reported for transparency only; "
           "Write_SSP_Record.py will not use their durations:")
     print(failed[["days_missing", "flood_season_missing"]].to_string())
+overridden = result[result["Season_Override"] & result["Season_Complete"]]
+if len(overridden):
+    print(f"\nWYs admitted by SEASON_OVERRIDE_WYS despite missing "
+          "flood-season days (winter-only record; peaks assumed captured):")
+    print(overridden[["flood_season_missing"]].to_string())
 
 result.to_csv(OUT_CSV)
 print(f"\nWrote: {OUT_CSV}")
