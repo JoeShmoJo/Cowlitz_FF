@@ -24,8 +24,7 @@ record, NOT the USGS instantaneous peak-flow record, so that REG and
 UNREG peaks are computed identically for the regression in
 PeakDiff_Storage_Regression.py.
 
-Output: ../output/wy_peak_records.csv (or ref_data/ref_out for a
-reference-data run). One row per WY where the UNREG record has any
+Output: ../output/wy_peak_records.csv. One row per WY where the UNREG record has any
 valid data; REG-only WYs (candidates for the regression correction) are
 also included, with the UNREG columns blank.
 """
@@ -40,18 +39,11 @@ import pandas as pd
 # CONFIGURATION
 
 REPO_ROOT = r"C:\Projects\Claude"          # <-- set to your local repo path
-USE_REFERENCE_DATA = True                  # True = ref_data sample run
 
 PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
-
-if USE_REFERENCE_DATA:
-    root_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_in")
-    unreg_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-    output_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-else:
-    root_dir = os.path.join(PROJECT_DIR, "data")
-    unreg_dir = os.path.join(PROJECT_DIR, "output")
-    output_dir = os.path.join(PROJECT_DIR, "output")
+root_dir = os.path.join(PROJECT_DIR, "data")
+unreg_dir = os.path.join(PROJECT_DIR, "output")
+output_dir = os.path.join(PROJECT_DIR, "output")
 
 sys.path.insert(0, REPO_ROOT)
 UTILS_DIR = os.path.join(PROJECT_DIR, "src", "Cowlitz_Unreg", "Cowlitz")

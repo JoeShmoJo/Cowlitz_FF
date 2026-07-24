@@ -30,6 +30,12 @@ observed data into this file. Backup accordingly.
 
 ## Scripts (src/), in run order
 
+0. `#DataDownload.py` -- USGS/CWMS download -> `data/obsData.dss` (+
+   optional parquet). Record list read from `data/MOS_ELEV.csv`
+   (RequiredRecordsDict format; fuller dictionaries alongside).
+   CAUTION: never let a re-download overwrite the hand-cleaned
+   CWMS-CLEAN record -- it writes the raw CWMS/USGS records only, but
+   back up obsData.dss first anyway.
 1. `Build_Hourly_Holdout_Unreg.py` (formerly Clean_MOS_Holdout.py --
    renamed because the despike/smoothing machinery was removed once
    ELEV moved to hand-cleaning). Cleaned ELEV -> holdout -> routing ->
@@ -40,12 +46,16 @@ observed data into this file. Backup accordingly.
    the timing offset between the two peaks. -> `wy_peak_records.csv`.
 3. `PeakDiff_Storage_Regression.py` -- regress (REG - UNREG) 1-hr peak
    against max MOS daily storage change over 1/2/3/4-day windows near
-   the peak (from the clean DAILY elevation record); pick the best
-   window; apply to gap WYs that have a good regulated peak (hourly or
-   USGS peak record) but no holdout-based unreg peak.
+   the peak (daily means of CWMS-CLEAN). ADOPTED PREDICTOR: dS_2day.
+   Applies the fit to gap WYs that have a good regulated peak (hourly
+   or USGS peak record) but no holdout-based unreg peak.
 4. `Unreg_Durations_MassBalance.py` -- daily mass-balance unreg
    (CAS + daily MOS holdout), 1/3/5-day WY maxima. Used for the 3- and
    5-day durations; no routing needed at daily resolution.
+5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
+   (hourly peaks + dS_2day regression fills + mass-balance durations,
+   with source tags) and write `output/CAS_Unreg_SSP.dss` for HEC-SSP,
+   plus the audit table `wy_record_ssp.csv`.
 
 QC / reference:
 - `MOS_STOR_RECORD_COUNT.py` -- daily count of valid hourly STOR values
@@ -56,15 +66,15 @@ QC / reference:
 - `Cowlitz_Unreg/Cowlitz/` -- utilsDSS wrapper (readDF/writeSeries,
   sentinel handling), SSARR routing, config.
 
-## Data conventions
+## Folder structure (consistent across projects)
 
-- `data/` and `output/` are local (gitignored); `ref_data/ref_in|out`
-  hold small committed samples.
-- Input/output rule: `data/`+`ref_in/` hold SOURCE records only
-  (observed downloads + the hand-cleaned store); `output/`+`ref_out/`
-  hold everything scripts write, intermediates and final products
-  alike. See docs/DSS_RECORD_CLEANUP.md for the record-level cleanup
-  list and the one Reg_Unreg exception.
+`src/`, `data/`, `output/`, `diagnostics/`, `docs/`. No ref_data
+sample folders -- the data is small enough to commit directly.
+Input/output rule: `data/` holds SOURCE records only (observed
+downloads + the hand-cleaned store); `output/` holds everything
+scripts write, intermediates (MOS_Cleaned.dss) and final products
+(CAS_Unreg_SSP.dss) alike. See docs/DSS_RECORD_CLEANUP.md for the
+record-level cleanup list and the one Reg_Unreg exception.
 - `data/obsData.dss` is the canonical live observed-data store, shared
   with CAS_Reg_Unreg (its scripts point here). Don't duplicate records
   across projects -- cross-project reads are preferred.

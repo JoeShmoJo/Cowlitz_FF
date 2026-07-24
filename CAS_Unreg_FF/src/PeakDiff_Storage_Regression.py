@@ -51,20 +51,12 @@ import matplotlib.pyplot as plt
 # CONFIGURATION
 
 REPO_ROOT = r"C:\Projects\Claude"          # <-- set to your local repo path
-USE_REFERENCE_DATA = True                  # True = ref_data sample run
 
 PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
-
-if USE_REFERENCE_DATA:
-    root_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_in")
-    peaks_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-    output_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-    diag_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-else:
-    root_dir = os.path.join(PROJECT_DIR, "data")
-    peaks_dir = os.path.join(PROJECT_DIR, "output")
-    output_dir = os.path.join(PROJECT_DIR, "output")
-    diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+root_dir = os.path.join(PROJECT_DIR, "data")
+peaks_dir = os.path.join(PROJECT_DIR, "output")
+output_dir = os.path.join(PROJECT_DIR, "output")
+diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
 
 sys.path.insert(0, REPO_ROOT)
 UTILS_DIR = os.path.join(PROJECT_DIR, "src", "Cowlitz_Unreg", "Cowlitz")
@@ -106,7 +98,8 @@ CFS_DAYS_PER_AF = 43560.0 / 86400.0  # 1 ac-ft over 1 day = 0.504 cfs
 
 # Which fitted predictor to use for the applied correction. One of
 # "dS_1day_cfs" ... "dS_4day_cfs", or None to auto-pick the highest R^2.
-APPLY_PREDICTOR = None
+# ADOPTED: dS_2day (best-performing window, Jul 2026).
+APPLY_PREDICTOR = "dS_2day_cfs"
 
 ###############################################################################
 # FUNCTION DEFINITIONS

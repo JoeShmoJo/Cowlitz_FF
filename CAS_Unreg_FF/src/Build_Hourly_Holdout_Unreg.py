@@ -54,16 +54,10 @@ import pandas as pd
 # CONFIGURATION
 
 REPO_ROOT = r"C:\Projects\Claude"          # <-- set to your local repo path
-USE_REFERENCE_DATA = True                            # True = ref_data sample run
 
 PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
-
-if USE_REFERENCE_DATA:
-    root_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_in")
-    output_dir = os.path.join(PROJECT_DIR, "ref_data", "ref_out")
-else:
-    root_dir = os.path.join(PROJECT_DIR, "data")
-    output_dir = os.path.join(PROJECT_DIR, "output")
+root_dir = os.path.join(PROJECT_DIR, "data")
+output_dir = os.path.join(PROJECT_DIR, "output")
 
 sys.path.insert(0, REPO_ROOT)
 UTILS_DIR = os.path.join(PROJECT_DIR, "src", "Cowlitz_Unreg", "Cowlitz")

@@ -1,2 +1,1 @@
-Generated results for this project. Local-only -- excluded from git
-via .gitignore (too large to sync). Only this README syncs.
+Placeholder so git tracks this empty folder. See STRUCTURE.md at repo root.

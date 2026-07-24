@@ -27,11 +27,14 @@ peak = 1-hr max of USGS hourly (NOT the USGS instantaneous peak
 record) so both peaks are computed identically; track reg/unreg
 peak-timing offset and exclude pairs > 72 hrs apart.
 
-Run order: `Build_Hourly_Holdout_Unreg.py` (was Clean_MOS_Holdout.py;
-smoothing logic removed) -> `WY_Peak_Records.py` ->
-`PeakDiff_Storage_Regression.py`; `Unreg_Durations_MassBalance.py`
-for 3/5-day. QC: `MOS_STOR_RECORD_COUNT.py`,
-`MOS_CASTLEROCK_PEAK_DATE_COMPARE.py`.
+Run order: `#DataDownload.py` -> `Build_Hourly_Holdout_Unreg.py`
+(was Clean_MOS_Holdout.py; smoothing logic removed) ->
+`WY_Peak_Records.py` -> `PeakDiff_Storage_Regression.py` (ADOPTED
+predictor: dS_2day) -> `Unreg_Durations_MassBalance.py` (3/5-day) ->
+`Write_SSP_Record.py` (final assembly -> output/CAS_Unreg_SSP.dss +
+wy_record_ssp.csv audit table). QC: `MOS_STOR_RECORD_COUNT.py`,
+`MOS_CASTLEROCK_PEAK_DATE_COMPARE.py`. CAS_Unreg_FF runs FIRST; it
+owns obsData.dss and the download script.
 
 ## Critical facts
 
@@ -50,9 +53,10 @@ for 3/5-day. QC: `MOS_STOR_RECORD_COUNT.py`,
   scripts write (final products included).
 - Planned, not implemented: derive MOS inflows for ResSim from the
   CWMS-CLEAN elevation instead of the raw inflow record.
-- data/ and output/ are local+gitignored; ref_data/ref_in|ref_out hold
-  committed samples. Scripts use the REPO_ROOT + USE_REFERENCE_DATA
-  config pattern (see any src script header).
+- Folder structure, both projects: src/, data/, output/,
+  diagnostics/, docs/. No ref_data samples; data is committed
+  directly. Scripts use a plain REPO_ROOT config (no
+  USE_REFERENCE_DATA switch).
 - Coding style: flat functions, no classes/argparse, hardcoded paths
   at top, full scripts. DSS: utilsDSS wrapper in
   `CAS_Unreg_FF/src/Cowlitz_Unreg/Cowlitz/` (readDF/writeSeries);
@@ -62,16 +66,15 @@ for 3/5-day. QC: `MOS_STOR_RECORD_COUNT.py`,
   runs scripts locally; container/Claude cannot run pydsstools —
   verify logic with stubs/synthetic data instead.
 
-## Open tasks (as of 24 Jul 2026)
+## Open tasks (as of 24 Jul 2026, PM)
 
-1. Run WY_Peak_Records + PeakDiff_Storage_Regression on real data;
-   pick winning ΔS window; scrutinize large peak-offset WYs.
-2. Confirm daily MOS ELEV pathname in PeakDiff_Storage_Regression
-   (placeholder: `//MOS/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/`).
-3. Iterate hourly ELEV cleaning as holdout scrutiny demands.
-4. Update `CAS_Unreg_FF/docs/MEMO_CAS_Unreg_FF.docx` with adopted
-   regression results.
-5. CAS_Reg_Unreg: implement cleaned-elevation-derived MOS inflows for
+1. dS_2day regression ADOPTED. Run Write_SSP_Record.py to produce
+   output/CAS_Unreg_SSP.dss; import *-MOS-HOLDOUT pathnames in SSP.
+2. Update `CAS_Unreg_FF/docs/MEMO_CAS_Unreg_FF.docx` with the adopted
+   dS_2day regression stats and gap-year fills.
+3. Prune retired DSS records per CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md,
+   then squeeze obsData.dss.
+4. CAS_Reg_Unreg: implement cleaned-elevation-derived MOS inflows for
    ResSim (future).
 
 ## Key file map
@@ -80,7 +83,8 @@ for 3/5-day. QC: `MOS_STOR_RECORD_COUNT.py`,
   `MOS_Cleaned.dss` paths incl.
   `//CASTLE ROCK/FLOW-UNREG//1HOUR/CAS+ROUTED-DIFF/`,
   `wy_peak_records.csv`, `peakdiff_storage_regressions.csv`,
-  `unreg_peak_estimates.csv`, memo in `docs/`.
+  `unreg_peak_estimates.csv`, `wy_record_ssp.csv`,
+  `CAS_Unreg_SSP.dss` (final SSP input), memo in `docs/`.
 - CAS_Reg_Unreg: `README.md` (script + diagnostics use cases);
   external ResSim watershed paths under
   `C:\Projects\Cowlitz_Flow_Frequency\ResSim\...` (not in repo).

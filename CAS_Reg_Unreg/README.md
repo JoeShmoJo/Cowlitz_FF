@@ -14,9 +14,9 @@ locals) back into that file.
 
 ## Scripts (src/)
 
-- `#DataDownload.py` -- USGS/CWMS download -> shared obsData.dss.
-  Record list read from `data/MOS_ELEV.csv` (RequiredRecordsDict
-  format; full dictionaries also in data/).
+Data download lives in CAS_Unreg_FF (`#DataDownload.py`) -- that
+project runs first and owns the shared obsData.dss.
+
 - `#Reservoir_Inflow_And_Basin_Peaks.py` -- inflow back-calc from
   elev/stor + outflow, peak-window shaping, Castle Rock local flow
   inputs. WRITES into shared obsData.dss; do not run casually.
@@ -42,7 +42,6 @@ locals) back into that file.
 - `MAY_local_shaped.html`, `MAY_local_shaped_stats.csv`,
   `inspect_MAY_PEAKCLEAN.csv` -- Mayfield local shaping QA.
 - `2015/2025_MOS_INFLOW_CLEAN.csv` -- example cleaned-inflow exports.
-- `data_coverage.html` -- record coverage after download.
 - `alignment_check.csv`, `ensemble_slot0_check.csv` -- ensemble
   alignment verification.
 
