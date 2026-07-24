@@ -74,15 +74,24 @@ owns obsData.dss and the download script.
   runs scripts locally; container/Claude cannot run pydsstools —
   verify logic with stubs/synthetic data instead.
 
-## Open tasks (as of 24 Jul 2026, PM)
+## Status: CAS_Unreg_FF RECORD COMPLETE (24 Jul 2026)
 
-1. dS_2day regression ADOPTED. Run Write_SSP_Record.py to produce
-   output/CAS_Unreg_SSP.dss; import *-MOS-HOLDOUT pathnames in SSP.
-2. Update `CAS_Unreg_FF/docs/MEMO_CAS_Unreg_FF.docx` with the adopted
-   dS_2day regression stats and gap-year fills.
-3. Prune retired DSS records per CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md,
+WY1927-2026 in output/CAS_Unreg_SSP.dss (import *-MOS-HOLDOUT paths in
+SSP); only WY1969-1973 absent. Peak 95 (42 pre-reg USGS / 37 dS_2day
+regression / 16 holdout), One_day 94, 3/5-day 93. Adopted:
+(REG-UNREG) = -0.869*dS_2day - 3,836 cfs, R2 0.871, SE ~5,530, n 17.
+Season override = full regulated era WY1974-2025 (winter-only daily
+record; recorded season assumed to capture maxima); WY2026 awaits
+year close. Memo final in CAS_Unreg_FF/docs.
+
+## Open tasks
+
+1. WY1969-1973 SSP treatment (perception threshold vs exclusion).
+2. Review low-coverage WYs in the regression fit set.
+3. WY2026 close-out re-run (3/5-day).
+4. Prune retired DSS records per CAS_Unreg_FF/docs/DSS_RECORD_CLEANUP.md,
    then squeeze obsData.dss.
-4. CAS_Reg_Unreg: implement cleaned-elevation-derived MOS inflows for
+5. CAS_Reg_Unreg: implement cleaned-elevation-derived MOS inflows for
    ResSim (future).
 
 ## Key file map

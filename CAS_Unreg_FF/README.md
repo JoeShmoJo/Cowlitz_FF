@@ -62,11 +62,13 @@ observed data into this file. Backup accordingly.
    record is separate from -- not derived from -- the hourly
    CWMS-CLEAN, which is used only in the holdout workflow under its
    STOR-COUNT day-by-day screen. Admission: Season_Complete =
-   Oct-Mar completeness screen OR SEASON_OVERRIDE_WYS (WY1993-2000:
-   winter-only Castle Rock daily record; assumption that the recorded
-   season captured the annual peaks). Rolling windows run on a full
-   daily grid, so an N-day value always means N consecutive recorded
-   days.
+   Oct-Mar completeness screen OR SEASON_OVERRIDE_WYS (adopted:
+   the full regulated era WY1974-2025 -- the Castle Rock daily record
+   is winter-only / season-incomplete through much of it -- under the
+   stated assumption that the recorded season captured the annual
+   maxima; WY2026 excluded until the year closes). Rolling windows run
+   on a full daily grid, so an N-day value always means N consecutive
+   recorded days.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
    and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
    table `wy_record_ssp.csv`. Source rules: pre-1968, Peak from the
@@ -98,13 +100,14 @@ record-level cleanup list and the one Reg_Unreg exception.
   across projects -- cross-project reads are preferred.
 - Sentinels <= -900 are missing; -902 written for gaps.
 
-## Status / open items
+## Status (24 Jul 2026): RECORD COMPLETE
 
-- Hourly unreg constructed; iterate ELEV cleaning as needed.
-- Run WY_Peak_Records + PeakDiff_Storage_Regression on real data;
-  evaluate which dS window wins; scrutinize WYs with large peak-timing
-  offsets before accepting them into the fit.
-- Brief memo in docs/ describes the methodology; update with regression
-  results once adopted.
-- Prune retired DSS records per docs/DSS_RECORD_CLEANUP.md, then
-  squeeze obsData.dss.
+WY1927-2026 assembled and written to output/CAS_Unreg_SSP.dss; only
+WY1969-1973 absent (perception-threshold candidates in SSP). Peak: 95
+values (42 USGS pre-reg / 37 dS_2day regression / 16 hourly holdout);
+One_day 94; Three/Five_Day 93 (WY1927 durations n/a; WY2026 3/5-day
+await year completion). Adopted regression: (REG - UNREG) =
+-0.869 * dS_2day - 3,836 cfs, R^2 0.871, SE ~5,530 cfs, n 17. Memo
+finalized in docs/. Remaining: WY1969-1973 SSP treatment; low-coverage
+fit-set review; WY2026 close-out re-run; DSS cleanup + squeeze per
+docs/DSS_RECORD_CLEANUP.md.
