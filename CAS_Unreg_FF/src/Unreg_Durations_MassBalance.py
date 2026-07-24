@@ -14,8 +14,7 @@ hourly record (WY_Peak_Records.py) with dS_2day regression fill
 (PeakDiff_Storage_Regression.py) under the current methodology.
 [Historical note: in the archived Cowlitz_FF_DataPrep workflow they
 came from the pooled peak-from-1-day regression in Combine_Records.py,
-the same
-documented procedure already applied to WYs 1982-1987.
+the same documented procedure applied to WYs 1982-1987.]
 
 Provenance role:
     CDB elevation data for MOS begins in 1974, and the daily Castle Rock
