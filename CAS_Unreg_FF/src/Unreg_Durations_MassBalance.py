@@ -10,7 +10,11 @@ Method (same as BasicUnregCAS.py, extended to durations):
 Daily mass balance is considered adequate for 1- to 5-day durations but NOT
 for instantaneous peak (routing lag and sub-daily storage swings are lost at
 daily resolution). Peaks for these years are estimated separately by the
-pooled peak-from-1-day regression in Combine_Records.py -- the same
+hourly record (WY_Peak_Records.py) with dS_2day regression fill
+(PeakDiff_Storage_Regression.py) under the current methodology.
+[Historical note: in the archived Cowlitz_FF_DataPrep workflow they
+came from the pooled peak-from-1-day regression in Combine_Records.py,
+the same
 documented procedure already applied to WYs 1982-1987.
 
 Provenance role:
@@ -395,6 +399,8 @@ print("\nNon-adopted WYs are reported for transparency only; WY1975 and "
 
 result.to_csv(OUT_CSV)
 print(f"\nWrote: {OUT_CSV}")
-print("\nNext step: peak estimates for adopted WYs come from the pooled "
-      "peak-from-1-day regression (Combine_Records.py), matching the "
-      "procedure used for WYs 1982-1987.")
+print("\nNext step: this CSV feeds the 3/5-day durations in "
+      "Write_SSP_Record.py. Peaks come from the hourly record "
+      "(WY_Peak_Records.py) with dS_2day regression fill "
+      "(PeakDiff_Storage_Regression.py) -- NOT from the archived "
+      "Combine_Records.py pooled regression.")
