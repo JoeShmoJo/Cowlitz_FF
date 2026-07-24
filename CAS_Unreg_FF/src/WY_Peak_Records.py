@@ -57,8 +57,35 @@ PATH_CAS_REG = "/COWLITZ RIVER AT CASTLE ROCK, WA/14243000/FLOW//1Hour/USGS/"
 PATH_CAS_UNREG = "//CASTLE ROCK/FLOW-UNREG//1HOUR/CAS+ROUTED-DIFF/"
 
 OUT_CSV = os.path.join(output_dir, "wy_peak_records.csv")
+diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+OUT_GAPS_CSV = os.path.join(diag_dir, "wy_missing_windows.csv")
 
 SEASON_MONTHS = [10, 11, 12, 1, 2, 3]  # Oct-Mar, matches the holdout season
+
+# --- missing-window reporting -------------------------------------------
+# Every contiguous Oct-Mar gap >= MIN_GAP_HRS in either series is listed
+# in OUT_GAPS_CSV with its distance to that WY's computed peak, so the
+# significance of each window can be judged. NOTHING is omitted
+# automatically -- review the gap table, then populate the two lists
+# below to omit manually and re-run.
+MIN_GAP_HRS = 3
+
+# Date ranges to MASK (treated as missing) before peaks are computed.
+# Use when a suspect window (bad or gap-adjacent data) should not be
+# allowed to set a peak, without dropping the whole WY. Each entry:
+# ("YYYY-MM-DD HH:MM", "YYYY-MM-DD HH:MM", series) with series one of
+# "reg", "unreg", "both". Endpoints inclusive.
+EXCLUDE_RANGES = [
+    # ("1996-02-05 00:00", "1996-02-07 12:00", "unreg"),
+]
+
+# Water years to drop entirely from the output table (peaks judged
+# unusable after reviewing the gap report). These WYs then fall through
+# to the dS_2day regression fill in Write_SSP_Record.py if a regulated
+# peak exists elsewhere.
+OMIT_WYS = [
+    # 1997,
+]
 ONE_DAY_HOURS = 24                     # trailing-mean window for 1-day peak
 MIN_ONE_DAY_VALID = 20                 # need >= this many valid hrs in the 24-hr
                                        # window for the mean to count
@@ -133,6 +160,44 @@ def wy_oneday_peak(s):
     return df
 
 
+def find_gaps(s, label):
+    """List contiguous Oct-Mar missing windows >= MIN_GAP_HRS.
+    Returns a DataFrame [WY, series, gap_start, gap_end, gap_hrs]."""
+    if s.dropna().empty:
+        return pd.DataFrame(
+            columns=["WY", "series", "gap_start", "gap_end", "gap_hrs"])
+    idx = pd.date_range(s.index.min(), s.index.max(), freq="1h")
+    full = season_only(s.reindex(idx))
+    miss = full.isna()
+    # group consecutive hourly timestamps (season gaps between Mar->Oct
+    # are excluded because season_only removed those rows entirely)
+    grp = (
+        (~miss) | (miss.index.to_series().diff() > pd.Timedelta(hours=1))
+    ).cumsum()
+    rows = []
+    for _, block in full[miss].groupby(grp[miss]):
+        t0, t1 = block.index[0], block.index[-1]
+        hrs = (t1 - t0).total_seconds() / 3600.0 + 1
+        if hrs >= MIN_GAP_HRS:
+            rows.append({"WY": int(water_year(block.index)[0]),
+                         "series": label, "gap_start": t0, "gap_end": t1,
+                         "gap_hrs": hrs})
+    return pd.DataFrame(rows)
+
+
+def apply_exclusions(reg, unreg):
+    """Mask EXCLUDE_RANGES in the requested series (logged)."""
+    for start, end, which in EXCLUDE_RANGES:
+        t0, t1 = pd.Timestamp(start), pd.Timestamp(end)
+        for label, s in (("reg", reg), ("unreg", unreg)):
+            if which in (label, "both"):
+                n = int(s.loc[t0:t1].notna().sum())
+                s.loc[t0:t1] = np.nan
+                print(f"  EXCLUDED [{label}] {start} -> {end}: "
+                      f"{n} values masked")
+    return reg, unreg
+
+
 def wy_coverage(s):
     """Fraction of Oct-Mar hours with valid data, per WY."""
     idx = pd.date_range(s.index.min(), s.index.max(), freq="1h")
@@ -194,7 +259,54 @@ def main():
     unreg = read_series(DSS_UNREG, PATH_CAS_UNREG)
     print(f"  {len(unreg)} values")
 
+    if EXCLUDE_RANGES:
+        print("Applying manual exclusion ranges...")
+        reg, unreg = apply_exclusions(reg, unreg)
+
+    # --- missing-window report (identification only; nothing omitted) ---
+    gaps = pd.concat([find_gaps(reg, "reg"), find_gaps(unreg, "unreg")],
+                     ignore_index=True)
+
     table = build_table(reg, unreg)
+
+    if len(gaps):
+        # distance from each gap to that WY's computed 1-hr peak, per series
+        def _dist(row):
+            col = f"{row['series']}_peak_1hr_time"
+            t = table[col].get(row["WY"], pd.NaT)
+            if pd.isna(t):
+                return np.nan
+            return round(min(abs((t - row["gap_start"]).total_seconds()),
+                             abs((t - row["gap_end"]).total_seconds()))
+                         / 3600.0, 1)
+        gaps["hrs_gap_to_peak"] = gaps.apply(_dist, axis=1)
+        gaps = gaps.sort_values(["WY", "series", "gap_start"])
+    gaps.to_csv(OUT_GAPS_CSV, index=False)
+    print(f"Missing-window report: {len(gaps)} gaps >= {MIN_GAP_HRS} hrs "
+          f"-> {OUT_GAPS_CSV}")
+
+    # per-WY gap summary columns for at-a-glance significance checks
+    for label in ("reg", "unreg"):
+        sub = gaps[gaps["series"] == label] if len(gaps) else gaps
+        if len(sub):
+            g = sub.groupby("WY")["gap_hrs"]
+            table[f"{label}_n_gaps"] = g.count().reindex(table.index)
+            table[f"{label}_max_gap_hrs"] = g.max().reindex(table.index)
+            near = sub.groupby("WY")["hrs_gap_to_peak"].min()
+            table[f"{label}_nearest_gap_to_peak_hrs"] = \
+                near.reindex(table.index)
+        else:
+            table[f"{label}_n_gaps"] = 0
+            table[f"{label}_max_gap_hrs"] = np.nan
+            table[f"{label}_nearest_gap_to_peak_hrs"] = np.nan
+    table[["reg_n_gaps", "unreg_n_gaps"]] = \
+        table[["reg_n_gaps", "unreg_n_gaps"]].fillna(0).astype(int)
+
+    if OMIT_WYS:
+        dropped = [y for y in OMIT_WYS if y in table.index]
+        table = table.drop(index=dropped)
+        print(f"OMITTED WYs (manual): {dropped}")
+
     table.to_csv(OUT_CSV)
     print(f"Wrote {len(table)} WY rows -> {OUT_CSV}")
 

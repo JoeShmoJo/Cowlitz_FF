@@ -44,6 +44,12 @@ observed data into this file. Backup accordingly.
    unreg and hourly regulated (1-hr max of USGS hourly, NOT the USGS
    instantaneous peak record), peak timestamps, REG-UNREG diffs, and
    the timing offset between the two peaks. -> `wy_peak_records.csv`.
+   Also identifies every Oct-Mar missing window >= MIN_GAP_HRS in both
+   series (-> `diagnostics/wy_missing_windows.csv`, with each gap's
+   distance to that WY's peak, plus per-WY gap-summary columns in the
+   main table). Nothing is omitted automatically -- review the gap
+   report, then populate EXCLUDE_RANGES (mask a suspect window) or
+   OMIT_WYS (drop a whole WY) and re-run.
 3. `PeakDiff_Storage_Regression.py` -- regress (REG - UNREG) 1-hr peak
    against max MOS daily storage change over 1/2/3/4-day windows near
    the peak (daily means of CWMS-CLEAN). ADOPTED PREDICTOR: dS_2day.
