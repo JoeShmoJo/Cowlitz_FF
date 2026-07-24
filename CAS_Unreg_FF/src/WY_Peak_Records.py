@@ -105,6 +105,7 @@ def read_series(dss_file, pathname):
     if df.empty:
         return pd.Series(dtype=float)
     s = df["value"]
+    s.index = pd.to_datetime(s.index)  # utilsDSS may return a plain Index
     s = s.mask((s <= -900.0))
     s = s[~s.index.duplicated(keep="last")].sort_index()
     return s
