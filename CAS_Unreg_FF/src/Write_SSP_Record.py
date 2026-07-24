@@ -8,24 +8,24 @@ write it to a DSS file for import into HEC-SSP. Run this LAST, after:
     3. PeakDiff_Storage_Regression.py  (unreg_peak_estimates.csv)
     4. Unreg_Durations_MassBalance.py  (unreg_durations_massbalance.csv)
 
-Sources per duration:
-    Pre-regulation WYs (<= PRE_REG_LAST_WY, before Mossyrock closure):
-        Peak            USGS observed instantaneous annual peaks
-                        (unregulated by definition pre-dam)
+Source rules (stated 24 Jul 2026):
+    Pre-1968 (<= PRE_REG_LAST_WY, before Mossyrock closure):
+        Peak            USGS peak flow record (observed instantaneous
+                        annual peaks; unregulated pre-dam)
         One/Three/Five  rolling 1/3/5-day maxima computed directly from
                         the USGS daily record, for WYs whose Oct-Mar
                         season is complete enough
-    Regulated-era WYs:
-        Peak      unreg_peak_1hr from the hourly record (holdout WYs);
-                  gap WYs filled from the adopted dS_2day regression
-                  estimates (unreg_peak_estimates.csv). Source column
-                  tags which is which.
-        One_day   unreg_peak_1day from the hourly record (holdout WYs
-                  only; no regression fill is defined for 1-day).
-        Three_Day daily mass balance (CAS daily + daily MOS holdout from
-        Five_Day  the CWMS-CLEAN daily means), restricted to WYs whose
-                  flood season is complete enough
-                  (MAX_SEASON_MISSING_DAYS).
+    Post-1968:
+        Peak      calculated hourly unreg (1-hr max), else the
+                  change-in-daily-storage (dS_2day) regression estimate
+                  (unreg_peak_estimates.csv)
+        One_day   1-day average of the hourly unreg record; if hourly
+                  doesn't exist for the WY, the one-day max of the
+                  daily unreg record (mass balance One_day)
+        Three_Day the unreg daily averages (mass balance), restricted
+        Five_Day  to WYs whose flood season is complete enough
+                  (MAX_SEASON_MISSING_DAYS)
+    Nothing is read from the Cowlitz_FF_DataPrep archive.
 
 Outputs:
     ../output/wy_record_ssp.csv    audit table (one row per WY, all
@@ -70,9 +70,9 @@ MAX_SEASON_MISSING_DAYS = 0
 PRE_REG_LAST_WY = 1968  # last pre-regulation WY (Mossyrock closure Dec 1968;
                         # WY1927-1968 treated as unregulated, matching the
                         # 2009 study / archived Build_Simplified convention)
-# USGS observed instantaneous annual peaks (archived study data; cross-
-# project read -- unregulated by definition for the pre-dam years)
-PRE_REG_PEAKS_CSV = os.path.join(REPO_ROOT, "Cowlitz_FF_DataPrep", "data",
+# USGS observed instantaneous annual peaks (active project input;
+# unregulated by definition for the pre-dam years)
+PRE_REG_PEAKS_CSV = os.path.join(PROJECT_DIR, "data",
                                  "CastleRock_USGS_peaks.csv")
 # USGS daily record at Castle Rock for the pre-reg 1/3/5-day durations
 DAILY_DSS = os.path.join(PROJECT_DIR, "data", "obsData.dss")
@@ -197,7 +197,7 @@ def assemble_record(peaks, estimates, massbal,
             rows.append(r)
             continue
 
-        # --- 3/5-day from daily mass balance ---
+        # --- 1/3/5-day from the daily unreg (mass balance) ---
         if wy in massbal.index:
             m = massbal.loc[wy]
             season_ok = m.get("flood_season_missing", np.inf) \
@@ -207,6 +207,12 @@ def assemble_record(peaks, estimates, massbal,
                     if np.isfinite(m.get(c, np.nan)):
                         r[c] = m[c]
                         r["Durations_Source"] = "daily_massbalance"
+                # One_day fallback: only when the hourly record didn't
+                # supply it -- one-day max of the daily unreg
+                if not np.isfinite(r["One_day"]) \
+                        and np.isfinite(m.get("One_day", np.nan)):
+                    r["One_day"] = m["One_day"]
+                    r["One_day_Source"] = "daily_massbalance"
         rows.append(r)
     df = pd.DataFrame(rows).set_index("WY")
     return df[df[["Peak", "One_day", "Three_Day", "Five_Day"]]

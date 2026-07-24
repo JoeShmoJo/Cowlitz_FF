@@ -60,19 +60,18 @@ observed data into this file. Backup accordingly.
    5-day durations; no routing needed at daily resolution.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
    and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
-   table `wy_record_ssp.csv`. Pre-regulation WYs (<= 1968, before
-   Mossyrock closure): peaks from the USGS instantaneous peak record,
-   1/3/5-day computed directly from the USGS daily record (both
-   unregulated by definition pre-dam). Regulated era: hourly peaks +
-   dS_2day regression fills + mass-balance durations. Every value is
-   source-tagged.
+   table `wy_record_ssp.csv`. Source rules: pre-1968, Peak from the
+   USGS peak flow record and 1/3/5-day straight from the USGS daily
+   record. Post-1968, Peak from the calculated hourly unreg else the
+   dS_2day storage-change regression; One_day from the 1-day average
+   of the hourly unreg else the one-day max of the daily unreg; 3- and
+   5-day from the unreg daily averages (mass balance). Every value is
+   source-tagged. Nothing reads from the Cowlitz_FF_DataPrep archive
+   (CastleRock_USGS_peaks.csv now lives in data/).
 
 QC / reference:
 - `MOS_STOR_RECORD_COUNT.py` -- daily count of valid hourly STOR values
   (spot sparse-telemetry days before trusting a holdout).
-- `MOS_CASTLEROCK_PEAK_DATE_COMPARE.py` -- peak-date comparison
-  diagnostics between MOS storage and Castle Rock records (moved from
-  Cowlitz_FF_DataPrep; reads that archive's data).
 - `Cowlitz_Unreg/Cowlitz/` -- utilsDSS wrapper (readDF/writeSeries,
   sentinel handling), SSARR routing, config.
 

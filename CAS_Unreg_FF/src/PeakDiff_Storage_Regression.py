@@ -82,7 +82,7 @@ PATH_MOS_ELEV_DAILY = ""  # only used when DAILY_FROM_HOURLY_CLEAN = False
 # Optional fallback source of regulated peaks for gap WYs where the USGS
 # hourly record is not good either (USGS instantaneous annual peaks).
 # Set to None to disable.
-USGS_PEAKS_CSV = os.path.join(REPO_ROOT, "Cowlitz_FF_DataPrep", "data",
+USGS_PEAKS_CSV = os.path.join(PROJECT_DIR, "data",
                               "CastleRock_USGS_peaks.csv")
 
 OUT_FITS_CSV = os.path.join(output_dir, "peakdiff_storage_regressions.csv")
