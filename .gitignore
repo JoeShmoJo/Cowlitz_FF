@@ -10,3 +10,17 @@ ProjectTemplate/output/*
 !ProjectTemplate/output/README.txt
 __pycache__/
 *.pyc
+
+CAS_Unreg_FF/data/*
+!CAS_Unreg_FF/data/README.txt
+CAS_Unreg_FF/output/*
+!CAS_Unreg_FF/output/README.txt
+
+CAS_Reg_Unreg/data/*
+!CAS_Reg_Unreg/data/README.txt
+!CAS_Reg_Unreg/data/MOS_ELEV.csv
+!CAS_Reg_Unreg/data/MOS_96.csv
+!CAS_Reg_Unreg/data/RequiredRecordsDict.csv
+!CAS_Reg_Unreg/data/RequiredRecordsDict_Full.csv
+CAS_Reg_Unreg/output/*
+!CAS_Reg_Unreg/output/README.txt

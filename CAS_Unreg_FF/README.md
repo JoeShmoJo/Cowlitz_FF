@@ -1,0 +1,75 @@
+# CAS_Unreg_FF
+
+Unregulated flow frequency record at Castle Rock (USGS 14243000) built
+by the MOS holdout method -- NOT by routing cleaned inflows through
+ResSim. Formerly `Basic_CAS_Unreg`; ResSim input development lives in
+`CAS_Reg_Unreg/`, and the 2026 memo-01 record work is archived in
+`Cowlitz_FF_DataPrep/`.
+
+## Method in one paragraph
+
+The hourly MOS elevation record is hand-cleaned iteratively in DSSVue
+(edit -> compute holdout -> scrutinize -> edit again). The cleaned
+elevation is converted to storage with the official 2014 rating and
+differenced to a raw hourly holdout, which is processed (3-hr rolling
+average, Oct-Mar season, sparse-telemetry days blanked) and routed with
+Mayfield outflow to Castle Rock via three chained SSARR reaches. The
+routed holdout effect added to observed Castle Rock flow gives the
+hourly unregulated estimate. For 3- and 5-day durations, daily holdout
+at MOS added to Castle Rock daily flow is adequate (routing < 1 day,
+so no routing needed). For WYs where the hourly elevation was too poor
+for a holdout, the peak regulated flow is corrected to unregulated via
+a regression of (REG - UNREG peak) against daily MOS storage change.
+
+## Manual step -- do not lose this record
+
+`//MOS/ELEV//1HOUR/CWMS-CLEAN/` in `data/obsData.dss` is hand-edited
+in DSSVue and is NOT reproducible from any script. It is the anchor of
+the whole workflow. Some series were also manually copied from the
+observed data into this file. Backup accordingly.
+
+## Scripts (src/), in run order
+
+1. `Build_Hourly_Holdout_Unreg.py` (formerly Clean_MOS_Holdout.py --
+   renamed because the despike/smoothing machinery was removed once
+   ELEV moved to hand-cleaning). Cleaned ELEV -> holdout -> routing ->
+   hourly unreg. Writes `MOS_Cleaned.dss`.
+2. `WY_Peak_Records.py` -- per-WY 1-hr and 1-day peaks of the hourly
+   unreg and hourly regulated (1-hr max of USGS hourly, NOT the USGS
+   instantaneous peak record), peak timestamps, REG-UNREG diffs, and
+   the timing offset between the two peaks. -> `wy_peak_records.csv`.
+3. `PeakDiff_Storage_Regression.py` -- regress (REG - UNREG) 1-hr peak
+   against max MOS daily storage change over 1/2/3/4-day windows near
+   the peak (from the clean DAILY elevation record); pick the best
+   window; apply to gap WYs that have a good regulated peak (hourly or
+   USGS peak record) but no holdout-based unreg peak.
+4. `Unreg_Durations_MassBalance.py` -- daily mass-balance unreg
+   (CAS + daily MOS holdout), 1/3/5-day WY maxima. Used for the 3- and
+   5-day durations; no routing needed at daily resolution.
+
+QC / reference:
+- `MOS_STOR_RECORD_COUNT.py` -- daily count of valid hourly STOR values
+  (spot sparse-telemetry days before trusting a holdout).
+- `MOS_CASTLEROCK_PEAK_DATE_COMPARE.py` -- peak-date comparison
+  diagnostics between MOS storage and Castle Rock records (moved from
+  Cowlitz_FF_DataPrep; reads that archive's data).
+- `Cowlitz_Unreg/Cowlitz/` -- utilsDSS wrapper (readDF/writeSeries,
+  sentinel handling), SSARR routing, config.
+
+## Data conventions
+
+- `data/` and `output/` are local (gitignored); `ref_data/ref_in|out`
+  hold small committed samples.
+- `data/obsData.dss` is the canonical live observed-data store, shared
+  with CAS_Reg_Unreg (its scripts point here). Don't duplicate records
+  across projects -- cross-project reads are preferred.
+- Sentinels <= -900 are missing; -902 written for gaps.
+
+## Status / open items
+
+- Hourly unreg constructed; iterate ELEV cleaning as needed.
+- Run WY_Peak_Records + PeakDiff_Storage_Regression on real data;
+  evaluate which dS window wins; scrutinize WYs with large peak-timing
+  offsets before accepting them into the fit.
+- Brief memo in docs/ describes the methodology; update with regression
+  results once adopted.
