@@ -216,6 +216,9 @@ def apply_exclusions(reg, unreg):
 
 def wy_coverage(s):
     """Fraction of Oct-Mar hours with valid data, per WY."""
+    s = s.dropna()
+    if s.empty:
+        return pd.Series(dtype=float)
     idx = pd.date_range(s.index.min(), s.index.max(), freq="1h")
     full = s.reindex(idx)
     full = season_only(full)
@@ -274,6 +277,17 @@ def main():
     print(f"Reading unreg hourly from {DSS_UNREG}")
     unreg = read_series(DSS_UNREG, PATH_CAS_UNREG)
     print(f"  {len(unreg)} values")
+
+    if reg.empty:
+        raise RuntimeError(
+            f"Regulated record came back EMPTY: {PATH_CAS_REG} in {DSS_OBS}. "
+            "Verify obsData.dss actually lives there (did your local data "
+            "move from Basic_CAS_Unreg\\data to CAS_Unreg_FF\\data?) and "
+            "delete any small stray obsData.dss that a failed run "
+            "auto-created before copying the real file in.")
+    if unreg.empty:
+        print("  NOTE: unreg record empty -- peaks will be reg-only; "
+              f"run Build_Hourly_Holdout_Unreg.py first ({DSS_UNREG})")
 
     if EXCLUDE_RANGES:
         print("Applying manual exclusion ranges...")
