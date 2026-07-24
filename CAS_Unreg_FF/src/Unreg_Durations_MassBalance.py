@@ -17,13 +17,16 @@ came from the pooled peak-from-1-day regression in Combine_Records.py,
 the same documented procedure applied to WYs 1982-1987.]
 
 Provenance role:
-    CDB elevation data for MOS begins in 1974, and the daily Castle Rock
-    record on hand covers 11Jan1975 - 28Jan1980. WY1975 and WY1980 are
-    flood-season-incomplete (missing Oct-Dec 1974 and Feb-Sep 1980
-    respectively), so only WY1976-1979 are adopted from this computation.
-    Results are compared against Table B-I of the 2009 Hydrology Restudy
-    report ("basic routing model with daily data") as a cross-validation of
-    both this computation and the report's method.
+    Originally (archived memo-01 era) this script existed only to fill
+    WY1976-1979: CDB elevation for MOS begins in 1974, the daily Castle
+    Rock record then on hand covered 11Jan1975 - 28Jan1980, and WY1975 /
+    WY1980 were flood-season-incomplete. Under the current methodology
+    it computes the daily unreg for EVERY WY the daily records cover;
+    the Season_Complete flag (Oct-Mar completeness screen, same test
+    Write_SSP_Record.py applies) determines which WYs' durations enter
+    the record. Results were cross-validated against Table B-I of the
+    2009 Hydrology Restudy report ("basic routing model with daily
+    data") for the 1976-1979 overlap.
 
 Mayfield storage change is not included (INCLUDE_MAY hook below). Mayfield
 re-regulation storage is small relative to Mossyrock and largely nets out
@@ -57,8 +60,13 @@ CASTLE_ROCK_PATH = "/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW//1DAY/USGS/"
 
 OUT_CSV = r"../output/unreg_durations_massbalance.csv"
 
-# Water years to adopt (complete flood-season coverage within the data window)
-ADOPT_WYS = [1976, 1977, 1978, 1979]
+# A WY qualifies for the record only if its Oct-Mar flood season has at
+# most this many missing days -- the SAME screen Write_SSP_Record.py
+# applies when consuming this CSV, so the Season_Complete column here
+# and the assembly's behavior always agree. (Replaces the hand-curated
+# ADOPT_WYS list from the archived memo-01 era, when this script only
+# filled WY1976-1979.)
+MAX_SEASON_MISSING_DAYS = 0
 
 # Report every WY touched by the data, including partials, for transparency
 REPORT_ALL_WYS = True
@@ -355,7 +363,8 @@ for wy, grp in combined.groupby("WY"):
         row[f"{label}_Date"] = roll.idxmax().date() if roll.notna().any() else None
 
     row["TableB1_OneDay"] = TABLE_B1_ONEDAY.get(wy, np.nan)
-    row["Adopt"] = wy in ADOPT_WYS
+    row["Season_Complete"] = (
+        row["flood_season_missing"] <= MAX_SEASON_MISSING_DAYS)
     rows.append(row)
 
 result = pd.DataFrame(rows).set_index("WY").sort_index()
@@ -365,7 +374,7 @@ result["OneDay_vs_TableB1_pct"] = (
 result["Source"] = "MassBalance_Daily"
 
 if not REPORT_ALL_WYS:
-    result = result.loc[result["Adopt"]]
+    result = result.loc[result["Season_Complete"]]
 
 # =============================================================================
 # 5. Report and write
@@ -373,18 +382,17 @@ if not REPORT_ALL_WYS:
 cols = ["days_present", "days_missing", "flood_season_missing",
         "One_day", "One_day_Date", "Three_Day", "Three_Day_Date",
         "Five_Day", "Five_Day_Date",
-        "TableB1_OneDay", "OneDay_vs_TableB1_pct", "Adopt"]
+        "TableB1_OneDay", "OneDay_vs_TableB1_pct", "Season_Complete"]
 
 print("\nWY duration maxima (cfs):")
 print(result[cols].to_string(float_format=lambda v: f"{v:,.0f}"))
 
-partial = result[(result["Adopt"]) & (result["flood_season_missing"] > 0)]
-if len(partial):
-    print("\nWARNING: adopted WYs with missing flood-season days:")
-    print(partial[["days_missing", "flood_season_missing"]].to_string())
-
-print("\nNon-adopted WYs are reported for transparency only; WY1975 and "
-      "WY1980 are flood-season-incomplete and must not enter the record.")
+failed = result[~result["Season_Complete"]]
+if len(failed):
+    print(f"\nWYs failing the season screen (> {MAX_SEASON_MISSING_DAYS} "
+          "missing Oct-Mar days) -- reported for transparency only; "
+          "Write_SSP_Record.py will not use their durations:")
+    print(failed[["days_missing", "flood_season_missing"]].to_string())
 
 result.to_csv(OUT_CSV)
 print(f"\nWrote: {OUT_CSV}")
