@@ -77,8 +77,10 @@ owns obsData.dss and the download script.
 ## Status: CAS_Unreg_FF RECORD COMPLETE (24 Jul 2026)
 
 WY1927-2026 in output/CAS_Unreg_SSP.dss (import *-MOS-HOLDOUT paths in
-SSP); only WY1969-1973 absent. Peak 95 (42 pre-reg USGS / 37 dS_2day
-regression / 16 holdout), One_day 94, 3/5-day 93. Adopted:
+SSP); only WY1969-1973 absent. Peak 95 (42 pre-reg USGS / 30 dS_2day
+regression / 23 holdout), One_day 94, 3/5-day 93 (WY2026 3/5-day await
+year close). Record made monotonic backwards from 5-day: 10 raises
+across 9 WYs, logged in diagnostics/record_monotonic_adjustments.csv. Adopted:
 (REG-UNREG) = -0.869*dS_2day - 3,836 cfs, R2 0.871, SE ~5,530, n 17.
 Season override = full regulated era WY1974-2025 (winter-only daily
 record; recorded season assumed to capture maxima); WY2026 awaits

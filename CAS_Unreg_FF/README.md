@@ -123,7 +123,7 @@ record-level cleanup list and the one Reg_Unreg exception.
 
 WY1927-2026 assembled and written to output/CAS_Unreg_SSP.dss; only
 WY1969-1973 absent (perception-threshold candidates in SSP). Peak: 95
-values (42 USGS pre-reg / 37 dS_2day regression / 16 hourly holdout);
+values (42 USGS pre-reg / 30 dS_2day regression / 23 hourly holdout);
 One_day 94; Three/Five_Day 93 (WY1927 durations n/a; WY2026 3/5-day
 await year completion). Adopted regression: (REG - UNREG) =
 -0.869 * dS_2day - 3,836 cfs, R^2 0.871, SE ~5,530 cfs, n 17. Memo
