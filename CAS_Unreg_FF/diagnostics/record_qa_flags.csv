@@ -6,10 +6,9 @@ WY,violation,shorter_duration,shorter_value,shorter_source,longer_duration,longe
 1985,Three_Day > Peak,Peak,27739.80824219987,dS2day_regression,Three_Day,28765.268502977156,daily_massbalance,1025.4602607772867,3.6967099838032764,cross_source
 1994,One_day > Peak,Peak,23936.952598568358,dS2day_regression,One_day,26300.07696355184,daily_massbalance,2363.1243649834832,9.87228576926212,cross_source
 1994,Three_Day > Peak,Peak,23936.952598568358,dS2day_regression,Three_Day,24709.691447533503,daily_massbalance,772.7388489651457,3.2282256723496308,cross_source
-2001,Five_Day > One_day,One_day,12020.159830729166,hourly_holdout,Five_Day,14331.987987467448,daily_massbalance,2311.828156738282,19.232923599136882,cross_source
-2001,Five_Day > Peak,Peak,13918.7216796875,hourly_holdout,Five_Day,14331.987987467448,daily_massbalance,413.26630777994797,2.969139819665009,cross_source
-2001,Three_Day > One_day,One_day,12020.159830729166,hourly_holdout,Three_Day,15338.691788397897,daily_massbalance,3318.5319576687307,27.60805184291316,cross_source
-2001,Three_Day > Peak,Peak,13918.7216796875,hourly_holdout,Three_Day,15338.691788397897,daily_massbalance,1419.9701087103967,10.201871561112196,cross_source
+2001,Five_Day > Peak,Peak,11954.646076700406,dS2day_regression,Five_Day,14331.987987467448,daily_massbalance,2377.3419107670416,19.886342895591685,cross_source
+2001,One_day > Peak,Peak,11954.646076700406,dS2day_regression,One_day,19568.119591522216,daily_massbalance,7613.47351482181,63.686314642643104,cross_source
+2001,Three_Day > Peak,Peak,11954.646076700406,dS2day_regression,Three_Day,15338.691788397897,daily_massbalance,3384.0457116974903,28.307368448932937,cross_source
 2006,One_day > Peak,Peak,62349.91266236805,dS2day_regression,One_day,74081.96464411417,daily_massbalance,11732.051981746117,18.816468990544585,cross_source
 2006,Three_Day > Peak,Peak,62349.91266236805,dS2day_regression,Three_Day,62808.0588979933,daily_massbalance,458.1462356252523,0.7347985202580265,cross_source
 2007,One_day > Peak,Peak,130998.81991651142,dS2day_regression,One_day,147777.18454564412,daily_massbalance,16778.364629132702,12.808027308815408,cross_source

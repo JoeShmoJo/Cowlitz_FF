@@ -1,0 +1,2 @@
+WY,exclusion_reason,Peak,Peak_Source,One_day,One_day_Source,Three_Day,Five_Day,Durations_Source
+2001,39% Oct-Mar unreg coverage; annual max may fall in the gap,13918.7216796875,hourly_holdout,12020.159830729166,hourly_holdout,15338.691788397897,14331.987987467448,daily_massbalance
