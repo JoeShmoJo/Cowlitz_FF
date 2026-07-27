@@ -62,6 +62,19 @@ OUT_GAPS_CSV = os.path.join(diag_dir, "wy_missing_windows.csv")
 
 SEASON_MONTHS = [10, 11, 12, 1, 2, 3]  # Oct-Mar, matches the holdout season
 
+# Hours either side of the REGULATED annual peak over which the
+# unregulated record's data availability is measured
+# (unreg_cov_at_reg_peak). This is the screen the record assembly uses
+# to decide whether an hourly unreg peak is trustworthy: the regulated
+# record dates the basin's biggest event, and the unregulated record
+# must actually have data covering it. Season-wide coverage is the
+# wrong test (a WY can miss much of Oct-Mar and still cover the event),
+# and so is peak-timing offset (the unregulated annual max may
+# legitimately fall on a DIFFERENT storm than the regulated max,
+# because regulation determines which event produces the biggest
+# regulated flow).
+EVENT_WINDOW_HRS = 24
+
 # --- missing-window reporting -------------------------------------------
 # Every contiguous Oct-Mar gap >= MIN_GAP_HRS in either series is listed
 # in OUT_GAPS_CSV with its distance to that WY's computed peak, so the
@@ -227,6 +240,17 @@ def wy_coverage(s):
     return (grp.count() / grp.size()).rename("coverage")
 
 
+def event_coverage(unreg, reg_peak_time):
+    """Fraction of hours with valid unreg data within
+    +/- EVENT_WINDOW_HRS of the regulated annual peak."""
+    if pd.isna(reg_peak_time) or unreg.dropna().empty:
+        return np.nan
+    t0 = reg_peak_time - pd.Timedelta(hours=EVENT_WINDOW_HRS)
+    t1 = reg_peak_time + pd.Timedelta(hours=EVENT_WINDOW_HRS)
+    win = unreg.reindex(pd.date_range(t0, t1, freq="1h"))
+    return round(float(win.notna().sum()) / len(win), 3)
+
+
 def build_table(reg, unreg):
     """Assemble the per-WY peak table."""
     reg_1h = wy_hourly_peak(reg)
@@ -259,6 +283,8 @@ def build_table(reg, unreg):
         else:
             r["peak_offset_hrs"] = np.nan
 
+        r["unreg_cov_at_reg_peak"] = event_coverage(
+            unreg, r["reg_peak_1hr_time"])
         r["reg_coverage_octmar"] = round(float(cov_reg.get(y, np.nan)), 3)
         r["unreg_coverage_octmar"] = round(float(cov_unreg.get(y, np.nan)), 3) \
             if len(cov_unreg) else np.nan

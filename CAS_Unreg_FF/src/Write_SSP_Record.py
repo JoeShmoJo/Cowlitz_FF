@@ -60,6 +60,8 @@ MASSBAL_CSV = os.path.join(output_dir, "unreg_durations_massbalance.csv")
 
 OUT_CSV = os.path.join(output_dir, "wy_record_ssp.csv")
 OUT_DSS = os.path.join(output_dir, "CAS_Unreg_SSP.dss")
+diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+OUT_FLAGS_CSV = os.path.join(diag_dir, "record_qa_flags.csv")
 
 # WYs from the mass-balance table (and pre-reg WYs from the daily
 # record) qualify for durations only if their Oct-Mar flood season has
@@ -78,8 +80,21 @@ PRE_REG_PEAKS_CSV = os.path.join(PROJECT_DIR, "data",
 DAILY_DSS = os.path.join(PROJECT_DIR, "data", "obsData.dss")
 PATH_CAS_DAILY = "/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW//1DAY/USGS/"
 
-# Screen for the hourly-derived peaks: require at least this Oct-Mar
-# coverage fraction in the unreg record (column from WY_Peak_Records).
+# Screen for the hourly-derived peaks.
+# Season-wide coverage is the WRONG test: WY2016 misses 25% of Oct-Mar
+# yet covers the annual flood completely (nearest gap 43 days away), so
+# a 0.9 season screen threw away a directly computed 135,790 cfs peak
+# in favor of a regression estimate.
+# Peak-timing offset is ALSO the wrong test for record acceptance: the
+# unregulated annual maximum may legitimately occur on a different
+# storm than the regulated annual maximum, because regulation decides
+# which event yields the biggest regulated flow (WY2018 and WY2021 have
+# 100% coverage yet offsets of 857 and -249 hours).
+# The correct test: does the unregulated record actually have data
+# covering the basin's biggest event, as dated by the regulated peak?
+# That is unreg_cov_at_reg_peak from WY_Peak_Records.py.
+MIN_EVENT_COVERAGE = 0.9
+# Fallback for CSVs written before that column existed:
 MIN_UNREG_COVERAGE = 0.9
 
 # F part tag identifying the methodology; duration is prefixed per the
@@ -160,32 +175,65 @@ def assemble_record(peaks, estimates, massbal,
         r = {"WY": wy, "Peak": np.nan, "Peak_Source": "",
              "One_day": np.nan, "One_day_Source": "",
              "Three_Day": np.nan, "Five_Day": np.nan,
-             "Durations_Source": ""}
+             "Durations_Source": "",
+             # --- audit / paper trail: both candidates and the reason ---
+             "Peak_Screen": "", "Peak_Hourly_Candidate": np.nan,
+             "Peak_Regression_Candidate": np.nan,
+             "Peak_Offset_hrs": np.nan, "Unreg_Coverage_OctMar": np.nan,
+             "Unreg_Cov_At_Reg_Peak": np.nan}
 
-        # --- Peak and One_day from the hourly record ---
+        # --- Peak and One_day from the hourly record (same-storm test) ---
         if wy in peaks.index:
             p = peaks.loc[wy]
-            cov = p.get("unreg_coverage_octmar", np.nan)
-            cov_ok = np.isfinite(cov) and cov >= MIN_UNREG_COVERAGE
-            if np.isfinite(p.get("unreg_peak_1hr", np.nan)) and cov_ok:
-                r["Peak"] = p["unreg_peak_1hr"]
+            hourly_pk = p.get("unreg_peak_1hr", np.nan)
+            evcov = p.get("unreg_cov_at_reg_peak", np.nan)
+            seascov = p.get("unreg_coverage_octmar", np.nan)
+            r["Peak_Hourly_Candidate"] = hourly_pk
+            r["Peak_Offset_hrs"] = p.get("peak_offset_hrs", np.nan)
+            r["Unreg_Coverage_OctMar"] = seascov
+            r["Unreg_Cov_At_Reg_Peak"] = evcov
+            if np.isfinite(evcov):
+                event_ok = evcov >= MIN_EVENT_COVERAGE
+                basis = f"event coverage {evcov:.2f}"
+            else:   # legacy CSV without the event-coverage column
+                event_ok = np.isfinite(seascov) \
+                    and seascov >= MIN_UNREG_COVERAGE
+                basis = f"season coverage {seascov:.2f} (legacy screen)"
+            if np.isfinite(hourly_pk) and event_ok:
+                r["Peak"] = hourly_pk
                 r["Peak_Source"] = "hourly_holdout"
-            if np.isfinite(p.get("unreg_peak_1day", np.nan)) and cov_ok:
-                r["One_day"] = p["unreg_peak_1day"]
-                r["One_day_Source"] = "hourly_holdout"
+                r["Peak_Screen"] = (
+                    f"hourly accepted: unreg record covers the regulated "
+                    f"peak event ({basis})")
+                if np.isfinite(p.get("unreg_peak_1day", np.nan)):
+                    r["One_day"] = p["unreg_peak_1day"]
+                    r["One_day_Source"] = "hourly_holdout"
+            elif np.isfinite(hourly_pk):
+                r["Peak_Screen"] = (
+                    f"hourly REJECTED: unreg record does not cover the "
+                    f"regulated peak event ({basis})")
+            else:
+                r["Peak_Screen"] = "no hourly unreg peak computed"
 
         # --- Peak gap fill from the adopted regression ---
-        if not np.isfinite(r["Peak"]) and wy in estimates.index:
+        if wy in estimates.index:
             e = estimates.loc[wy]
-            if np.isfinite(e.get("unreg_peak_est", np.nan)):
-                r["Peak"] = e["unreg_peak_est"]
+            r["Peak_Regression_Candidate"] = e.get("unreg_peak_est", np.nan)
+        if not np.isfinite(r["Peak"]) and wy in estimates.index:
+            if np.isfinite(r["Peak_Regression_Candidate"]):
+                r["Peak"] = r["Peak_Regression_Candidate"]
                 r["Peak_Source"] = "dS2day_regression"
+                if not r["Peak_Screen"]:
+                    r["Peak_Screen"] = "no hourly record -> regression"
+                else:
+                    r["Peak_Screen"] += " -> regression"
 
         # --- pre-regulation WYs: observed USGS peaks + daily durations ---
         if wy <= PRE_REG_LAST_WY:
             if wy in prereg_pk.index and np.isfinite(prereg_pk[wy]):
                 r["Peak"] = prereg_pk[wy]
                 r["Peak_Source"] = "usgs_peak_prereg"
+                r["Peak_Screen"] = "pre-regulation: USGS peak record"
             if wy in prereg_dur.index:
                 d = prereg_dur.loc[wy]
                 for c in ("One_day", "Three_Day", "Five_Day"):
@@ -223,6 +271,60 @@ def assemble_record(peaks, estimates, massbal,
     df = pd.DataFrame(rows).set_index("WY")
     return df[df[["Peak", "One_day", "Three_Day", "Five_Day"]]
               .notna().any(axis=1)]
+
+
+def check_monotonicity(table):
+    """Flag physically impossible duration ordering.
+
+    A longer-duration average can never exceed a shorter-duration one
+    drawn from the SAME series: the shorter window is free to sit on
+    the wettest part of the longer one. Violations therefore mean one
+    of two things, and the flag says which:
+
+      cross_source  the two values come from different series or
+                    methods (e.g. Peak from the USGS instantaneous
+                    record vs One_day from the hourly rolling mean, or
+                    One_day from hourly vs Three_Day from the daily
+                    mass balance). Explainable, but worth reviewing --
+                    it means the two durations disagree about the event.
+      SAME_SOURCE   both values came from the same series. This should
+                    be impossible and indicates a computation or data
+                    problem; investigate before using the record.
+
+    Returns a DataFrame of violations (empty if none).
+    """
+    src_col = {"Peak": "Peak_Source", "One_day": "One_day_Source",
+               "Three_Day": "Durations_Source",
+               "Five_Day": "Durations_Source"}
+    pairs = [("Peak", "One_day"), ("One_day", "Three_Day"),
+             ("Three_Day", "Five_Day"),
+             # non-adjacent pairs catch cases the adjacent ones miss
+             ("Peak", "Three_Day"), ("Peak", "Five_Day"),
+             ("One_day", "Five_Day")]
+    rows = []
+    for wy, r in table.iterrows():
+        for short, long_ in pairs:
+            a, b = r.get(short, np.nan), r.get(long_, np.nan)
+            if not (np.isfinite(a) and np.isfinite(b)) or b <= a:
+                continue
+            sa = str(r.get(src_col[short], "") or "")
+            sb = str(r.get(src_col[long_], "") or "")
+            rows.append({
+                "WY": wy,
+                "violation": f"{long_} > {short}",
+                "shorter_duration": short, "shorter_value": a,
+                "shorter_source": sa,
+                "longer_duration": long_, "longer_value": b,
+                "longer_source": sb,
+                "excess_cfs": b - a,
+                "excess_pct": 100.0 * (b - a) / a if a else np.nan,
+                "flag": "SAME_SOURCE" if sa == sb else "cross_source",
+            })
+    df = pd.DataFrame(rows)
+    if len(df):
+        df = df.sort_values(["flag", "WY", "violation"],
+                            ascending=[True, True, True])
+    return df
 
 
 def write_dss(table):
@@ -277,6 +379,7 @@ def main():
     print(f"  {len(pre_dur)} pre-reg WYs with complete-season durations")
 
     table = assemble_record(peaks, estimates, massbal, pre_pk, pre_dur)
+    os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
     table.to_csv(OUT_CSV)
     print(f"\nAssembled {len(table)} WYs -> {OUT_CSV}")
     for col in ("Peak", "One_day", "Three_Day", "Five_Day"):
@@ -284,6 +387,47 @@ def main():
         print(f"  {col}: {n} WYs")
     n_reg = int((table["Peak_Source"] == "dS2day_regression").sum())
     print(f"  ({n_reg} peaks from the dS_2day regression fill)")
+
+    # --- paper trail: peaks rejected by the same-storm screen ---
+    rejected = table[table["Peak_Screen"].str.contains("REJECTED",
+                                                      na=False)]
+    if len(rejected):
+        print(f"\n{len(rejected)} WY(s) where the hourly peak was rejected "
+              "(flood event fell in a gap); regression used instead:")
+        print(rejected[["Peak_Hourly_Candidate", "Peak_Offset_hrs",
+                        "Peak"]].to_string())
+        higher = rejected[rejected["Peak_Hourly_Candidate"]
+                          > rejected["Peak"]]
+        if len(higher):
+            print("  NOTE: for WY "
+                  f"{list(higher.index)} the REJECTED hourly value exceeds "
+                  "the adopted regression estimate. The hourly value is an "
+                  "observed event and thus a valid lower bound -- review "
+                  "whether it should be adopted instead.")
+
+    # --- QA: duration ordering ---
+    flags = check_monotonicity(table)
+    os.makedirs(os.path.dirname(OUT_FLAGS_CSV), exist_ok=True)
+    flags.to_csv(OUT_FLAGS_CSV, index=False)
+    if len(flags):
+        same = flags[flags["flag"] == "SAME_SOURCE"]
+        cross = flags[flags["flag"] == "cross_source"]
+        print(f"\nQA: {len(flags)} duration-ordering violation(s) "
+              f"-> {OUT_FLAGS_CSV}")
+        if len(same):
+            print(f"  *** {len(same)} SAME_SOURCE violation(s) -- should be "
+                  "impossible; investigate before using the record:")
+            print(same[["WY", "violation", "shorter_value", "longer_value",
+                        "excess_pct"]].to_string(index=False))
+        if len(cross):
+            print(f"  {len(cross)} cross_source violation(s) (durations from "
+                  "different series disagree about the event):")
+            print(cross[["WY", "violation", "shorter_source",
+                         "longer_source", "excess_pct"]].to_string(
+                             index=False))
+    else:
+        print("\nQA: duration ordering OK "
+              "(Peak >= 1-day >= 3-day >= 5-day everywhere)")
 
     print(f"\nWriting {OUT_DSS}")
     write_dss(table)

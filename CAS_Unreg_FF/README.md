@@ -44,8 +44,10 @@ observed data into this file. Backup accordingly.
    unreg and hourly regulated (1-hr max of USGS hourly, NOT the USGS
    instantaneous peak record), peak timestamps, REG-UNREG diffs, and
    the timing offset between the two peaks. -> `wy_peak_records.csv`.
-   Also identifies every Oct-Mar missing window >= MIN_GAP_HRS in both
-   series (-> `diagnostics/wy_missing_windows.csv`, with each gap's
+   Also records unreg_cov_at_reg_peak (unregulated data availability
+   within +/-24 hrs of the regulated annual peak) -- the screen the
+   assembly uses to accept or reject an hourly peak -- and identifies
+   every Oct-Mar missing window >= MIN_GAP_HRS in both series (-> `diagnostics/wy_missing_windows.csv`, with each gap's
    distance to that WY's peak, plus per-WY gap-summary columns in the
    main table). Nothing is omitted automatically -- review the gap
    report, then populate EXCLUDE_RANGES (mask a suspect window) or
@@ -71,7 +73,10 @@ observed data into this file. Backup accordingly.
    recorded days.
 5. `Write_SSP_Record.py` -- assemble the final Peak/1/3/5-day WY record
    and write `output/CAS_Unreg_SSP.dss` for HEC-SSP, plus the audit
-   table `wy_record_ssp.csv`. Source rules: pre-1968, Peak from the
+   table `wy_record_ssp.csv` (every WY carries Peak_Screen, both peak
+   candidates, and the coverage evidence behind the choice) and the QA
+   file `diagnostics/record_qa_flags.csv` (duration-ordering
+   violations, classed SAME_SOURCE vs cross_source). Source rules: pre-1968, Peak from the
    USGS peak flow record and 1/3/5-day straight from the USGS daily
    record. Post-1968, Peak from the calculated hourly unreg else the
    dS_2day storage-change regression; One_day from the 1-day average

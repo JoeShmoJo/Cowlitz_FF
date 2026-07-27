@@ -91,11 +91,12 @@ OUT_EST_CSV = os.path.join(output_dir, "unreg_peak_estimates.csv")
 OUT_PNG = os.path.join(diag_dir, "peakdiff_storage_regression.png")
 
 WINDOW_DAYS = 7            # +/- days around the reg peak date to search for dS
-MIN_UNREG_COVERAGE = 0.9   # matches Write_SSP_Record: hourly unreg peaks below
-                           # this Oct-Mar coverage are rejected there, so such
-                           # WYs are treated as GAPS here and filled by the
-                           # regression (they may still appear in the fit set;
-                           # see the memo's open item on that review)
+# Gap test for WYs that DO have an hourly unreg peak: the peak is
+# unusable when the unregulated record has no data covering the basin's
+# biggest event, as dated by the regulated annual peak
+# (unreg_cov_at_reg_peak from WY_Peak_Records). Same threshold and same
+# column Write_SSP_Record uses, so the two scripts always agree.
+MIN_EVENT_COVERAGE = 0.9
 REG_FILL_FIRST_WY = 1969   # regression fill applies to the regulated era only
 DS_WINDOWS = [1, 2, 3, 4]  # storage-change window lengths, days
 MAX_PEAK_OFFSET_HRS = 72   # exclude WYs whose reg/unreg peaks are farther
@@ -283,24 +284,25 @@ def main():
           f"(R\u00b2={f['r2']:.3f}) to gap WYs")
 
     # gap universe (regulated era, WY >= REG_FILL_FIRST_WY):
-    #   no_unreg      hourly table row exists but no unreg peak
-    #   low_coverage  unreg peak exists but Oct-Mar coverage below the
-    #                 assembly's screen (Write_SSP_Record rejects it)
+    #   no_unreg_peak hourly table row exists but no unreg peak
+    #   missed_event  unreg peak exists but the unreg record has no data
+    #                 covering the regulated annual peak event -- the
+    #                 flood fell in a gap in the hourly record
     #   no_hourly     WY only in the USGS peak record (hourly record
-    #                 hasn't started / has no row) -- e.g. WY1975-1986
-    cov = table["unreg_coverage_octmar"] \
-        if "unreg_coverage_octmar" in table.columns \
+    #                 hasn't started / has no row) -- e.g. WY1974-1991
+    evcov = table["unreg_cov_at_reg_peak"] \
+        if "unreg_cov_at_reg_peak" in table.columns \
         else pd.Series(np.nan, index=table.index)
     no_unreg = set(table.index[table["unreg_peak_1hr"].isna()])
-    low_cov = set(table.index[table["unreg_peak_1hr"].notna()
-                              & (cov < MIN_UNREG_COVERAGE)])
+    missed = set(table.index[table["unreg_peak_1hr"].notna()
+                             & ~(evcov >= MIN_EVENT_COVERAGE)])
     csv_only = set(usgs.index[usgs.index >= REG_FILL_FIRST_WY]) \
         - set(table.index)
-    gap_wys = sorted(y for y in (no_unreg | low_cov | csv_only)
+    gap_wys = sorted(y for y in (no_unreg | missed | csv_only)
                      if y >= REG_FILL_FIRST_WY)
-    print(f"  gap WYs: {len(no_unreg)} no-unreg, {len(low_cov)} "
-          f"low-coverage(<{MIN_UNREG_COVERAGE}), {len(csv_only)} "
-          "USGS-peak-record-only")
+    print(f"  gap WYs: {len(no_unreg)} no-unreg-peak, {len(missed)} "
+          f"missed-event(event coverage < {MIN_EVENT_COVERAGE}), "
+          f"{len(csv_only)} USGS-peak-record-only")
 
     est_rows = []
     for wy in gap_wys:
@@ -321,7 +323,7 @@ def main():
             continue
         diff_pred = f["slope"] * x + f["intercept"]
         reason = ("no_hourly" if wy in csv_only else
-                  "low_coverage" if wy in low_cov else "no_unreg_peak")
+                  "missed_event" if wy in missed else "no_unreg_peak")
         est_rows.append({
             "WY": wy,
             "reg_peak": reg_peak,
