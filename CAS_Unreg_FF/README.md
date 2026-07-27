@@ -84,7 +84,13 @@ observed data into this file. Backup accordingly.
    in the *_Raw columns, each WY's changes are summarized in
    Monotonic_Adjustment, and every raise is logged to
    `diagnostics/record_monotonic_adjustments.csv`. Missing shorter
-   durations are left missing, never fabricated from a longer one. Source rules: pre-1968, Peak from the
+   durations are left missing, never fabricated from a longer one.
+   EXCLUDE_WYS drops a whole water year from the record whatever source
+   would have supplied it, with the reason and the discarded values
+   written to `diagnostics/record_excluded_wys.csv`. (Note:
+   SEASON_OVERRIDE_WYS in the mass-balance script governs ONLY the
+   daily durations -- removing a WY there still leaves its Peak and
+   hourly One_day in the record.) Source rules: pre-1968, Peak from the
    USGS peak flow record and 1/3/5-day straight from the USGS daily
    record. Post-1968, Peak from the calculated hourly unreg else the
    dS_2day storage-change regression; One_day from the 1-day average

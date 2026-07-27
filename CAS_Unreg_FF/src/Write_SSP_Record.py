@@ -63,6 +63,7 @@ OUT_DSS = os.path.join(output_dir, "CAS_Unreg_SSP.dss")
 diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
 OUT_FLAGS_CSV = os.path.join(diag_dir, "record_qa_flags.csv")
 OUT_ADJ_CSV = os.path.join(diag_dir, "record_monotonic_adjustments.csv")
+OUT_EXCL_CSV = os.path.join(diag_dir, "record_excluded_wys.csv")
 
 # Enforce Peak >= 1-day >= 3-day >= 5-day by working BACKWARDS from the
 # longest duration: Five_Day is the anchor and is never changed; each
@@ -74,6 +75,20 @@ OUT_ADJ_CSV = os.path.join(diag_dir, "record_monotonic_adjustments.csv")
 # the *_Raw columns. Set False to write the record unadjusted (the QA
 # flags file is produced either way).
 ENFORCE_MONOTONIC = True
+
+# Water years to drop from the record ENTIRELY, whatever source would
+# have supplied them (hourly holdout, regression fill, mass balance,
+# pre-reg USGS). Use this to reject a year on judgment -- e.g. a year
+# whose hourly record covers the regulated peak event (so the event
+# screen passes) but whose season coverage is so low that a larger
+# unregulated event could be hiding in the missing part.
+# SEASON_OVERRIDE_WYS in Unreg_Durations_MassBalance.py does NOT do
+# this: it governs only the daily mass-balance durations, so removing a
+# WY there still leaves its Peak and hourly One_day in the record.
+# Give a reason for each -- it is written to the exclusions log.
+EXCLUDE_WYS = {
+    # 2001: "39% Oct-Mar unreg coverage; annual max may fall in the gap",
+}
 
 # WYs from the mass-balance table (and pre-reg WYs from the daily
 # record) qualify for durations only if their Oct-Mar flood season has
@@ -183,6 +198,7 @@ def assemble_record(peaks, estimates, massbal,
                    | set(massbal.index) | set(prereg_pk.index)
                    | set(prereg_dur.index))
     rows = []
+    excluded = []
     for wy in years:
         r = {"WY": wy, "Peak": np.nan, "Peak_Source": "",
              "One_day": np.nan, "One_day_Source": "",
@@ -281,8 +297,23 @@ def assemble_record(peaks, estimates, massbal,
                     r["One_day_Source"] = "daily_massbalance"
         rows.append(r)
     df = pd.DataFrame(rows).set_index("WY")
-    return df[df[["Peak", "One_day", "Three_Day", "Five_Day"]]
-              .notna().any(axis=1)]
+    df = df[df[["Peak", "One_day", "Three_Day", "Five_Day"]]
+            .notna().any(axis=1)]
+    # --- explicit whole-WY exclusions (logged, not silently dropped) ---
+    drop = [wy for wy in EXCLUDE_WYS if wy in df.index]
+    if drop:
+        ex = df.loc[drop, ["Peak", "Peak_Source", "One_day",
+                           "One_day_Source", "Three_Day", "Five_Day",
+                           "Durations_Source"]].copy()
+        ex.insert(0, "exclusion_reason",
+                  [EXCLUDE_WYS[wy] for wy in drop])
+        os.makedirs(os.path.dirname(OUT_EXCL_CSV), exist_ok=True)
+        ex.to_csv(OUT_EXCL_CSV)
+        print(f"\nEXCLUDED {len(drop)} WY(s) entirely -> {OUT_EXCL_CSV}")
+        print(ex[["exclusion_reason", "Peak", "Peak_Source",
+                  "One_day"]].to_string())
+        df = df.drop(index=drop)
+    return df
 
 
 def check_monotonicity(table):
@@ -461,6 +492,18 @@ def main():
                   "the adopted regression estimate. The hourly value is an "
                   "observed event and thus a valid lower bound -- review "
                   "whether it should be adopted instead.")
+
+    # --- advisory: hourly peaks accepted despite thin season coverage ---
+    thin = table[(table["Peak_Source"] == "hourly_holdout")
+                 & (table["Unreg_Coverage_OctMar"] < MIN_UNREG_COVERAGE)]
+    if len(thin):
+        print(f"\nADVISORY: {len(thin)} hourly peak(s) accepted because the "
+              "unreg record covers the regulated peak event, but season "
+              f"coverage is below {MIN_UNREG_COVERAGE} -- a larger "
+              "unregulated event could lie in the uncovered part. Review; "
+              "use EXCLUDE_WYS to reject any you don't trust:")
+        print(thin[["Peak", "Unreg_Coverage_OctMar",
+                    "Unreg_Cov_At_Reg_Peak", "Peak_Offset_hrs"]].to_string())
 
     # --- QA: duration ordering (BEFORE any adjustment) ---
     flags = check_monotonicity(table)
