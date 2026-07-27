@@ -76,7 +76,15 @@ observed data into this file. Backup accordingly.
    table `wy_record_ssp.csv` (every WY carries Peak_Screen, both peak
    candidates, and the coverage evidence behind the choice) and the QA
    file `diagnostics/record_qa_flags.csv` (duration-ordering
-   violations, classed SAME_SOURCE vs cross_source). Source rules: pre-1968, Peak from the
+   violations, classed SAME_SOURCE vs cross_source, logged BEFORE any
+   adjustment). With ENFORCE_MONOTONIC (default on) the record is then
+   made monotonic working backwards from 5-day: Five_Day is the anchor,
+   each shorter duration is raised to the longer one where the longer
+   is higher, and raises cascade upward. Pre-adjustment values are kept
+   in the *_Raw columns, each WY's changes are summarized in
+   Monotonic_Adjustment, and every raise is logged to
+   `diagnostics/record_monotonic_adjustments.csv`. Missing shorter
+   durations are left missing, never fabricated from a longer one. Source rules: pre-1968, Peak from the
    USGS peak flow record and 1/3/5-day straight from the USGS daily
    record. Post-1968, Peak from the calculated hourly unreg else the
    dS_2day storage-change regression; One_day from the 1-day average

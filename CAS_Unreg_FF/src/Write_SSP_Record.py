@@ -62,6 +62,18 @@ OUT_CSV = os.path.join(output_dir, "wy_record_ssp.csv")
 OUT_DSS = os.path.join(output_dir, "CAS_Unreg_SSP.dss")
 diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
 OUT_FLAGS_CSV = os.path.join(diag_dir, "record_qa_flags.csv")
+OUT_ADJ_CSV = os.path.join(diag_dir, "record_monotonic_adjustments.csv")
+
+# Enforce Peak >= 1-day >= 3-day >= 5-day by working BACKWARDS from the
+# longest duration: Five_Day is the anchor and is never changed; each
+# shorter duration is raised to the longer one where the longer is
+# higher, and the raise cascades upward (a lifted Three_Day can in turn
+# lift One_day, which can lift Peak). Adjustments are logged to
+# OUT_ADJ_CSV and summarized per WY in the record's
+# Monotonic_Adjustment column, with pre-adjustment values preserved in
+# the *_Raw columns. Set False to write the record unadjusted (the QA
+# flags file is produced either way).
+ENFORCE_MONOTONIC = True
 
 # WYs from the mass-balance table (and pre-reg WYs from the daily
 # record) qualify for durations only if their Oct-Mar flood season has
@@ -327,6 +339,51 @@ def check_monotonicity(table):
     return df
 
 
+def enforce_monotonicity(table):
+    """Raise shorter durations to match longer ones, longest first.
+
+    Works backwards 5-day -> 3-day -> 1-day -> Peak. Five_Day is the
+    anchor and is never modified. Each step compares a duration with the
+    next-longer one AFTER that longer one has been finalized, so a raise
+    cascades upward through the shorter durations.
+
+    Only values that already exist are adjusted -- a missing shorter
+    duration is left missing rather than fabricated from a longer one.
+
+    Returns (adjusted_table, adjustments_log).
+    """
+    t = table.copy()
+    order = ["Five_Day", "Three_Day", "One_day", "Peak"]  # longest first
+    for col in order[1:]:
+        t[f"{col}_Raw"] = t[col]
+    t["Monotonic_Adjustment"] = ""
+    src_col = {"Peak": "Peak_Source", "One_day": "One_day_Source",
+               "Three_Day": "Durations_Source"}
+    log = []
+    for wy, r in t.iterrows():
+        notes = []
+        for longer, shorter in zip(order[:-1], order[1:]):
+            lv = t.at[wy, longer]
+            sv = t.at[wy, shorter]
+            if not (np.isfinite(lv) and np.isfinite(sv)) or sv >= lv:
+                continue
+            t.at[wy, shorter] = lv
+            log.append({
+                "WY": wy, "duration": shorter,
+                "original_value": sv, "adjusted_value": lv,
+                "raised_to_match": longer,
+                "delta_cfs": lv - sv,
+                "delta_pct": 100.0 * (lv - sv) / sv if sv else np.nan,
+                "original_source": str(r.get(src_col.get(shorter, ""), "")),
+                "matched_source": str(r.get(src_col.get(longer, ""), "")),
+            })
+            notes.append(f"{shorter} raised {sv:,.0f} -> {lv:,.0f} "
+                         f"to match {longer}")
+        if notes:
+            t.at[wy, "Monotonic_Adjustment"] = "; ".join(notes)
+    return t, pd.DataFrame(log)
+
+
 def write_dss(table):
     """Write one IR-YEAR record per duration, Sep 30 stamped."""
     with HecDss.Open(OUT_DSS, version=6) as dss:
@@ -405,7 +462,7 @@ def main():
                   "observed event and thus a valid lower bound -- review "
                   "whether it should be adopted instead.")
 
-    # --- QA: duration ordering ---
+    # --- QA: duration ordering (BEFORE any adjustment) ---
     flags = check_monotonicity(table)
     os.makedirs(os.path.dirname(OUT_FLAGS_CSV), exist_ok=True)
     flags.to_csv(OUT_FLAGS_CSV, index=False)
@@ -428,6 +485,26 @@ def main():
     else:
         print("\nQA: duration ordering OK "
               "(Peak >= 1-day >= 3-day >= 5-day everywhere)")
+
+    # --- enforce monotonicity, working backwards from 5-day ---
+    if ENFORCE_MONOTONIC:
+        table, adj = enforce_monotonicity(table)
+        adj.to_csv(OUT_ADJ_CSV, index=False)
+        if len(adj):
+            print(f"\nMonotonic enforcement: {len(adj)} value(s) raised "
+                  f"across {adj.WY.nunique()} WY(s) -> {OUT_ADJ_CSV}")
+            print(adj[["WY", "duration", "original_value",
+                       "adjusted_value", "raised_to_match",
+                       "delta_pct"]].to_string(index=False))
+        else:
+            print("\nMonotonic enforcement: no adjustments needed.")
+        residual = check_monotonicity(table)
+        if len(residual):
+            print("  *** WARNING: ordering violations remain after "
+                  "enforcement -- inspect enforce_monotonicity():")
+            print(residual[["WY", "violation"]].to_string(index=False))
+        table.to_csv(OUT_CSV)   # rewrite with adjusted values + audit
+        print(f"  record rewritten with adjustments -> {OUT_CSV}")
 
     print(f"\nWriting {OUT_DSS}")
     write_dss(table)
