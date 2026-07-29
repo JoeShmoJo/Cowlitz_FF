@@ -15,13 +15,18 @@ instantaneous peak against the 2009 0.20-day statistics. Their adopted
 means agree closely (4.784 vs 4.777), but the comparison is
 approximate by construction. Columns 1, 3 and 5 map directly.
 
-EXPECTED PROBABILITY: with EP_2009 / EP_2026 True, the curve is drawn
-as the Bulletin 17 expected probability curve -- each computed value is
-plotted at the exceedance probability it is actually expected to have
-given the record length, which lifts the curve in the tails for short
-records. With False, the plain computed curve is drawn. The defaults
-below show the 2009 expected curve against the 2026 computed curve; set
-both the same for a like-for-like comparison.
+COMPUTED vs EXPECTED: the computed curve is the plain LP3 fit from the
+adopted statistics. The expected probability curve adds Bulletin 17's
+sampling-uncertainty adjustment, which depends on the RECORD LENGTH --
+so it is not a property of the flood estimate but of how much data
+stood behind it. The 2009 study had N = 69-79 and this one has
+N = 93-95, so comparing expected curves would fold that ~20-year
+difference into the comparison as if it were hydrology.
+
+For an apples-to-apples comparison of the two studies, leave both
+EP flags False: computed vs computed isolates the actual difference in
+the fitted distributions. Set BOTH True only to reproduce whatever
+each report published.
 """
 
 import os
@@ -63,8 +68,8 @@ STATS_2009 = {
 COLORS = {"Peak": "#c00000", "1-Day": "#0070c0",
           "3-Day": "#00874e", "5-Day": "#7030a0"}
 
-EP_2009 = True                # draw 2009 as the expected probability curve
-EP_2026 = False               # draw 2026 as the computed curve
+EP_2009 = False               # False = computed curve (apples-to-apples)
+EP_2026 = False               # keep these two the SAME for comparison
 SHOW_STATS_BOX = True
 
 Y_LIMITS = (10_000, 300_000)       # flow axis, cfs
@@ -72,9 +77,9 @@ Y_TICKS = [10_000, 100_000, 300_000]
 P_LIMITS = (0.999, 0.001)          # exceedance probability, left to right
 
 P_TICKS = [0.999, 0.99, 0.9, 0.5, 0.2, 0.1,
-           0.05, 0.02, 0.01, 0.005, 0.002]
-T_TICKS = [1.001, 1.1, 2, 5, 10, 50, 200, 500]
-T_LABELS = ["1.0", "1.1", "2", "5", "10", "50", "200", "500"]
+           0.05, 0.02, 0.01, 0.005, 0.001]
+T_TICKS = [1.001, 1.1, 2, 5, 10, 50, 200, 1000]
+T_LABELS = ["1.0", "1.1", "2", "5", "10", "50", "200", "1000"]
 
 CURVE_P_LIMITS = (0.99, 0.002)      # lines drawn 1.01-yr to 500-yr
 CURVE_POINTS = 400
