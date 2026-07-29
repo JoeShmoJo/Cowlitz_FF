@@ -1,0 +1,64 @@
+Version=1.0
+ProjectName=NewTRIAL
+Extents=-Infinity,-Infinity,-Infinity,-Infinity
+Grow Extents=true
+Created=1251999929012
+Created By=g2ecdmrf
+UnitSystemID=1
+SyncMapWindows=false
+
+CoordinateInfoBegin
+type=X-Y
+units=U.S. Feet
+unitMult=1.0
+spheroid=
+CoordinateInfoEnd
+
+AdditionalProjectInfoBegin
+AdditionalProjectInfoEnd
+
+ManagerBegin
+Name=Base Map
+Description=
+File=DataStore.LST
+Class=hec2.ssp.model.DataStore
+ModifiedTime=1252000653851
+CreatedBy=g2ecdmrf
+CreatedOn=1251999929012
+ModifiedBy=g2ecdmrf
+ManagerEnd
+
+ManagerBegin
+Name=Base Map
+Description=
+File=Base_Map.map
+Class=hec2.ssp.model.Map
+ModifiedTime=1251999929012
+CreatedBy=g2ecdmrf
+CreatedOn=1251999929012
+ModifiedBy=g2ecdmrf
+ManagerEnd
+
+ManagerBegin
+Name=Toutle_peak
+Description=
+File=Toutle_peak.17b
+Class=hec2.ssp.model.Bulletin17BAnalysis
+ModifiedTime=1252000745929
+CreatedBy=g2ecdmrf
+CreatedOn=1252000334432
+ModifiedBy=g2ecdmrf
+LastModified=1252000745929
+ManagerEnd
+
+ManagerBegin
+Name=Toutle_peak_tri-SILVER LAKE-FLOW-PEAK
+Description=Imported from Z:\Mount_St_Helens\Long_Term_Plan\FY2008 Study Data\WorkingFiles\2009_Hydrology_Restudy\HEC-SSP\Cowlitz_SSP_input.xls
+File=DataStore.LST
+Class=hec2.ssp.model.Data
+ModifiedTime=1252000653851
+CreatedBy=g2ecdmrf
+CreatedOn=1252000653851
+ModifiedBy=g2ecdmrf
+ManagerEnd
+

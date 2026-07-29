@@ -1,0 +1,42 @@
+Node: Bulletin17B
+Name: Toutle_peak
+LastModified:1252000670242
+Version:101
+FlowDataSet:Toutle_peak_tri-SILVER LAKE-FLOW-PEAK
+DSSFileName:NewTRIAL.dss
+ReportFile:Bulletin17bResults/Toutle_peak/Toutle_peak.rpt
+SkewType:Station Skew
+RegionalSkew:-Infinity
+RegSkewMSE:-Infinity
+ExpectedProbablyCurve:Compute Expected Prob
+PlottingPosition:Weibull
+PlottingConstantA:-Infinity
+PlottingConstantB:-Infinity
+ConfidenceLimit:Defaults
+UpperLimit:-Infinity
+LowerLimit:-Infinity
+LastComputedTime:0
+UseHighOutlierThreshold:false
+HighOutlierThreshold:-Infinity
+UseLowOutlierThreshold:true
+LowOutlierThreshold:10000.0
+UseHistoricData:false
+HistoricStartYear:-2147483648
+HistoricEndYear:-2147483648
+UseNonStandardValues:false
+Freq Ord: 0.2
+Freq Ord: 0.5
+Freq Ord: 1.0
+Freq Ord: 2.0
+Freq Ord: 5.0
+Freq Ord: 10.0
+Freq Ord: 20.0
+Freq Ord: 50.0
+Freq Ord: 80.0
+Freq Ord: 90.0
+Freq Ord: 95.0
+Freq Ord: 99.0
+Use Start Date:false
+Use End Date:false
+StatsAndLimitsMethod: METHODS_17B
+LowOutlierTest: SingleGrubbsBeck
