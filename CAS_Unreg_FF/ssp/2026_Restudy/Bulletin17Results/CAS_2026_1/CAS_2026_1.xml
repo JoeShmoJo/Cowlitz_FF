@@ -2,7 +2,7 @@
 <AnalysisResults>
   <ComputedBy application="HEC-SSP" version="2.3" />
   <Bulletin17bAnalysis>
-    <AnalysisTime>2026.Jul.28 11:47:33.415</AnalysisTime>
+    <AnalysisTime>2026.Jul.30 12:30:56.084</AnalysisTime>
     <Name>CAS_2026_1</Name>
     <Description />
     <ProjectPath />
@@ -14,7 +14,7 @@
       <EndYear2026>
         <DataSet>
           <DataSetName>CAS_2026_1-CASTLEROCK-FLOW-UNREG</DataSetName>
-          <ComputeTime>1785264453985</ComputeTime>
+          <ComputeTime>1785439856614</ComputeTime>
           <DssFileName>2026_Restudy.dss</DssFileName>
           <DataPathname>//CASTLEROCK/FLOW-UNREG//IR-YEAR/1-DAY-MOS-HOLDOUT/</DataPathname>
           <StartDate>01Oct1928</StartDate>
@@ -52,8 +52,8 @@
             <Shape>NaN</Shape>
             <EquivalentRecordLength>94.0000000000000000000000000000000000000000000000000000</EquivalentRecordLength>
             <SystHistEquivalentRecordLength>94.0000000000000000000000000000000000000000000000000000</SystHistEquivalentRecordLength>
-            <CohnLaneBaierEquivalentRecordLength>99.8716666786714200000000000000000000000000000000000000</CohnLaneBaierEquivalentRecordLength>
-            <MargoEquivalentRecordLength>107.5744091644214800000000000000000000000000000000000000</MargoEquivalentRecordLength>
+            <CohnLaneBaierEquivalentRecordLength>100.3694922328380700000000000000000000000000000000000000</CohnLaneBaierEquivalentRecordLength>
+            <MargoEquivalentRecordLength>116.2190545648133000000000000000000000000000000000000000</MargoEquivalentRecordLength>
           </Statistics>
           <NumberOfEvents>
             <NumberHistoricEvents>0</NumberHistoricEvents>
@@ -69,8 +69,8 @@
             <EmaMseSkew>0.063964231157985</EmaMseSkew>
             <EquivalentRecordLength>94.000000000000000</EquivalentRecordLength>
             <SystHistEquivalentRecordLength>94.000000000000000</SystHistEquivalentRecordLength>
-            <CohnLaneBaierEquivalentRecordLength>99.871666678671420</CohnLaneBaierEquivalentRecordLength>
-            <MargoEquivalentRecordLength>107.574409164421480</MargoEquivalentRecordLength>
+            <CohnLaneBaierEquivalentRecordLength>100.369492232838070</CohnLaneBaierEquivalentRecordLength>
+            <MargoEquivalentRecordLength>116.219054564813300</MargoEquivalentRecordLength>
             <GrubbsBeckCriticalValue>0.000000000000000</GrubbsBeckCriticalValue>
           </EmaResults>
           <DistributionType>PEARSON3</DistributionType>
@@ -90,15 +90,15 @@
               <UpperConfidenceLevel>0.05</UpperConfidenceLevel>
               <ExpectedProbabilityOption>3</ExpectedProbabilityOption>
               <PercentExceedance>
-                <doubleArray Length="12" Step="10">
-                  <D Range="0-9" Data="0.20000000000000018,0.5000000000000004,1.0000000000000009,2.0000000000000018,5.000000000000004,9.999999999999998,19.999999999999996,50.0,80.0,90.0" />
-                  <D Range="10-12" Data="95.0,99.0" />
+                <doubleArray Length="16" Step="10">
+                  <D Range="0-9" Data="0.009999999999998899,0.019999999999997797,0.04999999999999449,0.10000000000000009,0.20000000000000018,0.5000000000000004,1.0000000000000009,2.0000000000000018,5.000000000000004,9.999999999999998" />
+                  <D Range="10-16" Data="19.999999999999996,50.0,80.0,90.0,95.0,99.0" />
                 </doubleArray>
               </PercentExceedance>
               <EmaVariance>
-                <doubleArray Length="12" Step="10">
-                  <D Range="0-9" Data="0.004731159129500983,0.0034080267357904626,0.002580917201315176,0.0018998731850243039,0.001216153128166015,8.547628869279113E-4,6.177649151857061E-4,4.8137735764276887E-4,5.757415130318887E-4,7.685008377914763E-4" />
-                  <D Range="10-12" Data="0.0010698386067178242,0.0022250206067869712" />
+                <doubleArray Length="16" Step="10">
+                  <D Range="0-9" Data="0.01094307692764891,0.009244494170873625,0.007242035545216595,0.005909175505829062,0.004731159129500983,0.0034080267357904626,0.002580917201315176,0.0018998731850243039,0.001216153128166015,8.547628869279113E-4" />
+                  <D Range="10-16" Data="6.177649151857061E-4,4.8137735764276887E-4,5.757415130318887E-4,7.685008377914763E-4,0.0010698386067178242,0.0022250206067869712" />
                 </doubleArray>
               </EmaVariance>
             </FrequencyCurve>

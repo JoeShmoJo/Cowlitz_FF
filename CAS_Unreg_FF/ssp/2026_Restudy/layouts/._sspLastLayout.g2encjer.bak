@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="0">
+<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="3">
   <horizontalDivider location="818" />
   <verticalDivider location="575" />
   <statusLine visible="true" />
@@ -47,7 +47,7 @@
       </FolderNode>
     </FolderNode>
   </ProjectTree>
-  <ProjectTreeSelections SelectedPath0="root, 2026_Restudy, Analysis, Bulletin 17, CAS_2026_p_PILF_2" />
+  <ProjectTreeSelections SelectedPath0="root, 2026_Restudy, Analysis, Bulletin 17, CAS_2026_p" />
   <ChildWindow0 class="hec2.ssp.client.SSPMapSchematic" title="Base Map" width="1330" height="815" positionX="0" positionY="0" maximized="true" iconized="false" selected="true" layer="0" ManagerCount="1" MapMouseAdapter="hec.map.MouseZoomAdapter" MapCount="0" DrawGrids="true" Background="white">
     <Manager0 ManagerName="Base Map" ManagerClass="hec2.ssp.model.Map" />
     <ViewRect zoom="1.178060413354531">
@@ -96,5 +96,11 @@
       </FolderNode>
     </FolderNode>
   </ProjectTree>
+  <ChildSSPWindow0 class="hec2.ssp.editors.Bullentin17BEditor" title="Bulletin 17 Editor - CAS_2026_p_PILF" width="1344" height="825" positionX="288" positionY="104" selected="false">
+    <Bullentin17BEditor SelectedItem="CAS_2026_p_PILF" SelectedTab="2" />
+  </ChildSSPWindow0>
+  <ChildSSPWindow1 class="hec2.ssp.editors.Bullentin17BEditor" title="Bulletin 17 Editor - CAS_2026_p_PILF_2" width="1344" height="825" positionX="288" positionY="104" selected="false">
+    <Bullentin17BEditor SelectedItem="CAS_2026_p_PILF_2" SelectedTab="2" />
+  </ChildSSPWindow1>
 </BrowserFrame>
 

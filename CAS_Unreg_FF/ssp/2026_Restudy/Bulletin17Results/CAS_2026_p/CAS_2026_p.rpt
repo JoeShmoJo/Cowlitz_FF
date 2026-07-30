@@ -1,6 +1,6 @@
 -------------------------------
 Bulletin 17C (Java) Frequency Analysis
-    30 Jul 2026   12:05 PM
+    30 Jul 2026   12:30 PM
 Computed By: HEC-SSP Version 2.3
 -------------------------------
 
@@ -31,6 +31,24 @@ Compute Expected Probability Curve using Numerical Integration (EMA)
 
 Upper Confidence Level: 0.05
 Lower Confidence Level: 0.95
+
+Use non-standard frequencies
+Frequency: 0.01
+Frequency: 0.02
+Frequency: 0.05
+Frequency: 0.1
+Frequency: 0.2
+Frequency: 0.5
+Frequency: 1.0
+Frequency: 2.0
+Frequency: 5.0
+Frequency: 10.0
+Frequency: 20.0
+Frequency: 50.0
+Frequency: 80.0
+Frequency: 90.0
+Frequency: 95.0
+Frequency: 99.0
 
 Display ordinate values using 1 digits in fraction part of value
 
@@ -161,8 +179,8 @@ CAS_2026_p-CASTLEROCK-FLOW-UNREG
 
   Equivalent Record Length [G at-site]            95.000000  
   Equivalent Record Length [Syst+Hist-LowOutl]    95.000000  
-  Equivalent Record Length [Cohn et al (1997)]   100.657041  
-  Equivalent Record Length [Margo]               102.530341  
+  Equivalent Record Length [Cohn et al (1997)]   103.703870  
+  Equivalent Record Length [Margo]               107.317807  
   Grubbs-Beck Critical Value                       0.000000  
   # Years w/ non [0-inf] Thresholds                0.000000  
 
@@ -289,6 +307,10 @@ CAS_2026_p-CASTLEROCK-FLOW-UNREG
 |     Curve       Log(EMA)     Probability  |   Chance    |          0.05          0.95 |
 |                 FLOW, CFS                 | Exceedance  |          FLOW, CFS          |
 |-------------------------------------------|-------------|-----------------------------|
+|     296,087.7    0.00979675     374,643.0 |       0.01  |     476,290.0     217,103.6 |
+|     276,072.2    0.00823721     332,739.2 |       0.02  |     426,542.7     207,623.8 |
+|     250,133.5    0.00639930     285,567.9 |       0.05  |     366,728.3     194,486.9 |
+|     230,884.4    0.00517849     255,074.1 |        0.1  |     325,578.4     184,043.8 |
 |     211,932.4    0.00410363     227,899.7 |        0.2  |     287,634.9     173,114.3 |
 |     187,282.4    0.00290586     195,977.2 |        0.5  |     241,929.3     157,817.9 |
 |     168,883.6    0.00216711     174,075.0 |        1.0  |     210,386.0     145,503.8 |

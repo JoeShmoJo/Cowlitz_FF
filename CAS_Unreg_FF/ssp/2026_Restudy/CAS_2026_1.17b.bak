@@ -1,6 +1,6 @@
 Node: Bulletin17B
 Name: CAS_2026_1
-LastModified:1785264397237
+LastModified:1785264453392
 Version:101
 FlowDataSet:CAS_2026_1-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_1/CAS_2026_1.dss
@@ -8,14 +8,14 @@ ReportFile:
 SkewType:Weighted Skew
 RegionalSkew:0.09
 RegSkewMSE:0.09
-ExpectedProbablyCurve:Do Not Compute Expected Prob
+ExpectedProbablyCurve:Compute Expected Prob Using Numerical Integration
 PlottingPosition:Hirsch/Stedinger
 PlottingConstantA:0.0
 PlottingConstantB:0.0
 ConfidenceLimit:Defaults
 UpperLimit:-Infinity
 LowerLimit:-Infinity
-LastComputedTime:1785264320301
+LastComputedTime:1785264404716
 UseHighOutlierThreshold:false
 HighOutlierThreshold:-Infinity
 UseLowOutlierThreshold:false

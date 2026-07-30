@@ -1,6 +1,6 @@
 -------------------------------
 Bulletin 17C (Java) Frequency Analysis
-    28 Jul 2026   11:49 AM
+    30 Jul 2026   12:31 PM
 Computed By: HEC-SSP Version 2.3
 -------------------------------
 
@@ -11,12 +11,12 @@ Analysis Name: CAS_2026_3
 Description: 
 
 Data Set Name: CAS_2026_3-CASTLEROCK-FLOW-UNREG
-DSS File Name: C:\Projects\2026_Cowlitz_Flow_Frequency\2026_Restudy\2026_Restudy.dss
+DSS File Name: C:\Projects\Claude\CAS_Unreg_FF\ssp\2026_Restudy\2026_Restudy.dss
 DSS Pathname: //CASTLEROCK/FLOW-UNREG/01jan1900/IR-YEAR/3-DAY-MOS-HOLDOUT/
 
-Report File Name: C:\Projects\2026_Cowlitz_Flow_Frequency\2026_Restudy\Bulletin17Results\CAS_2026_3\CAS_2026_3.rpt
-XML File Name: C:\Projects\2026_Cowlitz_Flow_Frequency\2026_Restudy\Bulletin17Results\CAS_2026_3\CAS_2026_3.xml
-Output DSS File Name: C:\Projects\2026_Cowlitz_Flow_Frequency\2026_Restudy\Bulletin17Results\CAS_2026_3\CAS_2026_3.dss
+Report File Name: C:\Projects\Claude\CAS_Unreg_FF\ssp\2026_Restudy\Bulletin17Results\CAS_2026_3\CAS_2026_3.rpt
+XML File Name: C:\Projects\Claude\CAS_Unreg_FF\ssp\2026_Restudy\Bulletin17Results\CAS_2026_3\CAS_2026_3.xml
+Output DSS File Name: C:/Projects/Claude/CAS_Unreg_FF/ssp/2026_Restudy/Bulletin17Results/CAS_2026_3/CAS_2026_3.dss
 
 Start Date: 01 Oct 1928
 End Date:   30 Sep 2025
@@ -31,6 +31,24 @@ Compute Expected Probability Curve using Numerical Integration (EMA)
 
 Upper Confidence Level: 0.05
 Lower Confidence Level: 0.95
+
+Use non-standard frequencies
+Frequency: 0.01
+Frequency: 0.02
+Frequency: 0.05
+Frequency: 0.1
+Frequency: 0.2
+Frequency: 0.5
+Frequency: 1.0
+Frequency: 2.0
+Frequency: 5.0
+Frequency: 10.0
+Frequency: 20.0
+Frequency: 50.0
+Frequency: 80.0
+Frequency: 90.0
+Frequency: 95.0
+Frequency: 99.0
 
 Display ordinate values using 1 digits in fraction part of value
 
@@ -159,8 +177,8 @@ CAS_2026_3-CASTLEROCK-FLOW-UNREG
 
   Equivalent Record Length [G at-site]            93.000000  
   Equivalent Record Length [Syst+Hist-LowOutl]    93.000000  
-  Equivalent Record Length [Cohn et al (1997)]   101.788331  
-  Equivalent Record Length [Margo]               109.206555  
+  Equivalent Record Length [Cohn et al (1997)]   105.405481  
+  Equivalent Record Length [Margo]               119.974998  
   Grubbs-Beck Critical Value                       0.000000  
   # Years w/ non [0-inf] Thresholds                0.000000  
 
@@ -285,10 +303,14 @@ CAS_2026_3-CASTLEROCK-FLOW-UNREG
 |     Curve       Log(EMA)     Probability  |   Chance    |          0.05          0.95 |
 |                 FLOW, CFS                 | Exceedance  |          FLOW, CFS          |
 |-------------------------------------------|-------------|-----------------------------|
-|     162,679.1    0.00405342     174,804.1 |        0.2  |     217,639.0     134,098.3 |
-|     142,415.9    0.00294645     149,186.3 |        0.5  |     182,067.4     120,563.1 |
-|     127,601.2    0.00225024     131,667.0 |        1.0  |     157,780.5     110,116.7 |
-|     113,161.7    0.00167288     115,547.3 |        2.0  |     135,506.1      99,435.5 |
+|     235,398.2    0.00920237     292,617.3 |       0.01  |     368,085.7     176,954.1 |
+|     217,611.0    0.00779922     259,048.2 |       0.02  |     327,937.6     167,178.9 |
+|     195,014.6    0.00614125     221,218.5 |       0.05  |     280,086.6     154,142.2 |
+|     178,580.1    0.00503454     196,491.1 |        0.1  |     247,468.8     144,175.6 |
+|     162,679.1    0.00405342     174,634.9 |        0.2  |     217,639.0     134,098.3 |
+|     142,415.9    0.00294645     149,083.5 |        0.5  |     182,067.4     120,563.1 |
+|     127,601.2    0.00225024     131,655.9 |        1.0  |     157,780.5     110,116.7 |
+|     113,161.7    0.00167288     115,546.6 |        2.0  |     135,506.1      99,435.5 |
 |      94,494.6    0.00108634      95,531.0 |        5.0  |     108,770.6      84,824.1 |
 |      80,497.6    0.00077048      80,991.0 |       10.0  |      90,270.2      73,237.8 |
 |      66,282.2    0.00055800      66,490.7 |       20.0  |      72,809.8      60,923.9 |

@@ -1,6 +1,6 @@
 Node: Bulletin17B
 Name: CAS_2026_p
-LastModified:1785433887471
+LastModified:1785439780439
 Version:101
 FlowDataSet:CAS_2026_p-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_p/CAS_2026_p.dss
@@ -15,7 +15,7 @@ PlottingConstantB:0.0
 ConfidenceLimit:Defaults
 UpperLimit:-Infinity
 LowerLimit:-Infinity
-LastComputedTime:1785433860575
+LastComputedTime:1785438307315
 UseHighOutlierThreshold:false
 HighOutlierThreshold:-Infinity
 UseLowOutlierThreshold:false
@@ -23,7 +23,9 @@ LowOutlierThreshold:30000.0
 UseHistoricData:false
 HistoricStartYear:-2147483648
 HistoricEndYear:-2147483648
-UseNonStandardValues:false
+UseNonStandardValues:true
+Freq Ord: 0.05
+Freq Ord: 0.1
 Freq Ord: 0.2
 Freq Ord: 0.5
 Freq Ord: 1.0
@@ -43,6 +45,7 @@ EndDate:30Sep2026
 StatsAndLimitsMethod: EMA_17C_JAVA
 LowOutlierTest: MultipleGrubbsBeck
 PerceptionThreshold:1927,2026,0.0,-Infinity,Total Record
+PerceptionThreshold:1969,1973,-Infinity,-Infinity,
 VariableTimeWindowOptions
 VariableTimeWindowType:SingleTimeWindow
 MovingWindowLength:20
@@ -93,11 +96,11 @@ DataValuesStart
 1966,28800.0,28800.0,28800.0,SYST,F,F,F
 1967,65000.0,65000.0,65000.0,SYST,F,F,F
 1968,49500.0,49500.0,49500.0,SYST,F,F,F
-1969,40300.0,80600.0,40300.0,SYST,T,T,T
-1970,37900.0,75800.0,37900.0,SYST,T,T,T
-1971,50000.0,100000.0,50000.0,SYST,T,T,T
-1972,81600.0,163200.0,81600.0,SYST,T,T,T
-1973,45600.0,91200.0,45600.0,SYST,T,T,T
+1969,0.0,80600.0, ,CENS,T,T,T
+1970,0.0,75800.0, ,CENS,T,T,T
+1971,0.0,100000.0, ,CENS,T,T,T
+1972,0.0,163200.0, ,CENS,T,T,T
+1973,0.0,91200.0, ,CENS,T,T,T
 1974,112486.05140177408,112486.05140177408,112486.05140177408,SYST,F,F,F
 1975,76895.92905735389,76895.92905735389,76895.92905735389,SYST,F,F,F
 1976,124945.97962801329,124945.97962801329,124945.97962801329,SYST,F,F,F

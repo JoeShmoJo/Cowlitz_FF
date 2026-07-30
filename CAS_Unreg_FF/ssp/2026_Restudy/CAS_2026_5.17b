@@ -1,7 +1,7 @@
 Node: Bulletin17B
 Name: CAS_2026_5
 Description:lin interp skew and mse from 3 and 7 day values from table 10 USGS 2020
-LastModified:1785265101956
+LastModified:1785439894053
 Version:101
 FlowDataSet:CAS_2026_5-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_5/CAS_2026_5.dss
@@ -24,7 +24,11 @@ LowOutlierThreshold:-Infinity
 UseHistoricData:false
 HistoricStartYear:-2147483648
 HistoricEndYear:-2147483648
-UseNonStandardValues:false
+UseNonStandardValues:true
+Freq Ord: 0.01
+Freq Ord: 0.02
+Freq Ord: 0.05
+Freq Ord: 0.1
 Freq Ord: 0.2
 Freq Ord: 0.5
 Freq Ord: 1.0

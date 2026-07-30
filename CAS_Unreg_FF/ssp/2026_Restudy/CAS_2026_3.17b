@@ -1,6 +1,6 @@
 Node: Bulletin17B
 Name: CAS_2026_3
-LastModified:1785264551218
+LastModified:1785439874203
 Version:101
 FlowDataSet:CAS_2026_3-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_3/CAS_2026_3.dss
@@ -23,7 +23,11 @@ LowOutlierThreshold:-Infinity
 UseHistoricData:false
 HistoricStartYear:-2147483648
 HistoricEndYear:-2147483648
-UseNonStandardValues:false
+UseNonStandardValues:true
+Freq Ord: 0.01
+Freq Ord: 0.02
+Freq Ord: 0.05
+Freq Ord: 0.1
 Freq Ord: 0.2
 Freq Ord: 0.5
 Freq Ord: 1.0

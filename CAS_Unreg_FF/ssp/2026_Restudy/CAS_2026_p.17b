@@ -1,6 +1,6 @@
 Node: Bulletin17B
 Name: CAS_2026_p
-LastModified:1785438306832
+LastModified:1785439826738
 Version:101
 FlowDataSet:CAS_2026_p-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_p/CAS_2026_p.dss
@@ -15,7 +15,7 @@ PlottingConstantB:0.0
 ConfidenceLimit:Defaults
 UpperLimit:-Infinity
 LowerLimit:-Infinity
-LastComputedTime:1785433887990
+LastComputedTime:1785439785824
 UseHighOutlierThreshold:false
 HighOutlierThreshold:-Infinity
 UseLowOutlierThreshold:false
@@ -23,7 +23,11 @@ LowOutlierThreshold:30000.0
 UseHistoricData:false
 HistoricStartYear:-2147483648
 HistoricEndYear:-2147483648
-UseNonStandardValues:false
+UseNonStandardValues:true
+Freq Ord: 0.01
+Freq Ord: 0.02
+Freq Ord: 0.05
+Freq Ord: 0.1
 Freq Ord: 0.2
 Freq Ord: 0.5
 Freq Ord: 1.0
