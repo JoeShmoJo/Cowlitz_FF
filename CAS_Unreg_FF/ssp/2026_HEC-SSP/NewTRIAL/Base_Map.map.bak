@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Map Name="Base Map" mapsSet="true">
-  <Description />
-  <maps MapOrigin="0.0, 0.0" MapZoom="1.2341463414634146" WindowXLoc="0" WindowYLoc="0" WindowWidth="687" WindowHeight="571" HasMapsSet="true">
-    <WorldRect e="1469.1088180112572" w="-1469.1088180112572" n="1234.1463414634147" s="-1234.1463414634147" />
-  </maps>
-</Map>
-

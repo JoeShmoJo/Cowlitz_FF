@@ -1,0 +1,50 @@
+Node: Bulletin17B
+Name: CAS_2026_3
+LastModified:1785264483707
+Version:101
+DSSFileName:Bulletin17Results/CAS_2026_3/CAS_2026_3.dss
+ReportFile:
+SkewType:Regional Skew
+RegionalSkew:-Infinity
+RegSkewMSE:-Infinity
+ExpectedProbablyCurve:Do Not Compute Expected Prob
+PlottingPosition:Median
+PlottingConstantA:0.0
+PlottingConstantB:0.0
+ConfidenceLimit:Defaults
+UpperLimit:-Infinity
+LowerLimit:-Infinity
+LastComputedTime:0
+UseHighOutlierThreshold:false
+HighOutlierThreshold:-Infinity
+UseLowOutlierThreshold:false
+LowOutlierThreshold:-Infinity
+UseHistoricData:false
+HistoricStartYear:-2147483648
+HistoricEndYear:-2147483648
+UseNonStandardValues:false
+Freq Ord: 0.2
+Freq Ord: 0.5
+Freq Ord: 1.0
+Freq Ord: 2.0
+Freq Ord: 5.0
+Freq Ord: 10.0
+Freq Ord: 20.0
+Freq Ord: 50.0
+Freq Ord: 80.0
+Freq Ord: 90.0
+Freq Ord: 95.0
+Freq Ord: 99.0
+Use Start Date:false
+Use End Date:false
+LowOutlierTest: SingleGrubbsBeck
+VariableTimeWindowOptions
+VariableTimeWindowType:SingleTimeWindow
+MovingWindowLength:20
+MovingWindowShift:1
+InitialTimeWindow:20
+expansionIncrement:1
+VariableTimeWindowOptionsEnd
+PlotNEB:false
+NonExceedanceBoundContainer
+NonExceedanceBoundContainerEnd

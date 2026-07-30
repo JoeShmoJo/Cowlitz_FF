@@ -60,8 +60,7 @@ OUT_TABLE_CSV = os.path.join(PROJECT_DIR, "output",
 
 # SSP Bulletin 17 report files, one per duration. Check the analysis
 # names against your Bulletin17Results folder.
-SSP_DIR = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\2026_Restudy"
-           r"\Bulletin17Results")
+SSP_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF", "ssp", "2026_Restudy", "Bulletin17Results")
 SSP_REPORTS = {
     "Peak":  os.path.join(SSP_DIR, "CAS_2026_p", "CAS_2026_p.rpt"),
     "1-Day": os.path.join(SSP_DIR, "CAS_2026_1", "CAS_2026_1.rpt"),
@@ -74,7 +73,7 @@ DURATION_DAYS = {"Peak": 0, "1-Day": 1, "3-Day": 3, "5-Day": 5}
 
 # 2026 adopted LP3 statistics: label -> (log10 mean, log10 std, skew)
 STATS_2026 = {
-    "Peak":  (4.784, 0.202, -0.149),
+    "Peak":  (4.778, 0.202, -0.135),
     "1-Day": (4.743, 0.203, -0.052),
     "3-Day": (4.660, 0.192, -0.007),
     "5-Day": (4.593, 0.179, -0.029),

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AnalysisResults>
+  <ComputedBy application="HEC-SSP" version="2.3" />
+  <Bulletin17bAnalysis>
+    <AnalysisTime>2026.Jul.28 11:49:11.242</AnalysisTime>
+    <Name>CAS_2026_3</Name>
+    <Description />
+    <ProjectPath />
+    <ReportFilePath>Bulletin17Results/CAS_2026_3/CAS_2026_3.rpt</ReportFilePath>
+    <OutputDssFile>Bulletin17Results/CAS_2026_3/CAS_2026_3.dss</OutputDssFile>
+    <HistoricData UseHistoricData="false" HistoricStartYear="0" HistoricEndYear="0" />
+    <VariableTimeWindowOptions VariableTimeWindowType="SingleTimeWindow" MovingWindowLength="20" MovingWindowShift="1" InitialTimeWindow="20" expansionIncrement="1" />
+    <computeYears>
+      <EndYear2025>
+        <DataSet>
+          <DataSetName>CAS_2026_3-CASTLEROCK-FLOW-UNREG</DataSetName>
+          <ComputeTime>1785264551855</ComputeTime>
+          <DssFileName>2026_Restudy.dss</DssFileName>
+          <DataPathname>//CASTLEROCK/FLOW-UNREG//IR-YEAR/3-DAY-MOS-HOLDOUT/</DataPathname>
+          <StartDate>01Oct1928</StartDate>
+          <EndDate>30Sep2025</EndDate>
+          <SkewParameters>
+            <SkewType>WEIGHTED</SkewType>
+            <RegionalSkew>0.07</RegionalSkew>
+            <RegionalSkewMSE>0.07</RegionalSkewMSE>
+            <DecimalPlaces>1</DecimalPlaces>
+          </SkewParameters>
+          <UseLogTransform>true</UseLogTransform>
+          <BrokenRecord>False</BrokenRecord>
+          <PlotPositionPathname>//CASTLEROCK/FREQ-FLOW///Bulletin 17_CAS_2026_3 EVENTS/</PlotPositionPathname>
+          <GraphicalPlotPositionPathname />
+          <GraphicalPlotPositionDssFile />
+          <PerceptionRangePathname>//CASTLEROCK/FREQ-FLOW///Bulletin 17_CAS_2026_3 EVENT RANGE/</PerceptionRangePathname>
+          <StatisticsAndLimitsMethod>17C_JAVA</StatisticsAndLimitsMethod>
+          <Statistics>
+            <StatisticsType>Systematic</StatisticsType>
+            <UseLogTransform>true</UseLogTransform>
+            <Mean>4.6595058854560705000000000000000000000000000000000000</Mean>
+            <StandardDeviation>0.1922805868566399300000000000000000000000000000000000</StandardDeviation>
+            <StationSkew>-0.0759213880941118000000000000000000000000000000000000</StationSkew>
+            <StationSkewMSE>0.0609280343976751500000000000000000000000000000000000</StationSkewMSE>
+            <RegionalSkew>0.0700000000000000000000000000000000000000000000000000</RegionalSkew>
+            <WeightedSkew>-0.0068072062039043115000000000000000000000000000000000</WeightedSkew>
+            <AdoptedSkew>-0.0068072062039043115000000000000000000000000000000000</AdoptedSkew>
+            <SkewType>WEIGHTED</SkewType>
+            <GrubbsBeckCriticalValue>0.0000000000000000000000000000000000000000000000000000</GrubbsBeckCriticalValue>
+            <EmaEstimateMSE>0.0609280343976751500000000000000000000000000000000000</EmaEstimateMSE>
+            <Shape0>NaN</Shape0>
+            <Shape1>NaN</Shape1>
+            <Location>NaN</Location>
+            <Scale>NaN</Scale>
+            <Shape>NaN</Shape>
+            <EquivalentRecordLength>92.9999999999999900000000000000000000000000000000000000</EquivalentRecordLength>
+            <SystHistEquivalentRecordLength>93.0000000000000000000000000000000000000000000000000000</SystHistEquivalentRecordLength>
+            <CohnLaneBaierEquivalentRecordLength>101.7883314703378200000000000000000000000000000000000000</CohnLaneBaierEquivalentRecordLength>
+            <MargoEquivalentRecordLength>109.2065553830729000000000000000000000000000000000000000</MargoEquivalentRecordLength>
+          </Statistics>
+          <NumberOfEvents>
+            <NumberHistoricEvents>0</NumberHistoricEvents>
+            <NumberHighOutliers>0</NumberHighOutliers>
+            <NumberLowOutliers>0</NumberLowOutliers>
+            <NumberZero>0</NumberZero>
+            <NumberIncompleteMissing>5</NumberIncompleteMissing>
+            <NumberMissing>5</NumberMissing>
+            <NumberSystematicEvents>93</NumberSystematicEvents>
+            <HistoricPeriod>98</HistoricPeriod>
+          </NumberOfEvents>
+          <EmaResults>
+            <EmaMseSkew>0.060928034397675</EmaMseSkew>
+            <EquivalentRecordLength>92.999999999999990</EquivalentRecordLength>
+            <SystHistEquivalentRecordLength>93.000000000000000</SystHistEquivalentRecordLength>
+            <CohnLaneBaierEquivalentRecordLength>101.788331470337820</CohnLaneBaierEquivalentRecordLength>
+            <MargoEquivalentRecordLength>109.206555383072900</MargoEquivalentRecordLength>
+            <GrubbsBeckCriticalValue>0.000000000000000</GrubbsBeckCriticalValue>
+          </EmaResults>
+          <DistributionType>PEARSON3</DistributionType>
+          <SampleFrequencyCurve>
+            <FrequencyCurve>
+              <DistributionType>Pearson Type III</DistributionType>
+              <ParameterLabel>FLOW</ParameterLabel>
+              <UnitsLabel>CFS</UnitsLabel>
+              <DssFileName>Bulletin17Results/CAS_2026_3/CAS_2026_3.dss</DssFileName>
+              <Pathname>/2026_Restudy/CAS_2026_3/FREQ-FLOW/Max Analytical//Bulletin 17_CAS_2026_3 Analytic-Data/</Pathname>
+              <UseLogTransform>true</UseLogTransform>
+              <NumberEvents>0</NumberEvents>
+              <Mean>4.6595058854560705000000000000000000000000000000000000</Mean>
+              <StandardDeviation>0.1922805868566399300000000000000000000000000000000000</StandardDeviation>
+              <Skew>-0.0068072062039043115000000000000000000000000000000000</Skew>
+              <LowerConfidenceLevel>0.95</LowerConfidenceLevel>
+              <UpperConfidenceLevel>0.05</UpperConfidenceLevel>
+              <ExpectedProbabilityOption>3</ExpectedProbabilityOption>
+              <PercentExceedance>
+                <doubleArray Length="12" Step="10">
+                  <D Range="0-9" Data="0.20000000000000018,0.5000000000000004,1.0000000000000009,2.0000000000000018,5.000000000000004,9.999999999999998,19.999999999999996,50.0,80.0,90.0" />
+                  <D Range="10-12" Data="95.0,99.0" />
+                </doubleArray>
+              </PercentExceedance>
+              <EmaVariance>
+                <doubleArray Length="12" Step="10">
+                  <D Range="0-9" Data="0.004053419400268613,0.0029464468644049306,0.002250241974079888,0.0016728774922392237,0.00108634059667653,7.704786037599833E-4,5.57997648895208E-4,4.309970712397711E-4,5.198158932714641E-4,6.933167385119588E-4" />
+                  <D Range="10-12" Data="9.570474521510861E-4,0.0019416782961147244" />
+                </doubleArray>
+              </EmaVariance>
+            </FrequencyCurve>
+          </SampleFrequencyCurve>
+        </DataSet>
+      </EndYear2025>
+    </computeYears>
+    <statisticTSList />
+  </Bulletin17bAnalysis>
+</AnalysisResults>
+

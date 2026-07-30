@@ -1,0 +1,60 @@
+27Jul2026:10:59:09-INFO-g2encjer-Added Manager Base Map type hec2.ssp.model.DataStore
+27Jul2026:10:59:09-INFO-g2encjer-Added Manager Base Map type hec2.ssp.model.Map
+27Jul2026:10:59:09-INFO-g2encjer-Created by g2encjer
+27Jul2026:10:59:09-INFO-g2encjer-Extents now -126.0,50.0,-66.0,24.0
+27Jul2026:10:59:09-INFO-g2encjer-Project Opened
+27Jul2026:10:59:09-INFO-g2encjer-Project Closed
+27Jul2026:10:59:10-INFO-g2encjer-Project Opened
+27Jul2026:10:59:21-INFO-g2encjer-Added Manager DataContainerNode type com.rma.model.WorkingSetManager
+27Jul2026:11:03:12-INFO-g2encjer-Added Manager CAS_2026_p-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+27Jul2026:11:03:48-INFO-g2encjer-Added Manager CAS_2026_1-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+27Jul2026:11:04:21-INFO-g2encjer-Added Manager CAS_2026_3-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+27Jul2026:11:05:03-INFO-g2encjer-Added Manager CAS_2026_5-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+27Jul2026:11:05:33-INFO-g2encjer-Removed Manager 17b test type hec2.ssp.model.Bulletin17BAnalysis
+27Jul2026:11:07:12-INFO-g2encjer-Added Manager CAS_2026_p type hec2.ssp.model.Bulletin17BAnalysis
+28Jul2026:08:45:11-INFO-g2encjer-Project Closed
+28Jul2026:09:35:51-INFO-g2encjer-Project Opened
+28Jul2026:09:37:12-INFO-g2encjer-Removed Manager CAS_2026_5 type hec2.ssp.model.Data
+28Jul2026:09:37:17-INFO-g2encjer-Removed Manager CAS_2026_3 type hec2.ssp.model.Data
+28Jul2026:09:37:21-INFO-g2encjer-Removed Manager CAS_2026_1 type hec2.ssp.model.Data
+28Jul2026:09:37:25-INFO-g2encjer-Removed Manager CAS_2026_p type hec2.ssp.model.Data
+28Jul2026:09:41:13-INFO-g2encjer-Added Manager CAS_2026_p-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:41:45-INFO-g2encjer-Added Manager CAS_2026_1-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:42:23-INFO-g2encjer-Added Manager CAS_2026_3-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:42:55-INFO-g2encjer-Added Manager CAS_2026_5-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:43:01-INFO-g2encjer-Removed Manager CAS_2026_1-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:43:32-INFO-g2encjer-Added Manager CAS_2026_1-CASTLEROCK-FLOW-UNREG type hec2.ssp.model.Data
+28Jul2026:09:44:38-INFO-g2encjer-Removed Manager CAS_2026_p type hec2.ssp.model.Bulletin17BAnalysis
+28Jul2026:09:49:39-INFO-g2encjer-Added Manager CAS_2026_p type hec2.ssp.model.Bulletin17BAnalysis
+28Jul2026:11:45:19-INFO-g2encjer-Added Manager CAS_2026_1 type hec2.ssp.model.Bulletin17BAnalysis
+28Jul2026:11:48:46-INFO-g2encjer-Added Manager CAS_2026_3 type hec2.ssp.model.Bulletin17BAnalysis
+28Jul2026:11:58:21-INFO-g2encjer-Added Manager CAS_2026_5 type hec2.ssp.model.Bulletin17BAnalysis
+29Jul2026:10:27:12-INFO-g2encjer-Project Closed
+29Jul2026:10:55:06-INFO-g2encjer-Project Opened
+29Jul2026:11:08:43-INFO-g2encjer-Project Closed
+29Jul2026:11:14:24-INFO-g2encjer-Project Opened
+29Jul2026:11:15:58-INFO-g2encjer-Project Closed
+30Jul2026:09:24:48-INFO-g2encjer-Project Opened
+30Jul2026:09:29:25-INFO-g2encjer-Added Manager CAS_2026_p_PILF type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:09:50:06-INFO-g2encjer-Added Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:09:51:29-INFO-g2encjer-Removed Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:09:51:54-INFO-g2encjer-Added Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:09:52:48-INFO-g2encjer-Project Closed
+30Jul2026:09:54:54-INFO-g2encjer-Project Opened
+30Jul2026:09:57:36-INFO-g2encjer-Removed Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:09:57:40-INFO-g2encjer-Project Closed
+30Jul2026:09:57:49-INFO-g2encjer-Project Opened
+30Jul2026:09:58:06-INFO-g2encjer-Added Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:10:00:30-INFO-g2encjer-Project Closed
+30Jul2026:10:00:48-INFO-g2encjer-Project Opened
+30Jul2026:10:09:55-INFO-g2encjer-Project Closed
+30Jul2026:10:10:37-INFO-g2encjer-Project Opened
+30Jul2026:10:13:40-INFO-g2encjer-Project Closed
+30Jul2026:10:13:54-INFO-g2encjer-Project Opened
+30Jul2026:10:26:44-INFO-g2encjer-Project Closed
+30Jul2026:10:27:31-INFO-g2encjer-Project Opened
+30Jul2026:11:13:26-INFO-g2encjer-Added Manager CAS_2009_p_Sensor_1969_1973 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:11:14:06-INFO-g2encjer-Removed Manager CAS_2009_p_Sensor_1969_1973 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:11:14:25-INFO-g2encjer-Added Manager CAS_2026_p_Sensor_1969_1973 type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:12:06:13-INFO-g2encjer-Removed Manager CAS_2026_p_PILF type hec2.ssp.model.Bulletin17BAnalysis
+30Jul2026:12:06:21-INFO-g2encjer-Removed Manager CAS_2026_p_PILF_2 type hec2.ssp.model.Bulletin17BAnalysis

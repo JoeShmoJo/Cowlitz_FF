@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="3">
+  <horizontalDivider location="818" />
+  <verticalDivider location="575" />
+  <statusLine visible="true" />
+  <messageArea visible="true" />
+  <projectTabs visible="true" divider="529" />
+  <ProjectTree>
+    <FolderNode Name="2026_Restudy" Class="com.rma.ui.ProjectTreeNode" Expanded="true" UserCreated="false">
+      <FolderNode Name="Analysis" Class="hec2.ssp.ui.AnalysesContainerNode" Expanded="true" UserCreated="false">
+        <FolderNode Name="Bulletin 17" Class="hec2.ssp.ui.Bullentin17bContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true">
+          <Node Name="CAS_2009_p" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_1" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_3" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_5" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p_PILF" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p_PILF_2" Class="hec2.ssp.ui.Bullentin17BNode" />
+        </FolderNode>
+        <FolderNode Name="General Frequency" Class="hec2.ssp.ui.GeneralAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Volume Frequency" Class="hec2.ssp.ui.VolumeAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Duration" Class="hec2.ssp.ui.DurationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Coincident Frequency" Class="hec2.ssp.ui.CoincidentFrequencyAnalysisConatainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Curve Combination" Class="hec2.ssp.ui.CurveCombinationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Balanced Hydrograph" Class="hec2.ssp.ui.BalancedHydrographAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Distribution Fitting" Class="hec2.ssp.ui.DistributionFittingAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Mixed Population" Class="hec2.ssp.ui.MixedPopulationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Correlation" Class="hec2.ssp.ui.correlation.CorrelationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Record Extension" Class="hec2.ssp.ui.RecordExtAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+      </FolderNode>
+      <FolderNode Name="Data" Class="hec2.ssp.ui.DataContainerNode" Expanded="true" UserCreated="false" DefaultOrder="false">
+        <Node Name="CAS_2009_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_5" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_5" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_5" Class="hec2.ssp.ui.DataNode" />
+      </FolderNode>
+      <FolderNode Name="Map" Class="hec2.ssp.ui.MapContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true">
+        <Node Name="Base Map" Class="hec2.ssp.ui.MapNode" />
+      </FolderNode>
+    </FolderNode>
+  </ProjectTree>
+  <ProjectTreeSelections SelectedPath0="root, 2026_Restudy, Analysis, Bulletin 17, CAS_2026_p" />
+  <ChildWindow0 class="hec2.ssp.client.SSPMapSchematic" title="Base Map" width="1330" height="815" positionX="0" positionY="0" maximized="true" iconized="false" selected="true" layer="0" ManagerCount="1" MapMouseAdapter="hec.map.MouseZoomAdapter" MapCount="0" DrawGrids="true" Background="white">
+    <Manager0 ManagerName="Base Map" ManagerClass="hec2.ssp.model.Map" />
+    <ViewRect zoom="1.178060413354531">
+      <WorldPt n="0.0" e="0.0" />
+    </ViewRect>
+  </ChildWindow0>
+  <ProjectTree>
+    <FolderNode Name="2026_Restudy" Class="com.rma.ui.ProjectTreeNode" Expanded="true" UserCreated="false">
+      <FolderNode Name="Analysis" Class="hec2.ssp.ui.AnalysesContainerNode" Expanded="true" UserCreated="false">
+        <FolderNode Name="Bulletin 17" Class="hec2.ssp.ui.Bullentin17bContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true">
+          <Node Name="CAS_2009_p" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_1" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_3" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_5" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p_PILF" Class="hec2.ssp.ui.Bullentin17BNode" />
+          <Node Name="CAS_2026_p_PILF_2" Class="hec2.ssp.ui.Bullentin17BNode" />
+        </FolderNode>
+        <FolderNode Name="General Frequency" Class="hec2.ssp.ui.GeneralAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Volume Frequency" Class="hec2.ssp.ui.VolumeAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Duration" Class="hec2.ssp.ui.DurationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Coincident Frequency" Class="hec2.ssp.ui.CoincidentFrequencyAnalysisConatainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Curve Combination" Class="hec2.ssp.ui.CurveCombinationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Balanced Hydrograph" Class="hec2.ssp.ui.BalancedHydrographAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Distribution Fitting" Class="hec2.ssp.ui.DistributionFittingAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Mixed Population" Class="hec2.ssp.ui.MixedPopulationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Correlation" Class="hec2.ssp.ui.correlation.CorrelationAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+        <FolderNode Name="Record Extension" Class="hec2.ssp.ui.RecordExtAnalysisContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true" />
+      </FolderNode>
+      <FolderNode Name="Data" Class="hec2.ssp.ui.DataContainerNode" Expanded="true" UserCreated="false" DefaultOrder="false">
+        <Node Name="CAS_2009_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2009_5" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2008_5" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_p" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_1" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_3" Class="hec2.ssp.ui.DataNode" />
+        <Node Name="CAS_2026_5" Class="hec2.ssp.ui.DataNode" />
+      </FolderNode>
+      <FolderNode Name="Map" Class="hec2.ssp.ui.MapContainerNode" Expanded="true" UserCreated="false" DefaultOrder="true">
+        <Node Name="Base Map" Class="hec2.ssp.ui.MapNode" />
+      </FolderNode>
+    </FolderNode>
+  </ProjectTree>
+  <ChildSSPWindow0 class="hec2.ssp.editors.Bullentin17BEditor" title="Bulletin 17 Editor - CAS_2026_p_PILF" width="1344" height="825" positionX="288" positionY="104" selected="false">
+    <Bullentin17BEditor SelectedItem="CAS_2026_p_PILF" SelectedTab="2" />
+  </ChildSSPWindow0>
+  <ChildSSPWindow1 class="hec2.ssp.editors.Bullentin17BEditor" title="Bulletin 17 Editor - CAS_2026_p_PILF_2" width="1344" height="825" positionX="288" positionY="104" selected="false">
+    <Bullentin17BEditor SelectedItem="CAS_2026_p_PILF_2" SelectedTab="2" />
+  </ChildSSPWindow1>
+</BrowserFrame>
+

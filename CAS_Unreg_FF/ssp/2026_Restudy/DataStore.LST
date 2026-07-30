@@ -1,0 +1,99 @@
+Data:
+     Name: CAS_2009_p
+     DssPath:/CAS/2009/FLOW-PEAK//IR-CENTURY/peak/
+     ShortId:CAS_2009_p
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2009/FLOW-PEAK//IR-CENTURY/peak/
+End
+
+Data:
+     Name: CAS_2009_1
+     DssPath:/CAS/2009/FLOW-PEAK//IR-CENTURY/1/
+     ShortId:CAS_2009_1
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2009/FLOW-PEAK//IR-CENTURY/1/
+End
+
+Data:
+     Name: CAS_2009
+     DssPath:/CAS/2009/FLOW-PEAK//IR-CENTURY/3/
+     ShortId:CAS_2009_3
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2009/FLOW-PEAK//IR-CENTURY/3/
+End
+
+Data:
+     Name: CAS_2009_5
+     DssPath:/CAS/2009/FLOW-PEAK//IR-CENTURY/5/
+     ShortId:CAS_2009_5
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2009/FLOW-PEAK//IR-CENTURY/5/
+End
+
+Data:
+     Name: CAS_2008_p
+     DssPath:/CAS/2008/FLOW-PEAK//IR-CENTURY/p/
+     ShortId:CAS_2008_p
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2008/FLOW-PEAK//IR-CENTURY/p/
+End
+
+Data:
+     Name: CAS_2008_1
+     DssPath:/CAS/2008/FLOW-PEAK//IR-CENTURY/1/
+     ShortId:CAS_2008_1
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2008/FLOW-PEAK//IR-CENTURY/1/
+End
+
+Data:
+     Name: CAS_2008_3
+     DssPath:/CAS/2008/FLOW-PEAK//IR-CENTURY/3/
+     ShortId:CAS_2008_3
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2008/FLOW-PEAK//IR-CENTURY/3/
+End
+
+Data:
+     Name: CAS_2008_5
+     DssPath:/CAS/2008/FLOW-PEAK//IR-CENTURY/5/
+     ShortId:CAS_2008_5
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: /CAS/2008/FLOW-PEAK//IR-CENTURY/5/
+End
+
+Data:
+     Name: CAS_2026_p-CASTLEROCK-FLOW-UNREG
+     DssPath://CASTLEROCK/FLOW-UNREG/01JAN1927 - 01JAN2026/IR-YEAR/PEAK-MOS-HOLDOUT/
+     ShortId:CAS_2026_p
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/01JAN1927 - 01JAN2026/IR-YEAR/PEAK-MOS-HOLDOUT/
+     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
+End
+
+Data:
+     Name: CAS_2026_3-CASTLEROCK-FLOW-UNREG
+     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/3-DAY-MOS-HOLDOUT/
+     ShortId:CAS_2026_3
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/3-DAY-MOS-HOLDOUT/
+     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
+End
+
+Data:
+     Name: CAS_2026_5-CASTLEROCK-FLOW-UNREG
+     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/5-DAY-MOS-HOLDOUT/
+     ShortId:CAS_2026_5
+     DataType:TIME_SERIES_IRREGULAR
+     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/5-DAY-MOS-HOLDOUT/
+     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
+End
+
+Data:
+     Name: CAS_2026_1-CASTLEROCK-FLOW-UNREG
+     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/1-DAY-MOS-HOLDOUT/
+     ShortId:CAS_2026_1
+     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/1-DAY-MOS-HOLDOUT/
+     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
+End
+
