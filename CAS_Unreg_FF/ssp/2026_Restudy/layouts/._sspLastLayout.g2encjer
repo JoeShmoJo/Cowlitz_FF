@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="2">
-  <horizontalDivider location="818" />
-  <verticalDivider location="575" />
+<BrowserFrame width="1918" height="1028" positionX="-2021" positionY="174" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="0">
+  <horizontalDivider location="800" />
+  <verticalDivider location="551" />
   <statusLine visible="true" />
   <messageArea visible="true" />
-  <projectTabs visible="true" divider="529" />
+  <projectTabs visible="true" divider="302" />
   <ProjectTree>
     <FolderNode Name="2026_Restudy" Class="com.rma.ui.ProjectTreeNode" Expanded="true" UserCreated="false">
       <FolderNode Name="Analysis" Class="hec2.ssp.ui.AnalysesContainerNode" Expanded="true" UserCreated="false">
