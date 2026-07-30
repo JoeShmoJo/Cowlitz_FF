@@ -1,0 +1,17 @@
+Parameter,Peak,1-Day,3-Day,5-Day
+Mean,4.778,4.743,4.660,4.593
+Standard Dev,0.202,0.203,0.192,0.179
+Station Skew,-0.158,-0.152,-0.076,-0.051
+Regional Skew,-0.070,0.090,0.070,0.000
+Weighted Skew,-0.135,-0.052,-0.007,-0.029
+Adopted Skew,-0.135,-0.052,-0.007,-0.029
+EMA MSE [G at-site],0.064,0.064,0.061,0.060
+Grubbs-Beck Critical Value,0.000,0.000,0.000,0.000
+Equivalent Record Length,100.657,100.369,105.405,110.932
+Systematic Events,95,94,93,93
+Historic Events,0,0,0,0
+High Outliers,0,0,0,0
+Low Outliers,0,0,0,0
+Zero Events,0,0,0,0
+Missing Events,5,5,5,5
+Historic Period,100,99,98,98
