@@ -19,7 +19,9 @@ Releases.
 
 The prescribed release is then compared, as a rolling 24-hour volume, against
 the release the project actually made -- Mayfield outflow less the Mayfield
-local when the local is available.  If the observed 24-hour volume already
+local when the local is available, and Mayfield outflow alone when it is not.
+Hourly negatives in that difference are timing noise and are left alone; only a
+negative 24-HOUR volume is treated as a red flag on the data.  If the observed 24-hour volume already
 equals or exceeds the prescribed volume, the observed regulation was at least as
 aggressive as a rule-curve start would have required, despite starting lower in
 the pool.  Where the prescribed volume is larger, the project would have had to
@@ -64,7 +66,7 @@ PATH_MAY_OUT = ("/COWLITZ RIVER BELOW MAYFIELD DAM, WA/14238000/FLOW/"
 DSS_F_PART = "ESRD-SCREEN"      # F-part applied to every series written out
 VOLUME_WINDOW_HOURS = 24        # window for the downstream volume comparison
 VOLUME_CENTERED = True          # centered window absorbs timing error both ways
-CLIP_NEGATIVE_RELEASE = True    # MAY out - local can go negative; hold at zero
+CLIP_NEGATIVE_RELEASE = False   # hourly negatives are timing noise; judge on the 24-hr volume
 ELEV_GAP_FILL_DAYS = 5          # max internal gap in daily elevation to interpolate
 MAX_POOL_ELEV = 778.5           # normal full pool at Mossyrock
 CAP_AT_MAX_POOL = False         # True = hold the shifted pool at MAX_POOL_ELEV
@@ -269,11 +271,9 @@ def add_release_and_volumes(hourly, interp, elev_grid, inflow_grid):
         active = rel_vol > 0
         block["observed_meets_prescribed"] = active & (obs_vol >= rel_vol)
         block["prescribed_exceeds_observed"] = active & (rel_vol > obs_vol)
-        neg_in_window = (block["release_obs_raw_cfs"] < 0).rolling(
-            VOLUME_WINDOW_HOURS, center=VOLUME_CENTERED, min_periods=1).sum()
-        block["window_has_negative_obs"] = neg_in_window > 0
+        block["obs_volume_negative"] = obs_vol < 0
         block["prescribed_exceeds_observed_clean"] = (
-            block["prescribed_exceeds_observed"] & ~block["window_has_negative_obs"])
+            block["prescribed_exceeds_observed"] & ~block["obs_volume_negative"])
         pieces.append(block)
     return pd.concat(pieces)
 
@@ -305,7 +305,10 @@ def summarize_events(hourly, event_lookup):
             "peak_release_observed_cfs": block["release_observed_cfs"].max(),
             "special_release_observed": bool((block["release_observed_cfs"] > 0).any()),
             "local_available_pct": 100.0 * block["local_available"].mean(),
-            "hours_negative_obs_release": int((block["release_obs_raw_cfs"] < 0).sum()),
+            "local_pct_of_inflow": 100.0 * block["may_local_cfs"].fillna(0.0).sum()
+                / max(block["inflow_cfs"].sum(), 1.0),
+            "hours_obs_volume_negative": int(block["obs_volume_negative"].sum()),
+            "min_obs_release_24hr_acft": block["release_obs_24hr_acft"].min(),
             "peak_obs_release_cfs": block["release_obs_cfs"].max(),
             "max_release_24hr_acft": block["release_24hr_acft"].max(),
             "obs_release_24hr_at_peak_acft":
@@ -457,6 +460,10 @@ def plot_water_year_panels(hourly, summary, out_file):
         if exceed.any():
             ax.fill_between(times, 0, ax.get_ylim()[1], where=exceed,
                             color="k", alpha=0.10, step="mid")
+        flag = panel["obs_volume_negative"].fillna(False).values.astype(bool)
+        if flag.any():
+            ax.fill_between(times, 0, ax.get_ylim()[1], where=flag,
+                            color="#e67e22", alpha=0.16, step="mid")
         ax.set_ylabel("Flow (cfs)", fontsize=8)
         ax.tick_params(labelsize=7)
         ax.set_title("Water year %d  --  %d event%s, %d entering special releases"
@@ -490,6 +497,7 @@ def plot_water_year_panels(hourly, summary, out_file):
         Line2D([], [], color="#c0392b", lw=1.6, label="Prescribed release, 24-hr mean"),
         Line2D([], [], color="#4c9a2a", lw=1.6, label="Observed MOS release (MAY out - local), 24-hr mean"),
         Line2D([], [], color="k", lw=6, alpha=0.10, label="Prescribed 24-hr volume exceeds observed"),
+        Line2D([], [], color="#e67e22", lw=6, alpha=0.16, label="RED FLAG: 24-hr (MAY out - local) is negative"),
         Line2D([], [], color="#c0392b", lw=1.3, ls="--", label="Shifted elevation (rule curve start)"),
         Line2D([], [], color="#2c7fb8", lw=1.0, ls=":", label="Observed elevation"),
         Line2D([], [], color="#8e44ad", lw=1.0, label="Seasonal rule curve"),
@@ -637,10 +645,15 @@ def main():
           % int(summary["prescribed_exceeds_observed"].sum()))
     print("observed release already meets the prescribed volume at every triggered hour: %d events"
           % int(summary["observed_meets_prescribed_all_hours"].sum()))
-    print("hours where MAY out - local went negative: %d of %d"
-          % (int((hourly["release_obs_raw_cfs"] < 0).sum()), len(hourly)))
-    print("   of the flagged hours, %d sit in a 24-hr window free of negatives"
-          % int(summary["hours_prescribed_exceeds_observed_clean"].sum()))
+    print("RED FLAG -- 24-hr volume of (MAY out - local) is negative: %d hours in %d events"
+          % (int(summary["hours_obs_volume_negative"].sum()),
+             int((summary["hours_obs_volume_negative"] > 0).sum())))
+    print("   flagged hours with a non-negative 24-hr observed volume: %d of %d"
+          % (int(summary["hours_prescribed_exceeds_observed_clean"].sum()),
+             int(summary["hours_prescribed_exceeds_observed"].sum())))
+    print("MAY local as a share of MOS inflow volume: median %.0f%%, max %.0f%% (event %s)"
+          % (summary["local_pct_of_inflow"].median(), summary["local_pct_of_inflow"].max(),
+             summary.loc[summary["local_pct_of_inflow"].idxmax(), "start"].strftime("%b %Y")))
     print("mean day-1 elevation shift: %+.1f ft   events above max pool: %d"
           % (summary["elev_offset_day1_ft"].mean(),
              int((summary["hours_above_max_pool"] > 0).sum())))
@@ -655,7 +668,7 @@ def main():
                     "obs_release_24hr_at_peak_acft", "max_deficit_24hr_acft",
                     "hours_prescribed_exceeds_observed",
                     "hours_prescribed_exceeds_observed_clean",
-                    "hours_negative_obs_release"]].copy()
+                    "hours_obs_volume_negative", "local_pct_of_inflow"]].copy()
     show["start"] = show["start"].dt.strftime("%Y-%m-%d")
     print(show.round(1).to_string(index=False))
 
