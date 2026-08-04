@@ -377,9 +377,15 @@ def plot_event_summary(summary, out_file):
 
     ax = axes[1]
     ax.bar(x - 0.19, summary["max_release_24hr_acft"], width=0.38, color="#c0392b",
-           label="Max 24-hr prescribed release volume")
-    ax.bar(x + 0.19, summary["max_downstream_24hr_acft"], width=0.38, color="#4c9a2a",
-           label="Max 24-hr downstream volume (MAY out + local)")
+           label="Peak 24-hr prescribed release volume")
+    ax.bar(x + 0.19, summary["downstream_24hr_at_peak_release_acft"], width=0.38,
+           color="#4c9a2a", label="Concurrent 24-hr downstream volume (MAY out + local)")
+    ax.plot(x, summary["max_downstream_24hr_acft"], ls="none", marker="_",
+            markersize=13, color="0.35", label="Max 24-hr downstream volume (any hour)")
+    for i in np.where(summary["exceeds_downstream"].values)[0]:
+        ax.annotate("exceeds", xy=(x[i], summary["max_release_24hr_acft"].iloc[i]),
+                    xytext=(0, 4), textcoords="offset points", ha="center",
+                    fontsize=7, color="k", fontweight="bold")
     ax.set_ylabel("Volume (ac-ft)")
     ax.legend(loc="upper left", fontsize=8)
     ax.grid(axis="y", alpha=0.3)
