@@ -70,7 +70,6 @@ CLIP_NEGATIVE_RELEASE = False   # hourly negatives are timing noise; judge on th
 ELEV_GAP_FILL_DAYS = 5          # max internal gap in daily elevation to interpolate
 MAX_POOL_ELEV = 778.5           # normal full pool at Mossyrock
 CAP_AT_MAX_POOL = False         # True = hold the shifted pool at MAX_POOL_ELEV
-PLOT_ALL_WATER_YEARS = False    # True = one panel for every water year, not just triggering years
 STORAGE_EXTRAP_TO = 800.0       # extend the storage curve this high (flag, not clip)
 WATER_YEAR_START_MONTH = 10
 
@@ -427,69 +426,58 @@ def plot_event_summary(summary, out_file):
     plt.close(fig)
 
 
-def plot_water_year_panels(hourly, summary, out_file):
-    """One panel per water year, showing every event in that year on a common date axis."""
-    if PLOT_ALL_WATER_YEARS:
-        years = sorted(summary["water_year"].unique())
-    else:
-        years = sorted(summary.loc[summary["special_release"], "water_year"].unique())
-    if len(years) == 0:
+def plot_event_panels(hourly, summary, out_file):
+    """One sub-plot per event that enters Special Flood Releases."""
+    hits = summary[summary["special_release"]].reset_index(drop=True)
+    if len(hits) == 0:
         return
-    ncol = 2
-    nrow = int(np.ceil(len(years) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(8.6 * ncol, 4.0 * nrow), squeeze=False)
+    ncol = 3
+    nrow = int(np.ceil(len(hits) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(5.6 * ncol, 3.7 * nrow), squeeze=False)
 
     for k in range(nrow * ncol):
         ax = axes[k // ncol][k % ncol]
-        if k >= len(years):
+        if k >= len(hits):
             ax.axis("off")
             continue
-        year = years[k]
-        events = summary[summary["water_year"] == year]
-        block = hourly[hourly["event"].isin(events["event"])].sort_index()
-        span = pd.date_range(block.index[0], block.index[-1], freq="h")
-        panel = block.reindex(span)
-        times = panel.index
+        row = hits.loc[k]
+        block = hourly[hourly["event"] == row["event"]].sort_index()
+        times = block.index
 
-        ax.plot(times, panel["inflow_cfs"], color="0.45", lw=1.1)
-        ax.fill_between(times, 0, panel["release_shifted_cfs"].fillna(0.0),
-                        color="#c0392b", alpha=0.5)
-        ax.plot(times, panel["release_24hr_cfs"], color="#c0392b", lw=1.6)
-        ax.plot(times, panel["release_obs_24hr_cfs"], color="#4c9a2a", lw=1.6)
-        exceed = panel["prescribed_exceeds_observed"].fillna(False).values.astype(bool)
+        ax.plot(times, block["inflow_cfs"], color="0.45", lw=1.1)
+        ax.fill_between(times, 0, block["release_shifted_cfs"], color="#c0392b", alpha=0.5)
+        ax.plot(times, block["release_24hr_cfs"], color="#c0392b", lw=1.6)
+        ax.plot(times, block["release_obs_24hr_cfs"], color="#4c9a2a", lw=1.6)
+        ax.axhline(0.0, color="0.6", lw=0.7)
+        top = ax.get_ylim()[1]
+        exceed = block["prescribed_exceeds_observed"].values.astype(bool)
         if exceed.any():
-            ax.fill_between(times, 0, ax.get_ylim()[1], where=exceed,
+            ax.fill_between(times, ax.get_ylim()[0], top, where=exceed,
                             color="k", alpha=0.10, step="mid")
-        flag = panel["obs_volume_negative"].fillna(False).values.astype(bool)
+        flag = block["obs_volume_negative"].values.astype(bool)
         if flag.any():
-            ax.fill_between(times, 0, ax.get_ylim()[1], where=flag,
+            ax.fill_between(times, ax.get_ylim()[0], top, where=flag,
                             color="#e67e22", alpha=0.16, step="mid")
         ax.set_ylabel("Flow (cfs)", fontsize=8)
+        ax.set_xlabel("")
         ax.tick_params(labelsize=7)
-        ax.set_title("Water year %d  --  %d event%s, %d entering special releases"
-                     % (year, len(events), "" if len(events) == 1 else "s",
-                        int(events["special_release"].sum())), fontsize=10)
+        ax.set_title("%s -- WY%d%s\nday-1 shift %+.1f ft,  local %.0f%% of inflow"
+                     % (row["start"].strftime("%d %b %Y"), row["water_year"],
+                        "  (WY max)" if row["is_annual_max"] else "",
+                        row["elev_offset_day1_ft"], row["local_pct_of_inflow"]),
+                     fontsize=9)
         ax.grid(alpha=0.25)
-
-        for n, (_, row) in enumerate(events.iterrows()):
-            ax.axvspan(row["start"], row["end"], color="0.85", alpha=0.35, zorder=0)
-            ax.annotate("%s  %+.0f ft" % (row["start"].strftime("%d %b"),
-                                          row["elev_offset_day1_ft"]),
-                        xy=(row["start"], 1.0), xycoords=("data", "axes fraction"),
-                        xytext=(2, -10 - 9 * (n % 2)), textcoords="offset points",
-                        fontsize=6.5,
-                        color="#c0392b" if row["special_release"] else "0.35")
+        for label in ax.get_xticklabels():
+            label.set_rotation(25)
+            label.set_horizontalalignment("right")
 
         ax2 = ax.twinx()
-        ax2.plot(times, panel["elev_shifted_ft"], color="#c0392b", lw=1.3, ls="--")
-        ax2.plot(times, panel["elev_obs_ft"], color="#2c7fb8", lw=1.0, ls=":")
-        ax2.plot(times, panel["elev_rulecurve_ft"], color="#8e44ad", lw=1.0)
+        ax2.plot(times, block["elev_shifted_ft"], color="#c0392b", lw=1.3, ls="--")
+        ax2.plot(times, block["elev_obs_ft"], color="#2c7fb8", lw=1.0, ls=":")
+        ax2.plot(times, block["elev_rulecurve_ft"], color="#8e44ad", lw=1.0)
         ax2.axhline(MAX_POOL_ELEV, color="k", lw=0.8, ls="-.")
         ax2.set_ylabel("Elevation (ft)", fontsize=8)
         ax2.tick_params(labelsize=7)
-        for label in ax.get_xticklabels():
-            label.set_rotation(20)
-            label.set_horizontalalignment("right")
 
     handles = [
         Line2D([], [], color="0.45", lw=1.2, label="Inflow"),
@@ -504,9 +492,8 @@ def plot_water_year_panels(hourly, summary, out_file):
         Line2D([], [], color="k", lw=0.8, ls="-.", label="Max pool %.1f ft" % MAX_POOL_ELEV),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8.5, frameon=False)
-    fig.suptitle("Special Flood Release screening by water year -- "
-                 "shaded bands are the analyst-defined event windows", fontsize=12)
-    fig.tight_layout(rect=[0, 0.05, 1, 0.97])
+    fig.suptitle("Events entering Special Flood Releases from a minimum flood pool start", fontsize=12)
+    fig.tight_layout(rect=[0, 0.06, 1, 0.96])
     fig.savefig(out_file, dpi=150)
     plt.close(fig)
 
@@ -628,7 +615,7 @@ def main():
     written = write_dss_output(hourly, OUT_DSS, por_index)
 
     plot_event_summary(summary, os.path.join(OUT_DIR, "MOS_Special_Release_Summary.png"))
-    plot_water_year_panels(hourly, summary, os.path.join(OUT_DIR, "MOS_Special_Release_WaterYears.png"))
+    plot_event_panels(hourly, summary, os.path.join(OUT_DIR, "MOS_Special_Release_WaterYears.png"))
     plot_esrd_trajectories(hourly, elev_grid, inflow_grid, release_grid,
                            os.path.join(OUT_DIR, "MOS_Special_Release_ESRD_Paths.png"))
     plot_volume_comparison(summary, os.path.join(OUT_DIR, "MOS_Special_Release_Volumes.png"))
