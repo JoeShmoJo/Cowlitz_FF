@@ -74,6 +74,7 @@ End
 Data:
      Name: CAS_2026_1-CASTLEROCK-FLOW-UNREG
      DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/1-DAY-MOS-HOLDOUT/
+     ShortId:CAS_2026_1
      DataType:TIME_SERIES_IRREGULAR
      StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/1-DAY-MOS-HOLDOUT/
      Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
@@ -81,18 +82,9 @@ End
 
 Data:
      Name: CAS_2026_3-CASTLEROCK-FLOW-UNREG
-     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/3-DAY-MOS-HOLDOUT/
+     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/3-DAY-MOS-HOLDOUT/
      ShortId:CAS_2026_3
-     DataType:TIME_SERIES_IRREGULAR
-     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/3-DAY-MOS-HOLDOUT/
-     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
-End
-
-Data:
-     Name: CAS_2026_5-CASTLEROCK-FLOW-UNREG
-     DssPath://CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/5-DAY-MOS-HOLDOUT/
-     ShortId:CAS_2026_5
-     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2025/IR-YEAR/5-DAY-MOS-HOLDOUT/
-     Description: Imported from C:\Projects\Claude\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
+     StudyDSSPath: //CASTLEROCK/FLOW-UNREG/29Sep1928 - 29Sep2026/IR-YEAR/3-DAY-MOS-HOLDOUT/
+     Description: Imported from C:\Projects\REPO\CAS_Unreg_FF\output\CAS_Unreg_SSP.dss
 End
 

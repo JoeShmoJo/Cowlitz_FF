@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="2">
-  <horizontalDivider location="818" />
-  <verticalDivider location="575" />
+<BrowserFrame width="1936" height="1046" positionX="-8" positionY="-6" childWindowCount="1" selectedTabIndex="0" childSSPWindowCount="0">
+  <horizontalDivider location="800" />
+  <verticalDivider location="551" />
   <statusLine visible="true" />
   <messageArea visible="true" />
-  <projectTabs visible="true" divider="529" />
+  <projectTabs visible="true" divider="302" />
   <ProjectTree>
     <FolderNode Name="2026_Restudy" Class="com.rma.ui.ProjectTreeNode" Expanded="true" UserCreated="false">
       <FolderNode Name="Analysis" Class="hec2.ssp.ui.AnalysesContainerNode" Expanded="true" UserCreated="false">
@@ -45,8 +45,8 @@
       </FolderNode>
     </FolderNode>
   </ProjectTree>
-  <ProjectTreeSelections SelectedPath0="root, 2026_Restudy, Analysis, Bulletin 17, CAS_2026_5" />
-  <ChildWindow0 class="hec2.ssp.client.SSPMapSchematic" title="Base Map" width="1330" height="815" positionX="0" positionY="0" maximized="true" iconized="false" selected="true" layer="0" ManagerCount="1" MapMouseAdapter="hec.map.MouseZoomAdapter" MapCount="0" DrawGrids="true" Background="white">
+  <ProjectTreeSelections SelectedPath0="root, 2026_Restudy, Data, CAS_2026_5" />
+  <ChildWindow0 class="hec2.ssp.client.SSPMapSchematic" title="Base Map" width="1337" height="815" positionX="0" positionY="0" maximized="true" iconized="false" selected="true" layer="0" ManagerCount="1" MapMouseAdapter="hec.map.MouseZoomAdapter" MapCount="0" DrawGrids="true" Background="white">
     <Manager0 ManagerName="Base Map" ManagerClass="hec2.ssp.model.Map" />
     <ViewRect zoom="1.178060413354531">
       <WorldPt n="0.0" e="0.0" />

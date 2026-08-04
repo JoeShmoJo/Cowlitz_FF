@@ -1,6 +1,6 @@
 Node: Bulletin17B
 Name: CAS_2026_3
-LastModified:1785439874203
+LastModified:1785861279577
 Version:101
 FlowDataSet:CAS_2026_3-CASTLEROCK-FLOW-UNREG
 DSSFileName:Bulletin17Results/CAS_2026_3/CAS_2026_3.dss
@@ -43,10 +43,10 @@ Freq Ord: 99.0
 Use Start Date:false
 StartDate:01Oct1928
 Use End Date:false
-EndDate:30Sep2025
+EndDate:30Sep2026
 StatsAndLimitsMethod: EMA_17C_JAVA
 LowOutlierTest: MultipleGrubbsBeck
-PerceptionThreshold:1928,2025,0.0,-Infinity,Total Record
+PerceptionThreshold:1928,2026,0.0,-Infinity,Total Record
 PerceptionThreshold:1969,1973,-Infinity,-Infinity,
 VariableTimeWindowOptions
 VariableTimeWindowType:SingleTimeWindow
@@ -154,6 +154,7 @@ DataValuesStart
 2023,47709.94909625583,47709.94909625583,47709.94909625583,SYST,F,F,F
 2024,59644.00289035373,59644.00289035373,59644.00289035373,SYST,F,F,F
 2025,35252.63325390286,35252.63325390286,35252.63325390286,SYST,F,F,F
+2026,94669.17199757892,94669.17199757892,94669.17199757892,SYST,F,F,F
 DataValuesEnd
 PlotNEB:false
 NonExceedanceBoundContainer
