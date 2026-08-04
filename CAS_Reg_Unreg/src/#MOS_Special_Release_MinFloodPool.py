@@ -17,11 +17,14 @@ ESRD special-curve table to get the prescribed release at each timestep.  A
 nonzero prescribed release means the project would have been in Special Flood
 Releases.
 
-The prescribed release is then compared, as a 24-hour volume, against the
-observed downstream flow (Mayfield outflow plus Mayfield local when available)
-to flag the times the special release would have exceeded what actually went
-downstream.  A 24-hour window is used to absorb timing mismatches between the
-computed inflow and the shaped local.
+The prescribed release is then compared, as a rolling 24-hour volume, against
+the release the project actually made -- Mayfield outflow less the Mayfield
+local when the local is available.  If the observed 24-hour volume already
+equals or exceeds the prescribed volume, the observed regulation was at least as
+aggressive as a rule-curve start would have required, despite starting lower in
+the pool.  Where the prescribed volume is larger, the project would have had to
+release more.  The 24-hour window absorbs timing mismatches between the computed
+inflow and the shaped local.
 
 Outputs: hourly CSV, event summary CSV, a DSS file of every plotted series, and
 four plots.
@@ -61,6 +64,7 @@ PATH_MAY_OUT = ("/COWLITZ RIVER BELOW MAYFIELD DAM, WA/14238000/FLOW/"
 DSS_F_PART = "ESRD-SCREEN"      # F-part applied to every series written out
 VOLUME_WINDOW_HOURS = 24        # window for the downstream volume comparison
 VOLUME_CENTERED = True          # centered window absorbs timing error both ways
+CLIP_NEGATIVE_RELEASE = True    # MAY out - local can go negative; hold at zero
 ELEV_GAP_FILL_DAYS = 5          # max internal gap in daily elevation to interpolate
 MAX_POOL_ELEV = 778.5           # normal full pool at Mossyrock
 CAP_AT_MAX_POOL = False         # True = hold the shifted pool at MAX_POOL_ELEV
@@ -234,7 +238,9 @@ def build_event_frame(event_id, start, end, flow_hourly, elev_daily, rc_seasonal
     frame["may_out_cfs"] = may_out.reindex(frame.index)
     frame["may_local_cfs"] = may_local.reindex(frame.index)
     frame["local_available"] = frame["may_local_cfs"].notna()
-    frame["downstream_cfs"] = frame["may_out_cfs"] + frame["may_local_cfs"].fillna(0.0)
+    raw = frame["may_out_cfs"] - frame["may_local_cfs"].fillna(0.0)
+    frame["release_obs_raw_cfs"] = raw
+    frame["release_obs_cfs"] = raw.clip(lower=0.0) if CLIP_NEGATIVE_RELEASE else raw
     return frame
 
 
@@ -253,19 +259,21 @@ def add_release_and_volumes(hourly, interp, elev_grid, inflow_grid):
         block = block.copy()
         rel_mean, rel_vol = rolling_volume(block["release_shifted_cfs"],
                                            VOLUME_WINDOW_HOURS, VOLUME_CENTERED)
-        dn_mean, dn_vol = rolling_volume(block["downstream_cfs"],
-                                         VOLUME_WINDOW_HOURS, VOLUME_CENTERED)
-        alt_release = block["release_shifted_cfs"] + block["may_local_cfs"].fillna(0.0)
-        alt_mean, alt_vol = rolling_volume(alt_release, VOLUME_WINDOW_HOURS, VOLUME_CENTERED)
-        out_mean, out_vol = rolling_volume(block["may_out_cfs"],
+        obs_mean, obs_vol = rolling_volume(block["release_obs_cfs"],
                                            VOLUME_WINDOW_HOURS, VOLUME_CENTERED)
         block["release_24hr_cfs"] = rel_mean
         block["release_24hr_acft"] = rel_vol
-        block["downstream_24hr_cfs"] = dn_mean
-        block["downstream_24hr_acft"] = dn_vol
+        block["release_obs_24hr_cfs"] = obs_mean
+        block["release_obs_24hr_acft"] = obs_vol
+        block["release_deficit_24hr_acft"] = rel_vol - obs_vol
         active = rel_vol > 0
-        block["exceeds_downstream_24hr"] = active & (rel_vol > dn_vol)
-        block["exceeds_downstream_24hr_alt"] = active & (alt_vol > out_vol)
+        block["observed_meets_prescribed"] = active & (obs_vol >= rel_vol)
+        block["prescribed_exceeds_observed"] = active & (rel_vol > obs_vol)
+        neg_in_window = (block["release_obs_raw_cfs"] < 0).rolling(
+            VOLUME_WINDOW_HOURS, center=VOLUME_CENTERED, min_periods=1).sum()
+        block["window_has_negative_obs"] = neg_in_window > 0
+        block["prescribed_exceeds_observed_clean"] = (
+            block["prescribed_exceeds_observed"] & ~block["window_has_negative_obs"])
         pieces.append(block)
     return pd.concat(pieces)
 
@@ -275,7 +283,7 @@ def summarize_events(hourly, event_lookup):
     rows = []
     for event_id, block in hourly.groupby("event", sort=False):
         triggered = block["release_shifted_cfs"] > 0
-        exceeds = block["exceeds_downstream_24hr"]
+        short = block["prescribed_exceeds_observed"]
         over_pool = block["elev_shifted_ft"] > MAX_POOL_ELEV
         rows.append({
             "event": event_id,
@@ -297,16 +305,21 @@ def summarize_events(hourly, event_lookup):
             "peak_release_observed_cfs": block["release_observed_cfs"].max(),
             "special_release_observed": bool((block["release_observed_cfs"] > 0).any()),
             "local_available_pct": 100.0 * block["local_available"].mean(),
-            "peak_downstream_cfs": block["downstream_cfs"].max(),
+            "hours_negative_obs_release": int((block["release_obs_raw_cfs"] < 0).sum()),
+            "peak_obs_release_cfs": block["release_obs_cfs"].max(),
             "max_release_24hr_acft": block["release_24hr_acft"].max(),
-            "max_downstream_24hr_acft": block["downstream_24hr_acft"].max(),
-            "downstream_24hr_at_peak_release_acft":
-                block["downstream_24hr_acft"].loc[block["release_24hr_acft"].idxmax()],
-            "max_release_minus_downstream_acft":
-                (block["release_24hr_acft"] - block["downstream_24hr_acft"]).max(),
-            "exceeds_downstream": bool(exceeds.any()),
-            "hours_exceeding_downstream": int(exceeds.sum()),
-            "exceeds_downstream_alt": bool(block["exceeds_downstream_24hr_alt"].any()),
+            "obs_release_24hr_at_peak_acft":
+                block["release_obs_24hr_acft"].loc[block["release_24hr_acft"].idxmax()],
+            "max_obs_release_24hr_acft": block["release_obs_24hr_acft"].max(),
+            "max_deficit_24hr_acft": block["release_deficit_24hr_acft"].max(),
+            "prescribed_exceeds_observed": bool(short.any()),
+            "hours_prescribed_exceeds_observed": int(short.sum()),
+            "hours_prescribed_exceeds_observed_clean":
+                int(block["prescribed_exceeds_observed_clean"].sum()),
+            "observed_meets_prescribed_all_hours":
+                bool(block.loc[block["release_shifted_cfs"] > 0,
+                               "observed_meets_prescribed"].all())
+                if (block["release_shifted_cfs"] > 0).any() else True,
         })
     summary = pd.DataFrame(rows)
     summary["is_annual_max"] = False
@@ -335,8 +348,9 @@ def write_dss_output(hourly, out_dss, por_index):
         ("//MOS/FLOW-ESRD-SPECIAL-24HR//1Hour/%s/" % DSS_F_PART, "release_24hr_cfs", "CFS", "INST-VAL"),
         ("//MAY/FLOW-OUT-EVENT//1Hour/%s/" % DSS_F_PART, "may_out_cfs", "CFS", "INST-VAL"),
         ("//MAY/FLOW-LOCAL-EVENT//1Hour/%s/" % DSS_F_PART, "may_local_cfs", "CFS", "INST-VAL"),
-        ("//MAY/FLOW-OUT-PLUS-LOCAL//1Hour/%s/" % DSS_F_PART, "downstream_cfs", "CFS", "INST-VAL"),
-        ("//MAY/FLOW-OUT-PLUS-LOCAL-24HR//1Hour/%s/" % DSS_F_PART, "downstream_24hr_cfs", "CFS", "INST-VAL"),
+        ("//MOS/FLOW-OUT-IMPLIED//1Hour/%s/" % DSS_F_PART, "release_obs_cfs", "CFS", "INST-VAL"),
+        ("//MOS/FLOW-OUT-IMPLIED-24HR//1Hour/%s/" % DSS_F_PART, "release_obs_24hr_cfs", "CFS", "INST-VAL"),
+        ("//MOS/FLOW-ESRD-DEFICIT-24HR//1Hour/%s/" % DSS_F_PART, "release_deficit_24hr_acft", "ACRE-FT", "INST-VAL"),
     ]
     if os.path.exists(out_dss):
         os.remove(out_dss)
@@ -378,14 +392,14 @@ def plot_event_summary(summary, out_file):
     ax = axes[1]
     ax.bar(x - 0.19, summary["max_release_24hr_acft"], width=0.38, color="#c0392b",
            label="Peak 24-hr prescribed release volume")
-    ax.bar(x + 0.19, summary["downstream_24hr_at_peak_release_acft"], width=0.38,
-           color="#4c9a2a", label="Concurrent 24-hr downstream volume (MAY out + local)")
-    ax.plot(x, summary["max_downstream_24hr_acft"], ls="none", marker="_",
-            markersize=13, color="0.35", label="Max 24-hr downstream volume (any hour)")
-    for i in np.where(summary["exceeds_downstream"].values)[0]:
+    ax.bar(x + 0.19, summary["obs_release_24hr_at_peak_acft"], width=0.38,
+           color="#4c9a2a", label="Concurrent 24-hr observed MOS release (MAY out - local)")
+    ax.plot(x, summary["max_obs_release_24hr_acft"], ls="none", marker="_",
+            markersize=13, color="0.35", label="Max 24-hr observed release (any hour)")
+    for i in np.where(summary["prescribed_exceeds_observed"].values)[0]:
         ax.annotate("exceeds", xy=(x[i], summary["max_release_24hr_acft"].iloc[i]),
                     xytext=(0, 4), textcoords="offset points", ha="center",
-                    fontsize=7, color="k", fontweight="bold")
+                    fontsize=7, color="k", fontweight="bold")  # prescribed > observed
     ax.set_ylabel("Volume (ac-ft)")
     ax.legend(loc="upper left", fontsize=8)
     ax.grid(axis="y", alpha=0.3)
@@ -393,8 +407,8 @@ def plot_event_summary(summary, out_file):
     ax = axes[2]
     ax.bar(x, summary["hours_in_special"], color="#c0392b",
            label="Hours in special releases")
-    ax.bar(x, summary["hours_exceeding_downstream"], color="k", width=0.35,
-           label="Hours 24-hr release volume exceeds downstream")
+    ax.bar(x, summary["hours_prescribed_exceeds_observed"], color="k", width=0.35,
+           label="Hours prescribed 24-hr volume exceeds observed release")
     ax.set_ylabel("Hours")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=70, ha="right", fontsize=7)
@@ -438,8 +452,8 @@ def plot_water_year_panels(hourly, summary, out_file):
         ax.fill_between(times, 0, panel["release_shifted_cfs"].fillna(0.0),
                         color="#c0392b", alpha=0.5)
         ax.plot(times, panel["release_24hr_cfs"], color="#c0392b", lw=1.6)
-        ax.plot(times, panel["downstream_24hr_cfs"], color="#4c9a2a", lw=1.6)
-        exceed = panel["exceeds_downstream_24hr"].fillna(False).values.astype(bool)
+        ax.plot(times, panel["release_obs_24hr_cfs"], color="#4c9a2a", lw=1.6)
+        exceed = panel["prescribed_exceeds_observed"].fillna(False).values.astype(bool)
         if exceed.any():
             ax.fill_between(times, 0, ax.get_ylim()[1], where=exceed,
                             color="k", alpha=0.10, step="mid")
@@ -474,8 +488,8 @@ def plot_water_year_panels(hourly, summary, out_file):
         Line2D([], [], color="0.45", lw=1.2, label="Inflow"),
         Line2D([], [], color="#c0392b", lw=6, alpha=0.5, label="Prescribed special release (hourly)"),
         Line2D([], [], color="#c0392b", lw=1.6, label="Prescribed release, 24-hr mean"),
-        Line2D([], [], color="#4c9a2a", lw=1.6, label="Downstream MAY out + local, 24-hr mean"),
-        Line2D([], [], color="k", lw=6, alpha=0.10, label="24-hr release volume exceeds downstream"),
+        Line2D([], [], color="#4c9a2a", lw=1.6, label="Observed MOS release (MAY out - local), 24-hr mean"),
+        Line2D([], [], color="k", lw=6, alpha=0.10, label="Prescribed 24-hr volume exceeds observed"),
         Line2D([], [], color="#c0392b", lw=1.3, ls="--", label="Shifted elevation (rule curve start)"),
         Line2D([], [], color="#2c7fb8", lw=1.0, ls=":", label="Observed elevation"),
         Line2D([], [], color="#8e44ad", lw=1.0, label="Seasonal rule curve"),
@@ -534,30 +548,30 @@ def plot_volume_comparison(summary, out_file):
     """Max 24-hour prescribed release volume against the downstream volume."""
     fig, ax = plt.subplots(figsize=(8.5, 8))
     hit = summary["special_release"].values
-    exceed = summary["exceeds_downstream"].values
-    ax.scatter(summary.loc[~hit, "downstream_24hr_at_peak_release_acft"],
+    exceed = summary["prescribed_exceeds_observed"].values
+    ax.scatter(summary.loc[~hit, "obs_release_24hr_at_peak_acft"],
                summary.loc[~hit, "max_release_24hr_acft"],
                s=45, facecolor="#7fb3d5", edgecolor="0.3", label="No special release")
-    ax.scatter(summary.loc[hit & ~exceed, "downstream_24hr_at_peak_release_acft"],
+    ax.scatter(summary.loc[hit & ~exceed, "obs_release_24hr_at_peak_acft"],
                summary.loc[hit & ~exceed, "max_release_24hr_acft"],
-               s=70, facecolor="#c0392b", edgecolor="k", label="Special release, below downstream")
-    ax.scatter(summary.loc[exceed, "downstream_24hr_at_peak_release_acft"],
+               s=70, facecolor="#c0392b", edgecolor="k", label="Observed release already meets it")
+    ax.scatter(summary.loc[exceed, "obs_release_24hr_at_peak_acft"],
                summary.loc[exceed, "max_release_24hr_acft"],
                s=110, facecolor="#c0392b", edgecolor="k", marker="D",
-               label="Special release exceeds downstream")
+               label="Prescribed exceeds observed release")
     for _, row in summary[hit].iterrows():
         ax.annotate(row["start"].strftime("%b %y"),
-                    (row["downstream_24hr_at_peak_release_acft"], row["max_release_24hr_acft"]),
+                    (row["obs_release_24hr_at_peak_acft"], row["max_release_24hr_acft"]),
                     fontsize=7, xytext=(4, 4), textcoords="offset points")
-    top = max(summary["downstream_24hr_at_peak_release_acft"].max(),
+    top = max(summary["obs_release_24hr_at_peak_acft"].max(),
               summary["max_release_24hr_acft"].max()) * 1.08
     ax.plot([0, top], [0, top], color="k", lw=1.0, ls="--")
     ax.text(top * 0.62, top * 0.66, "1:1", fontsize=9, rotation=45)
     ax.set_xlim(0, top)
     ax.set_ylim(0, top)
-    ax.set_xlabel("Concurrent 24-hr downstream volume, MAY out + local (ac-ft)")
+    ax.set_xlabel("Concurrent 24-hr observed MOS release, MAY out - local (ac-ft)")
     ax.set_ylabel("Max 24-hr prescribed special release volume (ac-ft)")
-    ax.set_title("Peak 24-hr prescribed special release vs. the concurrent downstream volume")
+    ax.set_title("Peak 24-hr prescribed special release vs. the observed release actually made")
     ax.legend(loc="upper left", fontsize=9)
     ax.grid(alpha=0.25)
     fig.tight_layout()
@@ -619,9 +633,14 @@ def main():
              int(annual["special_release"].sum()), len(annual)))
     print("entering special releases from the observed start: %d"
           % int(summary["special_release_observed"].sum()))
-    print("24-hr release volume exceeds downstream: %d events (alt. routing test: %d)"
-          % (int(summary["exceeds_downstream"].sum()),
-             int(summary["exceeds_downstream_alt"].sum())))
+    print("prescribed 24-hr volume exceeds the observed MOS release: %d events"
+          % int(summary["prescribed_exceeds_observed"].sum()))
+    print("observed release already meets the prescribed volume at every triggered hour: %d events"
+          % int(summary["observed_meets_prescribed_all_hours"].sum()))
+    print("hours where MAY out - local went negative: %d of %d"
+          % (int((hourly["release_obs_raw_cfs"] < 0).sum()), len(hourly)))
+    print("   of the flagged hours, %d sit in a 24-hr window free of negatives"
+          % int(summary["hours_prescribed_exceeds_observed_clean"].sum()))
     print("mean day-1 elevation shift: %+.1f ft   events above max pool: %d"
           % (summary["elev_offset_day1_ft"].mean(),
              int((summary["hours_above_max_pool"] > 0).sum())))
@@ -633,7 +652,10 @@ def main():
     show = summary[["start", "water_year", "is_annual_max", "peak_inflow_cfs",
                     "elev_offset_day1_ft", "max_elev_shifted_ft", "hours_in_special",
                     "peak_release_shifted_cfs", "max_release_24hr_acft",
-                    "max_downstream_24hr_acft", "hours_exceeding_downstream"]].copy()
+                    "obs_release_24hr_at_peak_acft", "max_deficit_24hr_acft",
+                    "hours_prescribed_exceeds_observed",
+                    "hours_prescribed_exceeds_observed_clean",
+                    "hours_negative_obs_release"]].copy()
     show["start"] = show["start"].dt.strftime("%Y-%m-%d")
     print(show.round(1).to_string(index=False))
 
