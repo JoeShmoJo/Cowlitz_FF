@@ -67,6 +67,7 @@ DSS_F_PART = "ESRD-SCREEN"      # F-part applied to every series written out
 VOLUME_WINDOW_HOURS = 24        # window for the downstream volume comparison
 VOLUME_CENTERED = True          # centered window absorbs timing error both ways
 CLIP_NEGATIVE_RELEASE = False   # hourly negatives are timing noise; judge on the 24-hr volume
+MIN_CONTROLLING_RELEASE = 5000.0  # project minimum release; below this the ESRD is not controlling
 ELEV_GAP_FILL_DAYS = 5          # max internal gap in daily elevation to interpolate
 MAX_POOL_ELEV = 778.5           # normal full pool at Mossyrock
 CAP_AT_MAX_POOL = False         # True = hold the shifted pool at MAX_POOL_ELEV
@@ -253,7 +254,7 @@ def add_release_and_volumes(hourly, interp, elev_grid, inflow_grid):
     hourly["release_observed_cfs"] = esrd_release(
         interp, hourly["elev_obs_ft"].values, hourly["inflow_cfs"].values,
         elev_grid, inflow_grid)
-    hourly["in_special_release"] = hourly["release_shifted_cfs"] > 0
+    hourly["in_special_release"] = hourly["release_shifted_cfs"] >= MIN_CONTROLLING_RELEASE
 
     pieces = []
     for _, block in hourly.groupby("event", sort=False):
@@ -267,10 +268,18 @@ def add_release_and_volumes(hourly, interp, elev_grid, inflow_grid):
         block["release_obs_24hr_cfs"] = obs_mean
         block["release_obs_24hr_acft"] = obs_vol
         block["release_deficit_24hr_acft"] = rel_vol - obs_vol
-        active = rel_vol > 0
+        active = block["in_special_release"].rolling(
+            VOLUME_WINDOW_HOURS, center=VOLUME_CENTERED, min_periods=1).max().astype(bool)
         block["observed_meets_prescribed"] = active & (obs_vol >= rel_vol)
         block["prescribed_exceeds_observed"] = active & (rel_vol > obs_vol)
         block["obs_volume_negative"] = obs_vol < 0
+        # calendar-day blocks, as a cross-check on the rolling window
+        day_rel = block.groupby("day")["release_shifted_cfs"].transform("mean") * 24 * CFSHR_TO_ACREFT
+        day_obs = block.groupby("day")["release_obs_cfs"].transform("mean") * 24 * CFSHR_TO_ACREFT
+        day_active = block.groupby("day")["in_special_release"].transform("max").astype(bool)
+        block["release_daily_acft"] = day_rel
+        block["release_obs_daily_acft"] = day_obs
+        block["prescribed_exceeds_observed_daily"] = day_active & (day_rel > day_obs)
         block["prescribed_exceeds_observed_clean"] = (
             block["prescribed_exceeds_observed"] & ~block["obs_volume_negative"])
         pieces.append(block)
@@ -281,7 +290,7 @@ def summarize_events(hourly, event_lookup):
     """One row per event summarizing the special-release screening."""
     rows = []
     for event_id, block in hourly.groupby("event", sort=False):
-        triggered = block["release_shifted_cfs"] > 0
+        triggered = block["in_special_release"]
         short = block["prescribed_exceeds_observed"]
         over_pool = block["elev_shifted_ft"] > MAX_POOL_ELEV
         rows.append({
@@ -302,12 +311,17 @@ def summarize_events(hourly, event_lookup):
             "hours_in_special": int(triggered.sum()),
             "peak_release_shifted_cfs": block["release_shifted_cfs"].max(),
             "peak_release_observed_cfs": block["release_observed_cfs"].max(),
-            "special_release_observed": bool((block["release_observed_cfs"] > 0).any()),
+            "special_release_observed":
+                bool((block["release_observed_cfs"] >= MIN_CONTROLLING_RELEASE).any()),
             "local_available_pct": 100.0 * block["local_available"].mean(),
             "local_pct_of_inflow": 100.0 * block["may_local_cfs"].fillna(0.0).sum()
                 / max(block["inflow_cfs"].sum(), 1.0),
             "hours_obs_volume_negative": int(block["obs_volume_negative"].sum()),
             "min_obs_release_24hr_acft": block["release_obs_24hr_acft"].min(),
+            "days_prescribed_exceeds_observed_daily":
+                int(block.loc[block["prescribed_exceeds_observed_daily"], "day"].nunique()),
+            "max_daily_deficit_acft":
+                (block["release_daily_acft"] - block["release_obs_daily_acft"]).max(),
             "peak_obs_release_cfs": block["release_obs_cfs"].max(),
             "max_release_24hr_acft": block["release_24hr_acft"].max(),
             "obs_release_24hr_at_peak_acft":
@@ -319,9 +333,8 @@ def summarize_events(hourly, event_lookup):
             "hours_prescribed_exceeds_observed_clean":
                 int(block["prescribed_exceeds_observed_clean"].sum()),
             "observed_meets_prescribed_all_hours":
-                bool(block.loc[block["release_shifted_cfs"] > 0,
-                               "observed_meets_prescribed"].all())
-                if (block["release_shifted_cfs"] > 0).any() else True,
+                bool(block.loc[triggered.values, "observed_meets_prescribed"].all())
+                if triggered.any() else True,
         })
     summary = pd.DataFrame(rows)
     summary["is_annual_max"] = False
@@ -621,6 +634,7 @@ def main():
     plot_volume_comparison(summary, os.path.join(OUT_DIR, "MOS_Special_Release_Volumes.png"))
 
     annual = summary[summary["is_annual_max"]]
+    print("minimum controlling release: %.0f cfs" % MIN_CONTROLLING_RELEASE)
     print("events defined: %d   analyzed: %d   skipped (no inflow): %s"
           % (len(events), len(summary), skipped if skipped else "none"))
     print("entering special releases: %d of %d   (water year maxima only: %d of %d)"
@@ -630,6 +644,9 @@ def main():
           % int(summary["special_release_observed"].sum()))
     print("prescribed 24-hr volume exceeds the observed MOS release: %d events"
           % int(summary["prescribed_exceeds_observed"].sum()))
+    print("same test on fixed calendar-day blocks: %d events, %d days total"
+          % (int((summary["days_prescribed_exceeds_observed_daily"] > 0).sum()),
+             int(summary["days_prescribed_exceeds_observed_daily"].sum())))
     print("observed release already meets the prescribed volume at every triggered hour: %d events"
           % int(summary["observed_meets_prescribed_all_hours"].sum()))
     print("RED FLAG -- 24-hr volume of (MAY out - local) is negative: %d hours in %d events"
@@ -655,7 +672,9 @@ def main():
                     "obs_release_24hr_at_peak_acft", "max_deficit_24hr_acft",
                     "hours_prescribed_exceeds_observed",
                     "hours_prescribed_exceeds_observed_clean",
-                    "hours_obs_volume_negative", "local_pct_of_inflow"]].copy()
+                    "hours_obs_volume_negative",
+                    "days_prescribed_exceeds_observed_daily",
+                    "max_daily_deficit_acft", "local_pct_of_inflow"]].copy()
     show["start"] = show["start"].dt.strftime("%Y-%m-%d")
     print(show.round(1).to_string(index=False))
 
