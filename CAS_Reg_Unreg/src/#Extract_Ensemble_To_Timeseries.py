@@ -43,9 +43,24 @@ ENS_SUFFIX = "ENSEMBLE--0"
 
 # Locations to pull back. (part_a, part_b, part_c, units, out_f_part)
 RECORDS = [
-    ("", "CASTLEROCK_NWS",  "FLOW",     "CFS",  "UNREG_RESSIM"),
-    ("", "MOSSYROCK-POOL",  "FLOW-OUT", "CFS",  "UNREG_RESSIM"),
+    ("", "CASTLEROCK_NWS",  "FLOW",       "CFS",  "UNREG_RESSIM"),
+    ("", "MOSSYROCK-POOL",  "FLOW-OUT",   "CFS",  "UNREG_RESSIM"),
+    # passed straight through ResSim -- reassemble them to check the mapping
+    ("", "MOSSYROCK-POOL",  "FLOW-IN",    "CFS",  "UNREG_RESSIM"),
+    ("", "CASTLEROCK_NWS",  "FLOW-LOCAL", "CFS",  "UNREG_RESSIM"),
 ]
+
+# Round-trip check: reassembled record vs. the record it was built from.
+# (out_part_b, out_part_c, source_dss, source_pathname)
+CHECK_AGAINST = [
+    ("MOSSYROCK-POOL", "FLOW-IN", r"../output/ResSimInflows.dss",
+     "//MOSSYROCK/FLOW-IN/*/1HOUR/FOR_RESSIM/"),
+    ("CASTLEROCK_NWS", "FLOW-LOCAL", r"../output/ResSimInflows.dss",
+     "//CASTLE ROCK/FLOW-LOCAL/*/1HOUR/FOR_RESSIM/"),
+]
+SOURCE_DSS_VERSION = 6
+CHECK_TOLERANCE_ABS = 0.5      # cfs; below this is DSS single-precision noise
+CHECK_TOLERANCE_REL = 0.0001   # or this fraction of the record peak, whichever is larger
 
 SENTINEL = -901.0
 SENTINEL_TOL = 0.5
@@ -123,8 +138,17 @@ def build_container(pathname, values, start_time, units, data_type, interval_min
 
 
 def reassemble(dss, mapping, part_a, part_b, part_c):
-    """Move every member back to its real dates; returns a real-dated Series."""
-    pieces, misses, collisions = [], [], 0
+    """Move every member back to its real dates; returns a real-dated Series.
+
+    ResSim decides its own simulation window, which is usually NOT the window the
+    ensemble was written on -- a run folder named 1999.10.02-1200 produces output
+    stamped 02Oct1999 - 29Apr2000 even though the input covered 01Oct - 01May. So
+    do not slice to the input window. Instead preserve each value's OFFSET from
+    ensemble_start and add it to real_start, which works for any run window:
+
+        real_time = real_start + (output_time - ensemble_start)
+    """
+    pieces, misses, offsets = [], [], []
     for _, row in mapping.iterrows():
         member = int(row["member"])
         try:
@@ -132,23 +156,23 @@ def reassemble(dss, mapping, part_a, part_b, part_c):
         except Exception as exc:
             misses.append((member, str(exc).strip()[:60]))
             continue
-        ens_start = pd.Timestamp(row["ensemble_start"])
-        n_hours = int(row["hours"])
-        window = synth.loc[ens_start:ens_start + pd.Timedelta(hours=n_hours - 1)]
-        if len(window) < n_hours:
-            misses.append((member, "short window: %d of %d" % (len(window), n_hours)))
+        synth = synth.dropna()          # drops DSS block padding as well as gaps
+        if synth.empty:
+            misses.append((member, "no valid values"))
             continue
-        real_index = pd.date_range(pd.Timestamp(row["real_start"]),
-                                   periods=n_hours, freq="h")
-        pieces.append(pd.Series(window.values[:n_hours], index=real_index))
+        ens_start = pd.Timestamp(row["ensemble_start"])
+        real_start = pd.Timestamp(row["real_start"])
+        lead = synth.index[0] - ens_start
+        offsets.append((member, lead, synth.index[-1] - ens_start, len(synth)))
+        pieces.append(pd.Series(synth.values, index=real_start + (synth.index - ens_start)))
 
     if not pieces:
-        return None, misses, 0
+        return None, misses, 0, offsets
     combined = pd.concat(pieces)
     collisions = int(combined.index.duplicated().sum())
     if collisions:
         combined = combined[~combined.index.duplicated(keep="first")]
-    return combined.sort_index(), misses, collisions
+    return combined.sort_index(), misses, collisions, offsets
 
 
 def to_continuous(series):
@@ -176,13 +200,21 @@ def main():
     try:
         for part_a, part_b, part_c, units, out_f in RECORDS:
             print("\n%s/%s" % (part_b, part_c))
-            series, misses, collisions = reassemble(src, mapping, part_a,
-                                                    part_b, part_c)
+            series, misses, collisions, offsets = reassemble(src, mapping, part_a,
+                                                             part_b, part_c)
             if series is None:
                 print("   no members read -- check the pathname parts and ENS_SUFFIX")
                 for member, why in misses[:5]:
                     print("     member %d: %s" % (member, why))
                 continue
+
+            leads = set(o[1] for o in offsets)
+            tails = set(o[2] for o in offsets)
+            print("   run window   : starts %s after ensemble_start, ends %s after"
+                  % (sorted(leads)[0], sorted(tails)[-1]))
+            if len(leads) > 1 or len(tails) > 1:
+                print("   NOTE: members do not share one run window "
+                      "(%d distinct starts, %d distinct ends)" % (len(leads), len(tails)))
 
             n_members = len(mapping) - len(misses)
             full = to_continuous(series)
@@ -226,8 +258,82 @@ def main():
         dst.close()
 
     pd.DataFrame(summary).to_csv(SUMMARY_CSV, index=False)
+
+    if CHECK_AGAINST:
+        run_checks()
+
     print("\n" + "-" * 78)
     print("Summary CSV: %s" % SUMMARY_CSV)
+
+
+def read_whole(dss_file, pathname, version):
+    """Read a full record as a real-dated Series (used for the round-trip check)."""
+    dss = HecDss.Open(dss_file, version=version)
+    try:
+        ts = dss.read_ts(pathname)
+        values = np.atleast_1d(np.array(ts.values, dtype=float))
+        nodata = np.atleast_1d(np.array(ts.nodata, dtype=bool))
+        values[nodata] = np.nan
+        values[np.isclose(values, SENTINEL, atol=SENTINEL_TOL)] = np.nan
+        values[values <= -900.0] = np.nan
+        step = series_step(ts, pathname)
+        index = pd.date_range(first_stamp(ts) - step, periods=len(values), freq=step)
+    finally:
+        dss.close()
+    return pd.Series(values, index=index).sort_index()
+
+
+def run_checks():
+    """Compare pass-through records against the source they were built from."""
+    print("\n" + "=" * 78)
+    print("ROUND-TRIP CHECK -- reassembled vs. original")
+    print("=" * 78)
+    for out_b, out_c, src_dss, src_path in CHECK_AGAINST:
+        out_path = None
+        for part_a, part_b, part_c, units, out_f in RECORDS:
+            if part_b == out_b and part_c == out_c:
+                out_path = "/%s/%s/%s/*/1HOUR/%s/" % (part_a, part_b, part_c, out_f)
+        if out_path is None:
+            print("\n%s/%s: not in RECORDS, skipping" % (out_b, out_c))
+            continue
+        try:
+            got = read_whole(OUT_DSS, out_path, OUT_DSS_VERSION).dropna()
+            want = read_whole(src_dss, src_path, SOURCE_DSS_VERSION).dropna()
+        except Exception as exc:
+            print("\n%s/%s: could not read -- %s" % (out_b, out_c, exc))
+            continue
+        shared = got.index.intersection(want.index)
+        print("\n%s/%s" % (out_b, out_c))
+        print("   reassembled : %d values  %s -> %s"
+              % (len(got), got.index[0].date(), got.index[-1].date()))
+        print("   original    : %d values  %s -> %s"
+              % (len(want), want.index[0].date(), want.index[-1].date()))
+        print("   overlapping : %d hours" % len(shared))
+        if len(shared) == 0:
+            print("   *** NO OVERLAP -- the mapping is wrong ***")
+            continue
+        diff = (got.loc[shared] - want.loc[shared]).abs()
+        scale = max(float(want.loc[shared].abs().max()), 1.0)
+        tol = max(CHECK_TOLERANCE_ABS, CHECK_TOLERANCE_REL * scale)
+        n_over = int((diff > tol).sum())
+        print("   max abs diff: %.4f   mean abs diff: %.6f   (%.4f%% of peak)"
+              % (diff.max(), diff.mean(), 100.0 * diff.max() / scale))
+        print("   values off by more than %.3f: %d of %d (%.3f%%)"
+              % (tol, n_over, len(shared), 100.0 * n_over / len(shared)))
+        if n_over == 0:
+            print("   OK -- differences are storage precision, timing is aligned")
+        else:
+            worst = diff.idxmax()
+            print("   CHECK: worst at %s -- reassembled %.2f vs original %.2f"
+                  % (worst, got.loc[worst], want.loc[worst]))
+            off = diff[diff > tol]
+            print("   first 3 offenders: %s"
+                  % ", ".join("%s (%.2f)" % (t.strftime("%Y-%m-%d %H:%M"), d)
+                              for t, d in off.head(3).items()))
+            print("   A handful of large diffs usually means a value edit "
+                  "(clipping, cleaning) between the source and the ensemble;")
+            print("   a systematic offset across many hours means the timing "
+                  "mapping is wrong.")
 
 
 main()
