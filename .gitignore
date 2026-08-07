@@ -1,14 +1,3 @@
-
-RFC_ARCHIVE/data/*
-!RFC_ARCHIVE/data/README.txt
-RFC_ARCHIVE/output/*
-!RFC_ARCHIVE/output/README.txt
-
-ProjectTemplate/data/*
-!ProjectTemplate/data/README.txt
-ProjectTemplate/output/*
-!ProjectTemplate/output/README.txt
-
 # Python
 __pycache__/
 *.pyc

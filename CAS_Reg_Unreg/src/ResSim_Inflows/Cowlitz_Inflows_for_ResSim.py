@@ -58,7 +58,7 @@ register_matplotlib_converters()
 
 DSS_FILE = os.path.join(REPO_ROOT, "CAS_Unreg_FF", "data", "obsData.dss")
 
-OUT_DSS_FILE = "ResSimInflows.dss" 
+OUT_DSS_FILE = os.path.join(REPO_ROOT, "CAS_Reg_Unreg", "output", "ResSimInflows.dss")
 
 CFSDAYS_TO_KAF = 86400/43560/1000.
 
