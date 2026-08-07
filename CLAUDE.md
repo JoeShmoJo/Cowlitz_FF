@@ -59,9 +59,31 @@ Check the header directly when unsure -- byte 12 of the file is the version:
 - `import pydsstools` emits a `rasterio` ImportError on stderr. Harmless.
 - Pathname case is inconsistent across records (`1Hour` vs `1HOUR`). Compare
   case-insensitively or you will report false mismatches.
+- The header byte at offset 12 is `6` for a v6 file and `0` for a v7 file.
+  Passing ANY explicit `version=` bypasses the auto-detect guard; the file is
+  still opened with its own real version, so `version=7` on a v6 file works.
 - DSS stamps are END of period. A 1Hour value at 01:00 covers hour 0 of that
   day; a 1Day value at midnight is the PREVIOUS calendar day. Get this wrong and
   everything is off by one.
+
+
+## pandas 3 trap (silent wrong answers)
+
+`DatetimeIndex.asi8` returns **microseconds** in pandas 3, while
+`pd.Timestamp.value` returns **nanoseconds**. Mixing them in an `np.interp`
+call is off by 1000x and does not raise -- it silently returns a flat line.
+This produced a rule curve stuck at its minimum value until it was caught by
+checking the output against the input anchor points.
+
+Interpolate on unit-free floats instead:
+
+    epoch = pd.Timestamp(1900, 1, 1)
+    x = (index - epoch) / pd.Timedelta(hours=1)
+
+The user's machine may be on pandas 2, where the mixed version happens to work.
+Do not rely on that.
+
+Always verify an interpolated series against its input anchors before shipping.
 
 
 ## Repo conventions
