@@ -33,6 +33,12 @@ from matplotlib.patches import Patch
 import datetime
 from datetime import timedelta
 import dateutil
+import os, sys
+# Run-from-anywhere: resolve paths from this script's folder
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Modules"))
 from utilsDSS import HecDss
 import requests
 from pyextremes import get_extremes
@@ -50,7 +56,7 @@ register_matplotlib_converters()
 ###############################################################################
 #CONFIGURATION
 
-DSS_FILE = "../CAS_Unreg_FF/data/obsData.dss" 
+DSS_FILE = os.path.join(REPO_ROOT, "CAS_Unreg_FF", "data", "obsData.dss")
 
 OUT_DSS_FILE = "ResSimInflows.dss" 
 

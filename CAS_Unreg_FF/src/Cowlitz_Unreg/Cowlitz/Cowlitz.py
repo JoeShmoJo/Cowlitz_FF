@@ -18,6 +18,10 @@ from matplotlib.patches import Patch
 import datetime
 from datetime import timedelta
 import dateutil
+import os, sys
+# Shared modules live at the repo root: <repo>/Modules
+sys.path.insert(0, os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "Modules")))
 from utilsDSS import HecDss
 import requests
 from pyextremes import get_extremes

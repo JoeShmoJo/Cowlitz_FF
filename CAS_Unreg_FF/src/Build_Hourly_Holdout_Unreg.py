@@ -53,15 +53,16 @@ import pandas as pd
 ###############################################################################
 # CONFIGURATION
 
-REPO_ROOT = r"C:\Projects\Claude"          # <-- set to your local repo path
+# Repo root derived from this file: <repo>/CAS_Unreg_FF/src/<script>.py
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
 root_dir = os.path.join(PROJECT_DIR, "data")
 output_dir = os.path.join(PROJECT_DIR, "output")
 
 sys.path.insert(0, REPO_ROOT)
-UTILS_DIR = os.path.join(PROJECT_DIR, "src", "Cowlitz_Unreg", "Cowlitz")
-sys.path.insert(0, UTILS_DIR)
+MODULES_DIR = os.path.join(REPO_ROOT, "Modules")
+sys.path.insert(0, MODULES_DIR)
 from utilsDSS import HecDss  # noqa: E402  (project DSS wrapper, handles gaps)
 from HydrologicRouting import SsarrReach  # noqa: E402
 
