@@ -45,7 +45,7 @@ independent by construction. The correlations below are still the right way to
 rank durations against each other, but their absolute magnitude should not be
 read as skill in a predictive sense.
 
-OUTPUTS (../output and ../diagnostics)
+OUTPUTS (../output and ../output/diagnostics)
     critical_duration_dataset.csv       joined + screened data, one row per WY
     critical_duration_correlations.csv  fit statistics, one row per duration
     critical_duration_residuals.csv     per-WY residuals for the best fit
@@ -75,7 +75,7 @@ usgs_peaks_csv = os.path.join(SOURCE_PROJECT, "data", "CastleRock_USGS_peaks.csv
 wy_peaks_csv = os.path.join(SOURCE_PROJECT, "output", "wy_peak_records.csv")
 
 output_dir = os.path.join(PROJECT_DIR, "output")
-diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+diag_dir = os.path.join(PROJECT_DIR, "output", "diagnostics")
 
 # "usgs"   -> USGS reported annual peak from CastleRock_USGS_peaks.csv
 # "hourly" -> 1-hr max of the USGS hourly record from wy_peak_records.csv

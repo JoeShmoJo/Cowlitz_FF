@@ -58,7 +58,7 @@ PATH_CAS_REG = "/COWLITZ RIVER AT CASTLE ROCK, WA/14243000/FLOW//1Hour/USGS/"
 PATH_CAS_UNREG = "//CASTLE ROCK/FLOW-UNREG//1HOUR/CAS+ROUTED-DIFF/"
 
 OUT_CSV = os.path.join(output_dir, "wy_peak_records.csv")
-diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+diag_dir = os.path.join(PROJECT_DIR, "output", "diagnostics")
 OUT_GAPS_CSV = os.path.join(diag_dir, "wy_missing_windows.csv")
 
 SEASON_MONTHS = [10, 11, 12, 1, 2, 3]  # Oct-Mar, matches the holdout season

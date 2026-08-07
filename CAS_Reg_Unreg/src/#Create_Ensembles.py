@@ -285,7 +285,7 @@ for label, idx in INSPECT:
         print(f"  SKIP {label} — no data")
         continue
 
-    out_csv = rf"../diagnostics/inspect_{label}.csv"
+    out_csv = rf"../output/diagnostics/inspect_{label}.csv"
     with open(out_csv, "w", newline="") as f:
         writer = csv_module.writer(f)
         writer.writerow(["slot_index", "datetime", "value", "note"])
@@ -326,7 +326,7 @@ for label, idx in INSPECT:
 
 # Master alignment CSV — for every period, show what value each path
 # has at the period start timestamp, and what slot that maps to in each path
-align_csv = rf"../diagnostics/alignment_check.csv"
+align_csv = rf"../output/diagnostics/alignment_check.csv"
 with open(align_csv, "w", newline="") as f:
     writer = csv_module.writer(f)
 
@@ -366,7 +366,7 @@ print(f"  Written: {align_csv}")
 # Ensemble slot 0 verification CSV
 # For member 1: show what value is in slot 0 of the extracted array
 # vs what's in the actual DSS file at ENS_START
-ens_verify_csv = rf"../diagnostics/ensemble_slot0_check.csv"
+ens_verify_csv = rf"../output/diagnostics/ensemble_slot0_check.csv"
 with open(ens_verify_csv, "w", newline="") as f:
     writer = csv_module.writer(f)
     writer.writerow(["path", "period_start", "slot0_value",

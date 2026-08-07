@@ -95,6 +95,12 @@ CAS_Unreg_FF/output/wy_peak_records.csv, and
 CAS_Unreg_FF/data/CastleRock_USGS_peaks.csv.
 
 
+Diagnostic output
+-----------------
+Diagnostic plots, QC tables and inspection CSVs go to ../output/diagnostics/,
+kept separate from ../output/ which holds results that feed later steps.
+
+
 Caution
 -------
 Scripts marked W write into the shared store that CAS_Unreg_FF also depends on.

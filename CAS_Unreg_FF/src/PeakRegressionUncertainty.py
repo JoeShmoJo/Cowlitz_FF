@@ -31,7 +31,7 @@ regression predicts REG-minus-UNREG from the WY's dS metric, and
 (predicted_diff is normally negative during floods -- storage capture
 makes unreg exceed reg -- so the estimate lands above the reg peak).
 
-Outputs (../output and ../diagnostics):
+Outputs (../output and ../output/diagnostics):
     peakdiff_storage_regressions.csv   fit stats for every candidate
     peakdiff_regression_pairs.csv      the fit dataset (audit trail)
     unreg_peak_estimates.csv           corrected peaks for gap WYs
@@ -57,7 +57,7 @@ PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
 root_dir = os.path.join(PROJECT_DIR, "data")
 peaks_dir = os.path.join(PROJECT_DIR, "output")
 output_dir = os.path.join(PROJECT_DIR, "output")
-diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+diag_dir = os.path.join(PROJECT_DIR, "output", "diagnostics")
 
 sys.path.insert(0, REPO_ROOT)
 MODULES_DIR = os.path.join(REPO_ROOT, "Modules")

@@ -309,7 +309,7 @@ def plot_comparison(raw_series, cleaned_series, corrected_series, reservoir):
                     xanchor='right', x=1),
     )
 
-    output_path = os.path.abspath(f'../diagnostics/{reservoir}_volcor_comparison.html')
+    output_path = os.path.abspath(f'../output/diagnostics/{reservoir}_volcor_comparison.html')
     fig.write_html(output_path)
     print(f"Saved: {output_path}")
     webbrowser.open(f'file:///{output_path}')
@@ -348,7 +348,7 @@ def plot_shaped(local_vol_series, shape_series, shaped_series):
                     xanchor='right', x=1),
     )
 
-    output_path = os.path.abspath('../diagnostics/MAY_local_shaped.html')
+    output_path = os.path.abspath('../output/diagnostics/MAY_local_shaped.html')
     fig.write_html(output_path)
     print(f"Saved: {output_path}")
     webbrowser.open(f'file:///{output_path}')
@@ -401,7 +401,7 @@ for reservoir in RESERVOIRS:
 
     print(f"\nSegment summary for {reservoir}:")
     print(stats_df.to_string(index=False))
-    stats_csv = f'../diagnostics/{reservoir}_volcor_stats.csv'
+    stats_csv = f'../output/diagnostics/{reservoir}_volcor_stats.csv'
     stats_df.to_csv(stats_csv, index=False)
     print(f"Saved: {stats_csv}")
 
@@ -445,7 +445,7 @@ else:
 
     print(f"\nShaping segment summary:")
     print(shape_stats_df.to_string(index=False))
-    shape_stats_df.to_csv('../diagnostics/MAY_local_shaped_stats.csv', index=False)
+    shape_stats_df.to_csv('../output/diagnostics/MAY_local_shaped_stats.csv', index=False)
     print("Saved: MAY_local_shaped_stats.csv")
 
     write_to_dss(DSS_FILE, OUTPUT_SHAPED, shaped_out)

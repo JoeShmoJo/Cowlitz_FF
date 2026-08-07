@@ -60,7 +60,7 @@ MASSBAL_CSV = os.path.join(output_dir, "unreg_durations_massbalance.csv")
 
 OUT_CSV = os.path.join(output_dir, "wy_record_ssp.csv")
 OUT_DSS = os.path.join(output_dir, "CAS_Unreg_SSP.dss")
-diag_dir = os.path.join(PROJECT_DIR, "diagnostics")
+diag_dir = os.path.join(PROJECT_DIR, "output", "diagnostics")
 OUT_FLAGS_CSV = os.path.join(diag_dir, "record_qa_flags.csv")
 OUT_ADJ_CSV = os.path.join(diag_dir, "record_monotonic_adjustments.csv")
 OUT_EXCL_CSV = os.path.join(diag_dir, "record_excluded_wys.csv")

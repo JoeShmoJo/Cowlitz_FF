@@ -414,7 +414,7 @@ def plot_peak_windows(DataDict, reservoir, ref_paths, combined_peaks,
         legend=dict(groupclick='toggleitem'),
     )
 
-    output_path = os.path.abspath(f'../diagnostics/{reservoir}_peak_windows.html')
+    output_path = os.path.abspath(f'../output/diagnostics/{reservoir}_peak_windows.html')
     fig.write_html(output_path)
     print(f"Saved: {output_path}")
     webbrowser.open(f'file:///{output_path}')
@@ -463,7 +463,7 @@ def plot_inflow_interactive(DataDict, reservoirs):
     )
     fig.update_xaxes(title_text='Date', row=len(reservoirs), col=1)
 
-    output_path = os.path.abspath('../diagnostics/inflow_comparison.html')
+    output_path = os.path.abspath('../output/diagnostics/inflow_comparison.html')
     fig.write_html(output_path)
     print(f"Saved: {output_path}")
     webbrowser.open(f'file:///{output_path}')

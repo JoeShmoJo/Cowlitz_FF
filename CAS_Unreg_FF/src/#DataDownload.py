@@ -466,7 +466,7 @@ def plot_data_coverage(all_data):
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
     )
 
-    output_path = os.path.abspath('../diagnostics/data_coverage.html')
+    output_path = os.path.abspath('../output/diagnostics/data_coverage.html')
     fig.write_html(output_path)
     print(f"Saved: {output_path}")
     webbrowser.open(f'file:///{output_path}')

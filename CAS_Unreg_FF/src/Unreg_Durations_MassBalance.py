@@ -87,7 +87,7 @@ MAY_ELEV_PATH = ""  # e.g. "//MAY/ELEV-FOREBAY//1DAY/IRVZZAZD_CLEANED/"
 # then add it to SMOOTH_RANGES and re-run. Every smoothing edit is logged to
 # the console and must be carried into the memo's data-editing documentation.
 PLOT_DIAGNOSTIC = True
-DIAG_PLOT_HTML = r"../diagnostics/unreg_massbalance_diagnostic.html"
+DIAG_PLOT_HTML = r"../output/diagnostics/unreg_massbalance_diagnostic.html"
 
 # Elevation spans to repair by linear interpolation across the range
 # (endpoints exclusive of the bad data, i.e. values strictly inside the range
