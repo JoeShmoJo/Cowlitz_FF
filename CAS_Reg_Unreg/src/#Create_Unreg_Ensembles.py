@@ -85,8 +85,39 @@ OUT_PARTS_CAS = ("", "CASTLE ROCK", "FLOW-LOCAL", "CFS")
 # ----------------------------------------------------------------------------
 
 
+def first_stamp(ts):
+    """First timestamp of a DSS series, across pydsstools versions.
+
+    Some builds yield HecTime objects from ts.times, others yield strings, and
+    ts.startDateTime is not always populated. Only the first stamp is needed --
+    the rest follow from the interval -- so avoid walking the whole generator.
+    """
+    first = next(iter(ts.times))
+    if hasattr(first, "datetime"):
+        return pd.Timestamp(first.datetime())
+    text = str(getattr(ts, "startDateTime", None) or first).strip()
+    for fmt in ("%d%b%Y %H:%M:%S", "%d%b%Y %H:%M", "%d%b%Y %H%M%S", "%d%b%Y %H%M",
+                "%d %B %Y %H:%M:%S", "%d %B %Y %H:%M"):
+        try:
+            return pd.Timestamp(datetime.strptime(text, fmt))
+        except ValueError:
+            continue
+    return pd.Timestamp(text)
+
+
+def series_step(ts, pathname):
+    """Time step of a DSS regular series. ts.interval is in seconds."""
+    seconds = int(getattr(ts, "interval", 0) or 0)
+    if seconds > 0:
+        return pd.Timedelta(seconds=seconds)
+    e_part = pathname.split("/")[5].upper()
+    lookup = {"1MIN": "1min", "15MIN": "15min", "30MIN": "30min",
+              "1HOUR": "1h", "6HOUR": "6h", "12HOUR": "12h", "1DAY": "1D"}
+    return pd.Timedelta(lookup.get(e_part, "1h"))
+
+
 def read_dss_series(dss_file, pathname, version):
-    """Read a DSS regular time series into a pandas Series on hour-BEGINNING labels."""
+    """Read a DSS regular time series into a pandas Series on period-BEGINNING labels."""
     dss = HecDss.Open(dss_file, version=version)
     try:
         ts = dss.read_ts(pathname)
@@ -94,7 +125,10 @@ def read_dss_series(dss_file, pathname, version):
         nodata = np.array(ts.nodata, dtype=bool)
         values[nodata] = np.nan
         values[values <= -900.0] = np.nan
-        index = pd.DatetimeIndex([h.datetime() for h in ts.times]) - pd.Timedelta(hours=1)
+        step = series_step(ts, pathname)
+        # DSS stamps are END of period; step back one interval to label the start
+        start = first_stamp(ts) - step
+        index = pd.date_range(start, periods=len(values), freq=step)
     finally:
         dss.close()
     return pd.Series(values, index=index).sort_index()

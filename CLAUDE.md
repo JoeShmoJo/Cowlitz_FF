@@ -50,8 +50,16 @@ Check the header directly when unsure -- byte 12 of the file is the version:
                                 start_time="01JAN2025 0100",
                                 data_units="CFS", data_type="INST-VAL")
       d.put_ts(tsc, store_flag=2)
-- `ts.times` yields `HecTime` objects. `.datetime()` is a **method** -- call it.
-  Passing the objects to `pd.to_datetime` fails.
+- `ts.times` yields `HecTime` objects in some builds and **plain strings** in
+  others (the user's Windows build returns strings; this sandbox returns
+  HecTime). `h.datetime()` therefore raises `AttributeError: 'str' object has
+  no attribute 'datetime'` on their machine. `ts.startDateTime` is `None` here
+  but populated there. Build the index from the FIRST stamp plus `ts.interval`
+  (seconds) instead of walking every element -- it is version-safe and far
+  faster on a 859k-value record. See `first_stamp` / `series_step` in
+  `#Create_Unreg_Ensembles.py`.
+- `ts.times` is a generator: `len()` fails, so use `next(iter(ts.times))`.
+- `ts.numberValues` is `None` here; use `len(ts.values)`.
 - Missing values: mask with `np.array(ts.nodata, dtype=bool)`, and also treat
   `<= -900` as missing. Write missing as `-3.4028234663852886e38`.
 - `search_path('/*/*/*/*/*/*/')` is the catalog call. There is no
