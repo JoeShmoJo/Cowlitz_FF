@@ -31,23 +31,35 @@ from pydsstools.core import TimeSeriesContainer
 # ----------------------------------------------------------------------------
 # EXTERNAL: the ResSim simulation output (too large for the repository)
 SIM_DSS = r"C:/Projects/2026_Cowlitz_Flow_Frequency/ResSim/NWP_CowlitzLewis/watershed/NWP_CowlitzLewis/rss/1999.10.02-1200/simulation.dss"
+# Obs_RC run will have its own rss folder, e.g. .../rss/1999.09.30-0000/simulation.dss
 SIM_DSS_VERSION = 6
 
-MAPPING_CSV = r"../output/ensemble_unreg_mapping.csv"
-OUT_DSS = r"../output/ResSim_Unreg_Results.dss"
+# --- which ensemble set is being reassembled ---------------------------------
+# ResSim_WCM_RC  : WCM rule curve run, 01 Oct -> 01 May windows
+# ResSim_Obs_RC  : observed rule curve run, 31-day windows on the rising limb
+SET_NAME = "ResSim_WCM_RC"
+
+MAPPING_BY_SET = {
+    "ResSim_WCM_RC": r"../output/ensemble_unreg_mapping.csv",
+    "ResSim_Obs_RC": r"../output/ensemble_obs_rc_mapping.csv",
+}
+MAPPING_CSV = MAPPING_BY_SET[SET_NAME]
+OUT_DSS = r"../output/%s.dss" % SET_NAME
 OUT_DSS_VERSION = 6
-SUMMARY_CSV = r"../output/diagnostics/ensemble_results_summary.csv"
+SUMMARY_CSV = r"../output/diagnostics/%s_summary.csv" % SET_NAME
 
 # F-part suffix after the pipe. ENSEMBLE--0 is the first alternative in the run.
 ENS_SUFFIX = "ENSEMBLE--0"
 
 # Locations to pull back. (part_a, part_b, part_c, units, out_f_part)
 RECORDS = [
-    ("", "CASTLEROCK_NWS",  "FLOW",       "CFS",  "UNREG_RESSIM"),
-    ("", "MOSSYROCK-POOL",  "FLOW-OUT",   "CFS",  "UNREG_RESSIM"),
+    ("", "CASTLEROCK_NWS",  "FLOW",       "CFS",  SET_NAME),
+    ("", "MOSSYROCK-POOL",  "FLOW-OUT",   "CFS",  SET_NAME),
     # passed straight through ResSim -- reassemble them to check the mapping
-    ("", "MOSSYROCK-POOL",  "FLOW-IN",    "CFS",  "UNREG_RESSIM"),
-    ("", "CASTLEROCK_NWS",  "FLOW-LOCAL", "CFS",  "UNREG_RESSIM"),
+    ("", "MOSSYROCK-POOL",  "FLOW-IN",    "CFS",  SET_NAME),
+    ("", "CASTLEROCK_NWS",  "FLOW-LOCAL", "CFS",  SET_NAME),
+    # add for the Obs_RC set once that run exists:
+    # ("", "MOSSYROCK-POOL", "ELEV",       "FEET", SET_NAME),
 ]
 
 # Round-trip check: reassembled record vs. the record it was built from.
