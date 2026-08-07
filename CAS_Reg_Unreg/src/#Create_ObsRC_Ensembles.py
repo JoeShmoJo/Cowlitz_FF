@@ -16,9 +16,16 @@ Three records are written per member:
 The elevation is the OBSERVED pool from //MOS/ELEV//1DAY/USGS/, resampled to
 hourly. It is a lookback record, so it starts LOOKBACK_DAYS before the flows.
 
-Peak timing uses the sum of the two inflow records, which is what reaches Castle
-Rock. Routing lag between Mossyrock and the Castle Rock local is ignored -- it is
-a few hours against a month-long window.
+Peak timing comes from the REGULATED Castle Rock record produced by the WCM rule
+curve ResSim run (//CASTLEROCK_NWS/FLOW//1HOUR/ResSim_WCM_RC/), reassembled to a
+period-of-record series by #Extract_Ensemble_To_Timeseries.py. The rising limb is
+then found on the INFLOW hydrograph feeding that peak, so reservoir attenuation
+between inflow and regulated outflow is handled by looking back from the
+regulated peak rather than assuming the two coincide.
+
+That regulated record only spans 01 Oct -> 01 May each year, so annual peaks are
+by construction flood-season peaks. Water years with no regulated data are
+skipped and listed.
 
 Base detection smooths ONLY for detection. The values written out are the raw
 volume-corrected inflows, bounces intact.
@@ -67,6 +74,18 @@ PLOT_STEM = r"../output/diagnostics/ensemble_obs_rc_windows"
 PATH_MOS_IN = "//MOSSYROCK/FLOW-IN/*/1HOUR/FOR_RESSIM/"
 PATH_CAS_LOCAL = "//CASTLE ROCK/FLOW-LOCAL/*/1HOUR/FOR_RESSIM/"
 PATH_MOS_ELEV_DAILY = "//MOS/ELEV/*/1DAY/USGS/"
+
+# REGULATED Castle Rock flow -- annual peaks are taken from this record.
+# Produced by running #Extract_Ensemble_To_Timeseries.py on the WCM_RC simulation.
+PEAK_DSS = r"../output/ResSim_WCM_RC.dss"
+PEAK_DSS_VERSION = 6
+PEAK_PATH = "//CASTLEROCK_NWS/FLOW/*/1HOUR/ResSim_WCM_RC/"
+# Fail loudly rather than silently timing off the wrong hydrograph
+FALLBACK_TO_INFLOW_SUM = False
+
+# Hydrograph the rising limb is measured on: "SUM" (MOS inflow + CAS local)
+# or "MOS" (Mossyrock inflow only)
+LIMB_SERIES = "SUM"
 
 WINDOW_DAYS = 31            # member length
 LOOKBACK_DAYS = 1           # elevation record starts this much earlier
@@ -157,8 +176,12 @@ def water_year(stamp):
     return stamp.year + (1 if stamp.month >= WATER_YEAR_START_MONTH else 0)
 
 
-def find_peak_and_base(peak_series, smoothed, wy):
-    """Annual peak at Castle Rock and the base of the rising limb feeding it."""
+def find_peak_and_base(peak_series, limb, smoothed, wy):
+    """Regulated annual peak at Castle Rock, and the inflow rising limb feeding it.
+
+    peak_series is the REGULATED Castle Rock flow -- it sets the timing.
+    limb / smoothed are the INFLOW hydrograph -- they set the base.
+    """
     a = pd.Timestamp(wy - 1, WATER_YEAR_START_MONTH, 1)
     b = pd.Timestamp(wy, WATER_YEAR_START_MONTH, 1) - pd.Timedelta(hours=1)
     year = peak_series.loc[a:b].dropna()
@@ -188,9 +211,18 @@ def find_peak_and_base(peak_series, smoothed, wy):
     if base_time < earliest:
         base_time, clamped = earliest, "early"
 
+    inflow_window = limb.loc[base_time:peak_time + pd.Timedelta(days=3)].dropna()
+    inflow_peak_time = inflow_window.idxmax() if len(inflow_window) else pd.NaT
+    inflow_peak_cfs = float(inflow_window.max()) if len(inflow_window) else np.nan
+    attenuation_hours = (int((peak_time - inflow_peak_time).total_seconds() // 3600)
+                         if inflow_window.size else np.nan)
+
     return {"water_year": wy, "peak_time": peak_time, "peak_cfs": peak_value,
+            "inflow_peak_time": inflow_peak_time,
+            "inflow_peak_cfs": inflow_peak_cfs,
+            "reg_peak_lag_hours": attenuation_hours,
             "base_time": base_time.floor("h"),
-            "base_cfs": float(peak_series.get(base_time.floor("h"), np.nan)),
+            "base_cfs": float(limb.get(base_time.floor("h"), np.nan)),
             "trough_smoothed_cfs": trough_value,
             "base_threshold_cfs": threshold,
             "lead_hours": int((peak_time - base_time).total_seconds() // 3600),
@@ -247,7 +279,7 @@ def d_part(start, n_hours):
                         fmt_dss(pd.Timestamp(start) + pd.Timedelta(hours=n_hours - 1)))
 
 
-def plot_windows(events, peak_series, mos, cas, elev_hourly, stem):
+def plot_windows(events, peak_series, limb, mos, cas, elev_hourly, stem):
     """Paged panels: hydrograph, detected base, peak, and the member window."""
     pages = int(np.ceil(len(events) / float(PLOTS_PER_PAGE)))
     ncol = 4
@@ -267,16 +299,21 @@ def plot_windows(events, peak_series, mos, cas, elev_hourly, stem):
             view_a = base - pd.Timedelta(days=10)
             view_b = end + pd.Timedelta(days=3)
 
-            ax.plot(peak_series.loc[view_a:view_b].index,
-                    peak_series.loc[view_a:view_b].values,
-                    color="0.25", lw=1.2, label="MOS in + CAS local")
+            ax.plot(limb.loc[view_a:view_b].index, limb.loc[view_a:view_b].values,
+                    color="0.25", lw=1.2)
             ax.plot(mos.loc[view_a:view_b].index, mos.loc[view_a:view_b].values,
                     color="#2c7fb8", lw=0.8)
             ax.plot(cas.loc[view_a:view_b].index, cas.loc[view_a:view_b].values,
                     color="#4c9a2a", lw=0.8)
+            reg = peak_series.loc[view_a:view_b]
+            if len(reg):
+                ax.plot(reg.index, reg.values, color="#e67e22", lw=1.5)
             ax.axvspan(base, end, color="#c0392b", alpha=0.10)
             ax.axvline(base, color="#c0392b", lw=1.4)
             ax.axvline(pd.Timestamp(ev["peak_time"]), color="#e67e22", lw=1.2, ls="--")
+            if pd.notna(ev.get("inflow_peak_time")):
+                ax.axvline(pd.Timestamp(ev["inflow_peak_time"]), color="0.45",
+                           lw=1.0, ls=":")
             ax.axhline(ev["base_threshold_cfs"], color="0.6", lw=0.7, ls=":")
             ax.set_title("WY%d  peak %.0f cfs  lead %.1f d%s"
                          % (ev["water_year"], ev["peak_cfs"], ev["lead_hours"] / 24.0,
@@ -298,18 +335,21 @@ def plot_windows(events, peak_series, mos, cas, elev_hourly, stem):
             ax2.tick_params(labelsize=6)
 
         handles = [
-            Line2D([], [], color="0.25", lw=1.2, label="Castle Rock total (MOS in + local)"),
+            Line2D([], [], color="0.25", lw=1.2, label="Inflow hydrograph (MOS in + local)"),
             Line2D([], [], color="#2c7fb8", lw=0.8, label="Mossyrock inflow"),
             Line2D([], [], color="#4c9a2a", lw=0.8, label="Castle Rock local"),
+            Line2D([], [], color="#e67e22", lw=1.5, label="REGULATED Castle Rock (WCM_RC)"),
             Line2D([], [], color="#c0392b", lw=1.4, label="Detected base / window start"),
-            Line2D([], [], color="#e67e22", lw=1.2, ls="--", label="Annual peak"),
+            Line2D([], [], color="#e67e22", lw=1.2, ls="--", label="Regulated annual peak"),
+            Line2D([], [], color="0.45", lw=1.0, ls=":", label="Inflow peak"),
             Line2D([], [], color="0.6", lw=0.7, ls=":", label="Base threshold"),
             Line2D([], [], color="#8e44ad", lw=1.0, ls="-.", label="Observed pool elevation"),
         ]
-        fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8.5,
+        fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8.5,
                    frameon=False)
         fig.suptitle("Ensemble windows, page %d of %d -- base of the rising limb "
-                     "feeding each water year's Castle Rock peak" % (page + 1, pages),
+                     "feeding each water year's REGULATED Castle Rock peak"
+                     % (page + 1, pages),
                      fontsize=12)
         fig.tight_layout(rect=[0, 0.045, 1, 0.97])
         fig.savefig("%s_page%d.png" % (stem, page + 1), dpi=140)
@@ -323,8 +363,8 @@ def plot_overview(events, stem):
     x = frame["water_year"].values
     colors = ["#c0392b" if c != "none" else "#2c7fb8" for c in frame["clamped"]]
     axes[0].bar(x, frame["peak_cfs"], color="0.7")
-    axes[0].set_ylabel("Annual peak (cfs)")
-    axes[0].set_title("Detected event per water year "
+    axes[0].set_ylabel("Regulated annual peak (cfs)")
+    axes[0].set_title("Regulated Castle Rock annual peak per water year "
                       "(red = window clamped to contain the peak)")
     axes[0].grid(axis="y", alpha=0.3)
     axes[1].bar(x, frame["lead_hours"] / 24.0, color=colors)
@@ -355,11 +395,30 @@ def main():
     elev_daily = read_dss_series(OBS_DSS, PATH_MOS_ELEV_DAILY, OBS_DSS_VERSION)
     elev_hourly = daily_to_hourly(elev_daily.dropna(), ELEV_DAILY_TO_HOURLY)
 
-    peak_series = (mos.reindex(mos.index.union(cas.index)).fillna(0.0)
-                   + cas.reindex(mos.index.union(cas.index)).fillna(0.0))
-    peak_series = peak_series[mos.notna().reindex(peak_series.index, fill_value=False)
-                              | cas.notna().reindex(peak_series.index, fill_value=False)]
-    smoothed = peak_series.rolling(SMOOTH_HOURS, center=True, min_periods=1).mean()
+    joint = mos.index.union(cas.index)
+    inflow_sum = (mos.reindex(joint).fillna(0.0) + cas.reindex(joint).fillna(0.0))
+    inflow_sum = inflow_sum[mos.notna().reindex(joint, fill_value=False)
+                            | cas.notna().reindex(joint, fill_value=False)]
+    limb = inflow_sum if LIMB_SERIES == "SUM" else mos.dropna()
+    smoothed = limb.rolling(SMOOTH_HOURS, center=True, min_periods=1).mean()
+
+    # REGULATED Castle Rock flow sets the peak timing
+    try:
+        peak_series = read_dss_series(PEAK_DSS, PEAK_PATH, PEAK_DSS_VERSION).dropna()
+        peak_source = "%s  %s" % (PEAK_DSS, PEAK_PATH)
+    except Exception as exc:
+        if not FALLBACK_TO_INFLOW_SUM:
+            print("ERROR: could not read the regulated Castle Rock record.")
+            print("   %s" % exc)
+            print("   %s :: %s" % (PEAK_DSS, PEAK_PATH))
+            print("   Run #Extract_Ensemble_To_Timeseries.py on the WCM_RC simulation")
+            print("   first -- that is what produces this record. Set")
+            print("   FALLBACK_TO_INFLOW_SUM = True only if you deliberately want")
+            print("   UNREGULATED peak timing instead.")
+            return
+        print("WARNING: regulated record unavailable, timing off the inflow sum")
+        peak_series = inflow_sum
+        peak_source = "FALLBACK: unregulated inflow sum"
 
     n_hours = WINDOW_DAYS * 24
     elev_hours = n_hours + LOOKBACK_DAYS * 24
@@ -384,6 +443,9 @@ def main():
           % (ELEV_DAILY_TO_HOURLY, LOOKBACK_DAYS))
     print("Flow D-part   : %s" % flow_d)
     print("Elev D-part   : %s" % elev_d)
+    print("Peak timing   : %s" % peak_source)
+    print("Rising limb   : %s" % ("MOS inflow + CAS local" if LIMB_SERIES == "SUM"
+                                  else "Mossyrock inflow only"))
     print("Start dates   : %s" % ("MANUAL from %s (%d years)" % (MANUAL_STARTS_CSV, len(manual))
                                   if manual else "auto-detected"))
     if CLIP_NEGATIVE_FLOW and n_neg:
@@ -392,9 +454,9 @@ def main():
 
     events, skipped = [], []
     for wy in years:
-        ev = find_peak_and_base(peak_series, smoothed, wy)
+        ev = find_peak_and_base(peak_series, limb, smoothed, wy)
         if ev is None:
-            skipped.append((wy, "no data in water year"))
+            skipped.append((wy, "no regulated Castle Rock data in this water year"))
             continue
         if manual and wy in manual:
             ev["base_time"] = pd.Timestamp(manual[wy]).floor("h")
@@ -455,7 +517,7 @@ def main():
     diag.to_csv(DIAG_CSV, index=False)
     diag[["water_year", "base_time"]].to_csv(AUTO_STARTS_CSV, index=False)
 
-    plot_windows(events, peak_series, mos, cas, elev_hourly, PLOT_STEM)
+    plot_windows(events, peak_series, limb, mos, cas, elev_hourly, PLOT_STEM)
     plot_overview(events, PLOT_STEM)
 
     clamped = diag[diag["clamped"] != "none"]

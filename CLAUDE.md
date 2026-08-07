@@ -109,6 +109,23 @@ Always verify an interpolated series against its input anchors before shipping.
   top, and full scripts rather than snippets.
 
 
+## Ensemble workflow order (matters)
+
+`#Create_ObsRC_Ensembles.py` times its windows off the REGULATED Castle Rock
+peak, which only exists after the WCM_RC run has been extracted. The order is:
+
+    1. #Create_Unreg_Ensembles.py        -> ensemble_unreg.dss   (WCM rule curve)
+    2. run ResSim
+    3. #Extract_Ensemble_To_Timeseries.py with SET_NAME="ResSim_WCM_RC"
+    4. #Create_ObsRC_Ensembles.py        -> ensemble_obs_rc.dss  (observed pool)
+    5. run ResSim
+    6. #Extract_Ensemble_To_Timeseries.py with SET_NAME="ResSim_Obs_RC"
+
+Step 4 fails loudly if step 3 has not been done. Do NOT flip
+FALLBACK_TO_INFLOW_SUM to work around it -- that silently substitutes
+UNREGULATED peak timing, which is a different analysis.
+
+
 ## Open issue as of 7 Aug 2026
 
 `ObsData_RegUnreg.dss` was deleted from `CAS_Reg_Unreg/data` as "duplicative",
