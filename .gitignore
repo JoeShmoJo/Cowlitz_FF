@@ -8,5 +8,14 @@ ProjectTemplate/data/*
 !ProjectTemplate/data/README.txt
 ProjectTemplate/output/*
 !ProjectTemplate/output/README.txt
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
