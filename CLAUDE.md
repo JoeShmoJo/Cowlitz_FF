@@ -59,6 +59,11 @@ Check the header directly when unsure -- byte 12 of the file is the version:
   faster on a 859k-value record. See `first_stamp` / `series_step` in
   `#Create_Unreg_Ensembles.py`.
 - `ts.times` is a generator: `len()` fails, so use `next(iter(ts.times))`.
+- DSS uses **midnight-as-2400**, so a string stamp can be `01Oct1973 24:00:00`,
+  which means 02Oct1973 00:00. `pd.Timestamp` raises
+  `DateParseError: hour must be in 0..23` on it. Rewrite the hour to 00 and add
+  a day -- see `first_stamp` in the ensemble scripts. Daily records are the ones
+  that hit this.
 - `ts.numberValues` is `None` here; use `len(ts.values)`.
 - Missing values: mask with `np.array(ts.nodata, dtype=bool)`, and also treat
   `<= -900` as missing. Write missing as `-3.4028234663852886e38`.

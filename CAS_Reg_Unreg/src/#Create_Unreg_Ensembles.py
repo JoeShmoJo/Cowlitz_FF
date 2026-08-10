@@ -96,13 +96,20 @@ def first_stamp(ts):
     if hasattr(first, "datetime"):
         return pd.Timestamp(first.datetime())
     text = str(getattr(ts, "startDateTime", None) or first).strip()
+    # DSS uses midnight-as-2400: "01Oct1973 24:00:00" means 02Oct1973 00:00
+    roll_day = False
+    if " 24:" in text or text.endswith(" 2400"):
+        text = text.replace(" 24:", " 00:").replace(" 2400", " 0000")
+        roll_day = True
     for fmt in ("%d%b%Y %H:%M:%S", "%d%b%Y %H:%M", "%d%b%Y %H%M%S", "%d%b%Y %H%M",
                 "%d %B %Y %H:%M:%S", "%d %B %Y %H:%M"):
         try:
-            return pd.Timestamp(datetime.strptime(text, fmt))
+            stamp = pd.Timestamp(datetime.strptime(text, fmt))
+            return stamp + pd.Timedelta(days=1) if roll_day else stamp
         except ValueError:
             continue
-    return pd.Timestamp(text)
+    stamp = pd.Timestamp(text)
+    return stamp + pd.Timedelta(days=1) if roll_day else stamp
 
 
 def series_step(ts, pathname):
