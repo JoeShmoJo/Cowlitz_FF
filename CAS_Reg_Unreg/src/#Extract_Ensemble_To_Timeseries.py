@@ -48,7 +48,11 @@ OUT_DSS = r"../output/%s.dss" % SET_NAME
 OUT_DSS_VERSION = 6
 SUMMARY_CSV = r"../output/diagnostics/%s_summary.csv" % SET_NAME
 
-# F-part suffix after the pipe. ENSEMBLE--0 is the first alternative in the run.
+# F-part suffix after the pipe, as ResSim writes it in the simulation output.
+# NOTE: the INPUT ensembles are now tagged C:00000N|OBS_RC and C:00000N|WCM_RC,
+# but ResSim replaces whatever follows the pipe on OUTPUT with its own
+# alternative tag. Check the actual F-part in simulation.dss before running:
+# it may be "ENSEMBLE--0", or it may now carry the input tag through.
 ENS_SUFFIX = "ENSEMBLE--0"
 
 # Locations to pull back. (part_a, part_b, part_c, units, out_f_part)

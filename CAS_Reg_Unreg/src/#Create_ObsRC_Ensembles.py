@@ -136,6 +136,9 @@ RULE_CURVE_ANCHORS = [
     (9, 30, 778.5),
     (12, 1, 745.5),
 ]
+# Text appended to the F-part after the collection ID, e.g. C:000002|OBS_RC
+ENS_SUFFIX = "OBS_RC"
+
 RULE_CURVE_PART_B = "MOS"
 RULE_CURVE_PART_C = "ELEV-RULECURVE"
 
@@ -517,6 +520,7 @@ def main():
                                   "as the elevation record"
                                   % (RULE_CURVE_PART_B, RULE_CURVE_PART_C)
                                   if WRITE_RULE_CURVE else "not written"))
+    print("F-part        : C:<member>|%s" % ENS_SUFFIX)
     print("Flow D-part   : %s" % flow_d)
     print("Elev D-part   : %s" % elev_d)
     print("Peak timing   : %s" % peak_source)
@@ -571,7 +575,7 @@ def main():
     with HecDss.Open(OUT_DSS, version=OUT_DSS_VERSION) as dst:
         for member, ev in enumerate(events, start=1):
             base = pd.Timestamp(ev["base_time"])
-            f_part = "C:%06d|" % member
+            f_part = "C:%06d|%s" % (member, ENS_SUFFIX)
             mos_v, _, _ = slice_window(mos, base, n_hours)
             cas_v, _, _ = slice_window(cas, base, n_hours)
             elev_v, _, elev_idx = slice_window(elev_hourly,

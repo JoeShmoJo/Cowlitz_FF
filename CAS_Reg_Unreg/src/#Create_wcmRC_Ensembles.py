@@ -56,6 +56,9 @@ WINDOW_END_DAY = 1
 
 # Synthetic calendar the ensemble members are written on. Any non-leap year
 # works; 2000 matches the regulated ensembles already in the watershed.
+# Text appended to the F-part after the collection ID, e.g. C:000002|WCM_RC
+ENS_SUFFIX = "WCM_RC"
+
 ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)   # hour-beginning
 
 FIRST_YEAR = None        # None = earliest year with full coverage
@@ -222,7 +225,7 @@ def slice_member(series, start, n_hours):
 
 
 def ensemble_f_part(member):
-    return "C:%06d|" % member
+    return "C:%06d|%s" % (member, ENS_SUFFIX)
 
 
 def fmt_dss(dt):
@@ -259,6 +262,7 @@ def main():
           % (WINDOW_START_MONTH, WINDOW_START_DAY, WINDOW_END_MONTH, WINDOW_END_DAY,
              n_hours, n_hours / 24.0))
     print("Members       : %d  (%d - %d)" % (len(years), years[0], years[-1]))
+    print("F-part        : C:<member>|%s" % ENS_SUFFIX)
     print("Ensemble D-part: %s" % ens_d)
     print("Input  DSS    : %s" % IN_DSS)
     print("Output DSS    : %s" % OUT_DSS)
