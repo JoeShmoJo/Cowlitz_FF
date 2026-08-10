@@ -30,7 +30,7 @@ from pydsstools.core import TimeSeriesContainer
 # USER SETTINGS
 # ----------------------------------------------------------------------------
 # EXTERNAL: the ResSim simulation output (too large for the repository)
-SIM_DSS = r"C:/Projects/2026_Cowlitz_Flow_Frequency/ResSim/NWP_CowlitzLewis/watershed/NWP_CowlitzLewis/rss/1999.10.02-1200/simulation.dss"
+SIM_DSS = r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis\watershed\NWP_CowlitzLewis\rss\WCM_RC\simulation.dss"
 # Obs_RC run will have its own rss folder, e.g. .../rss/1999.09.30-0000/simulation.dss
 SIM_DSS_VERSION = 6
 

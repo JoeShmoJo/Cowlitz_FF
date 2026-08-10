@@ -40,7 +40,7 @@ IN_DSS = r"../output/ResSimInflows.dss"
 IN_DSS_VERSION = 6
 
 # EXTERNAL: requires the ResSim watershed (not in this repository)
-OUT_DSS = r"C:\Projects\Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis\watershed\NWP_CowlitzLewis\shared\ensemble_unreg.dss"
+OUT_DSS = r"../output/ensemble_wcm_rc.dss"
 OUT_DSS_VERSION = 6
 MAPPING_CSV = r"../output/ensemble_unreg_mapping.csv"
 COVERAGE_CSV = r"../output/diagnostics/ensemble_unreg_coverage.csv"
