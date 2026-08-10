@@ -124,6 +124,21 @@ ELEV_EXTENT = "full"
 # The observed pool record starts 02 Oct 1973, so earlier water years have no
 # starting elevation and cannot be part of this run. Members whose window has no
 # observed pool at the start are skipped and listed.
+# WCM rule curve, written alongside the observed pool as the seasonal TARGET.
+# Same anchors as #Create_wcmRC_Ensembles.py -- (month, day, elevation), linear
+# between anchors, wrapping Dec -> Jan. Evaluated on each member's REAL dates,
+# then written on the ensemble calendar so it lines up with everything else.
+WRITE_RULE_CURVE = True
+RULE_CURVE_ANCHORS = [
+    (1, 1, 745.5),
+    (1, 31, 745.5),
+    (6, 1, 778.5),
+    (9, 30, 778.5),
+    (12, 1, 745.5),
+]
+RULE_CURVE_PART_B = "MOS"
+RULE_CURVE_PART_C = "ELEV-RULECURVE"
+
 REQUIRE_START_ELEVATION = True
 MAX_ELEV_MISSING_HOURS = 72     # tolerate short gaps inside the window
 CLIP_NEGATIVE_FLOW = True
@@ -195,6 +210,30 @@ def daily_to_hourly(daily, how):
     return anchored.reindex(anchored.index.union(hourly_index)) \
                    .interpolate(method="time") \
                    .reindex(hourly_index)
+
+
+def rule_curve_on_index(index):
+    """Seasonal WCM rule curve for a DatetimeIndex, linear between anchors.
+
+    Anchors are repeated for every calendar year the index spans (plus one on
+    each side) so the Dec -> Jan segment wraps. Interpolating on real timestamps
+    handles leap years for free.
+
+    Interpolate on float HOURS from a fixed epoch. Do NOT mix Index.asi8 with
+    Timestamp.value -- pandas 3 returns microseconds from asi8 and nanoseconds
+    from .value, and the 1000x mismatch silently flattens the curve.
+    """
+    epoch = pd.Timestamp(1900, 1, 1)
+    knots = []
+    for year in range(int(index.year.min()) - 1, int(index.year.max()) + 2):
+        for month, day, elev in RULE_CURVE_ANCHORS:
+            hours = (pd.Timestamp(year, month, day) - epoch) / pd.Timedelta(hours=1)
+            knots.append((hours, float(elev)))
+    knots.sort()
+    kt = np.array([k[0] for k in knots], dtype=float)
+    kv = np.array([k[1] for k in knots], dtype=float)
+    x = (index - epoch) / pd.Timedelta(hours=1)
+    return np.interp(np.asarray(x, dtype=float), kt, kv)
 
 
 def water_year(stamp):
@@ -356,6 +395,9 @@ def plot_windows(events, peak_series, limb, mos, cas, elev_hourly, stem):
             ax2 = ax.twinx()
             ev_elev = elev_hourly.loc[view_a:view_b]
             ax2.plot(ev_elev.index, ev_elev.values, color="#8e44ad", lw=1.0, ls="-.")
+            if WRITE_RULE_CURVE and len(ev_elev):
+                ax2.plot(ev_elev.index, rule_curve_on_index(ev_elev.index),
+                         color="#16a085", lw=1.0)
             ax2.set_ylabel("Pool (ft)", fontsize=7)
             ax2.tick_params(labelsize=6)
 
@@ -368,7 +410,8 @@ def plot_windows(events, peak_series, limb, mos, cas, elev_hourly, stem):
             Line2D([], [], color="#e67e22", lw=1.2, ls="--", label="Regulated annual peak"),
             Line2D([], [], color="0.45", lw=1.0, ls=":", label="Inflow peak"),
             Line2D([], [], color="0.6", lw=0.7, ls=":", label="Base threshold"),
-            Line2D([], [], color="#8e44ad", lw=1.0, ls="-.", label="Observed pool elevation"),
+            Line2D([], [], color="#8e44ad", lw=1.0, ls="-.", label="Observed pool (lookback)"),
+            Line2D([], [], color="#16a085", lw=1.0, label="WCM rule curve (target)"),
         ]
         fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8.5,
                    frameon=False)
@@ -470,6 +513,10 @@ def main():
     print("Elevation     : observed daily pool -> hourly (%s), %d day lookback, "
           "extent=%s (%d hours)"
           % (ELEV_DAILY_TO_HOURLY, LOOKBACK_DAYS, ELEV_EXTENT, elev_hours))
+    print("Rule curve    : %s" % ("WCM seasonal target written as /%s/%s/, same span "
+                                  "as the elevation record"
+                                  % (RULE_CURVE_PART_B, RULE_CURVE_PART_C)
+                                  if WRITE_RULE_CURVE else "not written"))
     print("Flow D-part   : %s" % flow_d)
     print("Elev D-part   : %s" % elev_d)
     print("Peak timing   : %s" % peak_source)
@@ -527,13 +574,18 @@ def main():
             f_part = "C:%06d|" % member
             mos_v, _, _ = slice_window(mos, base, n_hours)
             cas_v, _, _ = slice_window(cas, base, n_hours)
-            elev_v, _, _ = slice_window(elev_hourly,
-                                        base - pd.Timedelta(days=LOOKBACK_DAYS),
-                                        elev_hours)
-            for parts, vals, units, dpart, wstart in [
-                    (("", "MOSSYROCK", "FLOW-IN"), mos_v, "CFS", flow_d, flow_write_start),
-                    (("", "CASTLE ROCK", "FLOW-LOCAL"), cas_v, "CFS", flow_d, flow_write_start),
-                    (("", "MOS", "ELEV"), elev_v, "FEET", elev_d, elev_write_start)]:
+            elev_v, _, elev_idx = slice_window(elev_hourly,
+                                               base - pd.Timedelta(days=LOOKBACK_DAYS),
+                                               elev_hours)
+            series = [(("", "MOSSYROCK", "FLOW-IN"), mos_v, "CFS", flow_d, flow_write_start),
+                      (("", "CASTLE ROCK", "FLOW-LOCAL"), cas_v, "CFS", flow_d, flow_write_start),
+                      (("", "MOS", "ELEV"), elev_v, "FEET", elev_d, elev_write_start)]
+            if WRITE_RULE_CURVE:
+                # evaluated on the member's REAL dates, written on the ensemble calendar
+                rc_v = rule_curve_on_index(elev_idx)
+                series.append((("", RULE_CURVE_PART_B, RULE_CURVE_PART_C), rc_v,
+                               "FEET", elev_d, elev_write_start))
+            for parts, vals, units, dpart, wstart in series:
                 pathname = "/%s/%s/%s/%s/1HOUR/%s/" % (parts[0], parts[1], parts[2],
                                                        dpart, f_part)
                 dst.put_ts(build_container(pathname, to_dss_values(vals), wstart,
@@ -548,7 +600,12 @@ def main():
                 "elev_ensemble_start": elev_ens_start, "elev_hours": elev_hours,
                 "peak_time": ev["peak_time"], "peak_cfs": round(ev["peak_cfs"], 1),
                 "lead_hours": ev["lead_hours"], "clamped": ev["clamped"],
-                "start_pool_ft": ev["start_pool_ft"]})
+                "start_pool_ft": ev["start_pool_ft"],
+                "start_rulecurve_ft": round(float(
+                    rule_curve_on_index(pd.DatetimeIndex([base]))[0]), 2),
+                "start_pool_minus_rc_ft": round(
+                    ev["start_pool_ft"]
+                    - float(rule_curve_on_index(pd.DatetimeIndex([base]))[0]), 2)})
 
     mapping = pd.DataFrame(mapping_rows)
     mapping.to_csv(MAPPING_CSV, index=False)
@@ -560,7 +617,9 @@ def main():
     plot_overview(events, PLOT_STEM)
 
     clamped = diag[diag["clamped"] != "none"]
-    print("Members written : %d   records: %d" % (len(events), len(events) * 3))
+    per_member = 3 + (1 if WRITE_RULE_CURVE else 0)
+    print("Members written : %d   records: %d (%d per member)"
+          % (len(events), len(events) * per_member, per_member))
     print("Mapping CSV     : %s" % MAPPING_CSV)
     print("Editable starts : %s  (copy to %s to override)"
           % (AUTO_STARTS_CSV, MANUAL_STARTS_CSV))
@@ -570,6 +629,12 @@ def main():
     pool = mapping["start_pool_ft"]
     print("Starting pool at event onset: median %.1f ft, min %.1f ft, max %.1f ft"
           % (pool.median(), pool.min(), pool.max()))
+    if WRITE_RULE_CURVE:
+        d = mapping["start_pool_minus_rc_ft"]
+        print("Observed pool vs rule curve at event onset: median %+.1f ft, "
+              "range %+.1f to %+.1f" % (d.median(), d.min(), d.max()))
+        print("   members starting BELOW the rule curve: %d of %d"
+              % (int((d < 0).sum()), len(d)))
     print("Lead time base->peak: median %.1f d, min %.1f d, max %.1f d"
           % (diag["lead_hours"].median() / 24.0, diag["lead_hours"].min() / 24.0,
              diag["lead_hours"].max() / 24.0))
