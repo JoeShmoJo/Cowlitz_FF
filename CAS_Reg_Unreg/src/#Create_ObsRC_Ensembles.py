@@ -108,6 +108,14 @@ MAX_MISSING_HOURS = 24         # skip a year only if gaps exceed this; the rest
 ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)   # hour-beginning
 
 ELEV_DAILY_TO_HOURLY = "interpolate"   # "interpolate" or "step"
+
+# How much observed pool to write.
+#   "lookback" : LOOKBACK_DAYS ending AT the simulation start -- an INITIAL
+#                condition, so ResSim's rules control the pool from there on.
+#   "full"     : the lookback plus the whole window. Only use this if you want
+#                the observed pool imposed across the simulation, which defeats
+#                the purpose of letting the release rules operate.
+ELEV_EXTENT = "lookback"
 CLIP_NEGATIVE_FLOW = True
 
 SENTINEL = -901.0
@@ -421,7 +429,10 @@ def main():
         peak_source = "FALLBACK: unregulated inflow sum"
 
     n_hours = WINDOW_DAYS * 24
-    elev_hours = n_hours + LOOKBACK_DAYS * 24
+    if ELEV_EXTENT == "lookback":
+        elev_hours = LOOKBACK_DAYS * 24 + 1      # ends ON the simulation start hour
+    else:
+        elev_hours = n_hours + LOOKBACK_DAYS * 24
     ens_start = pd.Timestamp(ENS_LABEL_START)
     elev_ens_start = ens_start - pd.Timedelta(days=LOOKBACK_DAYS)
     flow_d = d_part(ens_start, n_hours)
@@ -439,8 +450,9 @@ def main():
     print("=" * 78)
     print("Window        : %d days (%d hours) from the base of the rising limb"
           % (WINDOW_DAYS, n_hours))
-    print("Elevation     : observed daily pool -> hourly (%s), %d day lookback"
-          % (ELEV_DAILY_TO_HOURLY, LOOKBACK_DAYS))
+    print("Elevation     : observed daily pool -> hourly (%s), %d day lookback, "
+          "extent=%s (%d hours)"
+          % (ELEV_DAILY_TO_HOURLY, LOOKBACK_DAYS, ELEV_EXTENT, elev_hours))
     print("Flow D-part   : %s" % flow_d)
     print("Elev D-part   : %s" % elev_d)
     print("Peak timing   : %s" % peak_source)
@@ -509,7 +521,8 @@ def main():
                 "elev_real_start": base - pd.Timedelta(days=LOOKBACK_DAYS),
                 "elev_ensemble_start": elev_ens_start, "elev_hours": elev_hours,
                 "peak_time": ev["peak_time"], "peak_cfs": round(ev["peak_cfs"], 1),
-                "lead_hours": ev["lead_hours"], "clamped": ev["clamped"]})
+                "lead_hours": ev["lead_hours"], "clamped": ev["clamped"],
+                "start_pool_ft": round(float(elev_v[-1]), 2)})
 
     mapping = pd.DataFrame(mapping_rows)
     mapping.to_csv(MAPPING_CSV, index=False)
@@ -528,6 +541,9 @@ def main():
     print("Diagnostics CSV : %s" % DIAG_CSV)
     print("Plots           : %s_page*.png and %s_overview.png" % (PLOT_STEM, PLOT_STEM))
     print("-" * 78)
+    pool = mapping["start_pool_ft"]
+    print("Starting pool at event onset: median %.1f ft, min %.1f ft, max %.1f ft"
+          % (pool.median(), pool.min(), pool.max()))
     print("Lead time base->peak: median %.1f d, min %.1f d, max %.1f d"
           % (diag["lead_hours"].median() / 24.0, diag["lead_hours"].min() / 24.0,
              diag["lead_hours"].max() / 24.0))

@@ -126,6 +126,27 @@ FALLBACK_TO_INFLOW_SUM to work around it -- that silently substitutes
 UNREGULATED peak timing, which is a different analysis.
 
 
+## What the two ensemble sets are for
+
+Both runs use the SAME observed hydrology and the SAME current operating rules.
+Only the reservoir's starting pool differs, which is what isolates the value of
+the starting condition:
+
+    ResSim_WCM_RC  pool starts at the WCM rule curve   (Oct -> May windows)
+    ResSim_Obs_RC  pool starts at the OBSERVED elevation at event onset
+                   (31-day windows on the event that made the WCM_RC peak)
+
+The observed elevation in Obs_RC is an INITIAL condition, not a boundary
+condition -- ELEV_EXTENT="lookback" writes only the day ending at the simulation
+start. Setting it to "full" imposes the observed pool across the whole run and
+stops the release rules from operating, which defeats the point of the run.
+
+The endpoint is three sets of Castle Rock regulated peaks to compare: the USGS
+record, ResSim_WCM_RC, and ResSim_Obs_RC. The USGS annual peaks are already in
+obsData.dss at
+/COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW-ANNUAL PEAK//IR-CENTURY/USGS/.
+
+
 ## Open issue as of 7 Aug 2026
 
 `ObsData_RegUnreg.dss` was deleted from `CAS_Reg_Unreg/data` as "duplicative",
