@@ -14,7 +14,11 @@ Three records are written per member:
     //MOS/ELEV//1HOUR/C:00000N|/               main window + LOOKBACK_DAYS earlier
 
 The elevation is the OBSERVED pool from //MOS/ELEV//1DAY/USGS/, resampled to
-hourly. It is a lookback record, so it starts LOOKBACK_DAYS before the flows.
+hourly. It is a lookback record starting LOOKBACK_DAYS before the flows. ResSim
+takes only the value at the simulation start from it and then lets the release
+rules control the pool, so the record is written full length -- that way the
+simulation start can be shifted anywhere inside the window without rebuilding
+the ensemble.
 
 Peak timing comes from the REGULATED Castle Rock record produced by the WCM rule
 curve ResSim run (//CASTLEROCK_NWS/FLOW//1HOUR/ResSim_WCM_RC/), reassembled to a
@@ -110,12 +114,18 @@ ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)   # hour-beginning
 ELEV_DAILY_TO_HOURLY = "interpolate"   # "interpolate" or "step"
 
 # How much observed pool to write.
-#   "lookback" : LOOKBACK_DAYS ending AT the simulation start -- an INITIAL
-#                condition, so ResSim's rules control the pool from there on.
-#   "full"     : the lookback plus the whole window. Only use this if you want
-#                the observed pool imposed across the simulation, which defeats
-#                the purpose of letting the release rules operate.
-ELEV_EXTENT = "lookback"
+#   "full"     : the lookback plus the whole window. ResSim only takes the value
+#                at the simulation start from a lookback record, so a full-length
+#                record lets the simulation start time be shifted anywhere inside
+#                the window without rebuilding the ensemble. This is the default.
+#   "lookback" : LOOKBACK_DAYS ending at the nominal start. Smaller, but pins the
+#                simulation to that one start time.
+ELEV_EXTENT = "full"
+# The observed pool record starts 02 Oct 1973, so earlier water years have no
+# starting elevation and cannot be part of this run. Members whose window has no
+# observed pool at the start are skipped and listed.
+REQUIRE_START_ELEVATION = True
+MAX_ELEV_MISSING_HOURS = 72     # tolerate short gaps inside the window
 CLIP_NEGATIVE_FLOW = True
 
 SENTINEL = -901.0
@@ -488,6 +498,15 @@ def main():
         if max(mos_miss, cas_miss) > MAX_MISSING_HOURS:
             skipped.append((wy, "missing %d MOS / %d CAS hours" % (mos_miss, cas_miss)))
             continue
+        start_pool = elev_hourly.reindex([base]).iloc[0]
+        if REQUIRE_START_ELEVATION and not np.isfinite(start_pool):
+            skipped.append((wy, "no observed pool at %s (record starts %s)"
+                            % (base.date(), elev_hourly.dropna().index[0].date())))
+            continue
+        if elev_miss > MAX_ELEV_MISSING_HOURS:
+            skipped.append((wy, "observed pool missing %d hours in the window" % elev_miss))
+            continue
+        ev["start_pool_ft"] = round(float(start_pool), 2)
         events.append(ev)
 
     if not events:
@@ -522,7 +541,7 @@ def main():
                 "elev_ensemble_start": elev_ens_start, "elev_hours": elev_hours,
                 "peak_time": ev["peak_time"], "peak_cfs": round(ev["peak_cfs"], 1),
                 "lead_hours": ev["lead_hours"], "clamped": ev["clamped"],
-                "start_pool_ft": round(float(elev_v[-1]), 2)})
+                "start_pool_ft": ev["start_pool_ft"]})
 
     mapping = pd.DataFrame(mapping_rows)
     mapping.to_csv(MAPPING_CSV, index=False)

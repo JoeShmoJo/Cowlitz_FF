@@ -136,15 +136,28 @@ the starting condition:
     ResSim_Obs_RC  pool starts at the OBSERVED elevation at event onset
                    (31-day windows on the event that made the WCM_RC peak)
 
-The observed elevation in Obs_RC is an INITIAL condition, not a boundary
-condition -- ELEV_EXTENT="lookback" writes only the day ending at the simulation
-start. Setting it to "full" imposes the observed pool across the whole run and
-stops the release rules from operating, which defeats the point of the run.
+The observed elevation in Obs_RC is a LOOKBACK record. ResSim reads only the
+value at the simulation start from it and then lets the release rules control
+the pool -- a full-length record does NOT pin the pool across the run. It is
+written full length (ELEV_EXTENT="full") on purpose, so the simulation start
+time can be shifted anywhere inside the window without rebuilding the ensemble.
 
 The endpoint is three sets of Castle Rock regulated peaks to compare: the USGS
 record, ResSim_WCM_RC, and ResSim_Obs_RC. The USGS annual peaks are already in
 obsData.dss at
 /COWLITZ RIVER AT CASTLE ROCK/14243000/FLOW-ANNUAL PEAK//IR-CENTURY/USGS/.
+
+
+## Obs_RC is limited to WY1974 onward
+
+//MOS/ELEV//1DAY/USGS/ starts 02 Oct 1973, so 45 of the 98 water years have no
+observed starting pool and cannot be part of the Obs_RC run. The script skips
+them and lists them. That is a real limit of the record, not a bug -- Mossyrock
+only came online in 1968 anyway.
+
+Symptom if this check is removed: DSS accepts an all-missing record on write but
+those records then fail to read back with "Error code -1". A record that is
+entirely -901 is effectively corrupt. Never write one.
 
 
 ## Open issue as of 7 Aug 2026
