@@ -25,6 +25,13 @@ adjusted_peak = usgs_peak + (wcm_peak − obs_peak)     when wcm > obs
 adjusted_peak = usgs_peak                             otherwise
 ```
 
+**The adjustment is one-sided by design: the observed peak is only ever
+increased, never reduced.** A negative difference means the observed pool
+started *above* the rule curve, so the historical operation was already at
+least as good as following the WCM — there is nothing to remove and the
+observed peak stands. Only WY1976 falls in this category (Obs_RC 103,012 vs
+WCM_RC 75,597; the pool started 7.5 ft above the rule curve).
+
 The result is an observed-magnitude peak record on a consistent rule-curve
 starting-pool basis.
 
@@ -59,12 +66,12 @@ output CSV. Set `DROP_FAILED_SCREEN = True` to omit them instead.
 
 | Outcome | Years |
 |---|---|
-| Adjusted | 40 |
-| Not adjusted — Obs_RC peak ≥ WCM_RC peak | 4 |
+| Adjusted (increased) | 39 |
+| Not adjusted — no gain from the rule curve | 5 |
 | Not adjusted — failed screening | 7 |
 
-Adjustment where applied: median **+10,910 cfs**, mean +8,801, max +24,013 —
-a median **+21%** on the observed peak.
+Adjustment where applied: median **+10,966 cfs**, range +263 to +24,013 —
+a median **+21.6%** on the observed peak. No year is reduced.
 
 ### The seven screened out
 
@@ -96,13 +103,15 @@ placed on a different storm than the one that produced the observed peak.
 
 ## Two things to check before using this record
 
-**A cluster at +14,000 cfs.** 13 of the 40 adjustments land within ±50 cfs of
-+14,000. A repeated identical difference is not what a starting-pool effect
-looks like — it suggests the two runs are separated by a fixed release rule
-(a channel capacity or a maximum release constraint) that binds in one run and
-not the other. Worth confirming against the ResSim operation set before
-treating those 13 as storage effects. The script prints this warning
-automatically.
+**A cluster at +14,000 cfs.** 13 of the 39 adjustments land within ±50 cfs of
++14,000, and more within ±1,000. This is most likely a fixed release rule (a
+channel capacity or maximum release constraint) binding in one run and not the
+other, rather than a pure starting-pool effect.
+
+Reviewed and accepted (Aug 2026): an artifact of this size is not significant
+against a 14,000 cfs adjustment, and the record is used for a
+regulated-vs-unregulated relationship at large events, not for an analytical
+frequency fit. The script still prints the warning so the cluster stays visible.
 
 **Seven adjustments exceed 40% of the observed peak**: WY1989 (+59%),
 WY1992 (+52%), WY1993 (+95%), WY2005 (+47%), WY2010 (+52%), WY2014 (+43%),
@@ -111,9 +120,9 @@ is a large fraction. WY1993 nearly doubles a 14,700 cfs peak. These are
 mechanically correct given the inputs, but they move the low end of the
 frequency curve substantially and deserve a look.
 
-**WY1976** is the one large negative difference: Obs_RC peaks at 103,012 cfs
-against WCM_RC's 75,597, so the observed pool was *worse* than the rule curve
-that year — it started 7.5 ft above. No adjustment is applied, per the rule.
+**WY1976** is the one negative difference: Obs_RC peaks at 103,012 cfs against
+WCM_RC's 75,597, because the pool started 7.5 ft *above* the rule curve. No
+adjustment is applied — the record is increase-only.
 
 ## Outputs
 
@@ -129,6 +138,16 @@ The DSS record is written as a regular **1DAY** series, not IR-CENTURY: handing
 an IR-CENTURY pathname to `put_ts` with a regular container **segfaults** this
 pydsstools build rather than raising. The peak sits on its observed peak date;
 every other day is the missing sentinel, so it plots as points in DSSVue.
+
+## Intended use
+
+This record feeds a **critical duration analysis** relating unregulated AEP
+flows to regulated flows at large events. It is deliberately NOT intended for
+an analytical frequency fit on regulated flows, which do not follow an
+analytical distribution. That is why the screening losses are acceptable: the
+seven excluded years are dominated by low peaks that do not influence the
+large-event relationship.
+
 
 ## Settings that change the answer
 

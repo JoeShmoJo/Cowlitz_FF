@@ -130,6 +130,8 @@ DROP_FAILED_SCREEN = False
 # are where spurious timing mismatches cluster, because the annual maximum is
 # not a distinct storm.
 LOW_PEAK_CFS = 20000.0
+# Differences smaller than this are not worth recording as an adjustment.
+MIN_ADJUSTMENT_CFS = 1.0
 
 # Years never to adjust regardless of screening, with the reason recorded.
 # 1980: Mount St. Helens eruption, 18 May 1980 -- not a meteorological event.
@@ -401,11 +403,19 @@ def main():
                      abs((t_wcm - t_obs).days))
         passed, reason = screen_year(wy, t_usgs, t_wcm, t_obs, obs_windows)
         delta = p_wcm - p_obs
-        adjust = bool(passed and delta > 0)
+        # ONE-SIDED BY DESIGN: the observed peak is only ever INCREASED. A
+        # negative difference means the observed pool started ABOVE the rule
+        # curve and the historical operation was already at least as good as
+        # following the WCM; there is nothing to remove, so the peak stands.
+        adjust = bool(passed and delta > MIN_ADJUSTMENT_CFS)
         if adjust:
             decision = "adjusted +%.0f cfs" % delta
+        elif passed and delta < 0:
+            decision = ("no adjustment: Obs_RC peak exceeds WCM_RC by %.0f cfs "
+                        "-- observed pool started above the rule curve, so the "
+                        "observed peak is not reduced" % abs(delta))
         elif passed:
-            decision = "no adjustment: Obs_RC peak >= WCM_RC peak"
+            decision = "no adjustment: difference below %.0f cfs" % MIN_ADJUSTMENT_CFS
         else:
             decision = "no adjustment: %s" % reason
         rows.append({
@@ -461,7 +471,8 @@ def main():
         print("   as a share of the observed peak: median %+.1f%%, max %+.1f%%"
               % ((100 * adjusted["delta_wcm_minus_obs"] / adjusted["usgs"]).median(),
                  (100 * adjusted["delta_wcm_minus_obs"] / adjusted["usgs"]).max()))
-    print("NOT ADJUSTED, Obs_RC peak >= WCM_RC peak : %d years" % len(no_gain))
+    print("NOT ADJUSTED, no gain from the rule curve: %d years  "
+          "(record is increase-only; peaks are never reduced)" % len(no_gain))
     print("NOT ADJUSTED, failed event screening     : %d years" % len(failed))
     for _, row in failed.iterrows():
         flag = "  [low peak %.0f cfs]" % row["usgs"] if row["low_peak_year"] else ""
