@@ -165,6 +165,22 @@ those records then fail to read back with "Error code -1". A record that is
 entirely -901 is effectively corrupt. Never write one.
 
 
+## The mismatched-run trap (already caught once)
+
+Reassembling run A's simulation with run B's mapping does NOT error. It stamps
+A's members onto B's dates and writes a series that looks entirely plausible --
+right length, right shape, wrong dates. It was caught only because the
+pass-through FLOW-IN record disagreed with ResSimInflows.dss.
+
+SIM_DSS now lives in CONFIG_BY_SET alongside the mapping, keyed by SET_NAME, so
+the pair cannot drift apart. A guard also stops any record whose members return
+more than WINDOW_TOLERANCE x the mapped hours.
+
+Diagnostic that found it: take a member's reassembled block, scan the source
+record for the offset where it matches, and see where it really came from. If
+that date is outside the member's own window, the wrong simulation was read.
+
+
 ## Open issue as of 7 Aug 2026
 
 `ObsData_RegUnreg.dss` was deleted from `CAS_Reg_Unreg/data` as "duplicative",

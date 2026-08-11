@@ -29,21 +29,32 @@ from pydsstools.core import TimeSeriesContainer
 # ----------------------------------------------------------------------------
 # USER SETTINGS
 # ----------------------------------------------------------------------------
-# EXTERNAL: the ResSim simulation output (too large for the repository)
-SIM_DSS = r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis\watershed\NWP_CowlitzLewis\rss\WCM_RC\simulation.dss"
-# Obs_RC run will have its own rss folder, e.g. .../rss/1999.09.30-0000/simulation.dss
-SIM_DSS_VERSION = 6
-
 # --- which ensemble set is being reassembled ---------------------------------
 # ResSim_WCM_RC  : WCM rule curve run, 01 Oct -> 01 May windows
 # ResSim_Obs_RC  : observed rule curve run, 31-day windows on the rising limb
 SET_NAME = "ResSim_WCM_RC"
 
-MAPPING_BY_SET = {
-    "ResSim_WCM_RC": r"../output/ensemble_unreg_mapping.csv",
-    "ResSim_Obs_RC": r"../output/ensemble_obs_rc_mapping.csv",
+# Everything that differs between the runs lives in ONE table. SIM_DSS belongs
+# here too: pairing one run's simulation with the other run's mapping produces a
+# plausible-looking but completely wrong series, because it stamps run A's
+# members onto run B's dates. That is not hypothetical -- it happened.
+# EXTERNAL: the ResSim simulation output (too large for the repository)
+RSS_ROOT = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
+            r"\watershed\NWP_CowlitzLewis\rss")
+
+CONFIG_BY_SET = {
+    "ResSim_WCM_RC": {
+        "mapping": r"../output/ensemble_unreg_mapping.csv",
+        "sim_dss": RSS_ROOT + r"\WCM_RC\simulation.dss",
+    },
+    "ResSim_Obs_RC": {
+        "mapping": r"../output/ensemble_obs_rc_mapping.csv",
+        "sim_dss": RSS_ROOT + r"\OBS_RC\simulation.dss",
+    },
 }
-MAPPING_CSV = MAPPING_BY_SET[SET_NAME]
+MAPPING_CSV = CONFIG_BY_SET[SET_NAME]["mapping"]
+SIM_DSS = CONFIG_BY_SET[SET_NAME]["sim_dss"]
+SIM_DSS_VERSION = 6
 OUT_DSS = r"../output/%s.dss" % SET_NAME
 OUT_DSS_VERSION = 6
 SUMMARY_CSV = r"../output/diagnostics/%s_summary.csv" % SET_NAME
@@ -77,6 +88,10 @@ CHECK_AGAINST = [
 SOURCE_DSS_VERSION = 6
 CHECK_TOLERANCE_ABS = 0.5      # cfs; below this is DSS single-precision noise
 CHECK_TOLERANCE_REL = 0.0001   # or this fraction of the record peak, whichever is larger
+
+# A member returning more than this multiple of its mapped length means the
+# simulation and the ensemble do not belong together.
+WINDOW_TOLERANCE = 1.5
 
 SENTINEL = -901.0
 SENTINEL_TOL = 0.5
@@ -233,6 +248,18 @@ def main():
 
             leads = set(o[1] for o in offsets)
             tails = set(o[2] for o in offsets)
+            member_hours = int(mapping["hours"].iloc[0])
+            got_hours = max(o[3] for o in offsets)
+            if got_hours > member_hours * WINDOW_TOLERANCE:
+                print("   *** STOP: members returned up to %d hours but the mapping"
+                      " says %d ***" % (got_hours, member_hours))
+                print("   The simulation window does not match this ensemble.")
+                print("   Usual cause: SIM_DSS is a different run than SET_NAME=%s"
+                      % SET_NAME)
+                print("   SIM_DSS = %s" % SIM_DSS)
+                print("   Skipping this record -- the result would be wrong, not"
+                      " merely short.")
+                continue
             print("   run window   : starts %s after ensemble_start, ends %s after"
                   % (sorted(leads)[0], sorted(tails)[-1]))
             if len(leads) > 1 or len(tails) > 1:
