@@ -238,6 +238,44 @@ def fit_pair(x, y):
     return out
 
 
+def compare_correlations(data, fits):
+    """Are the r-squared differences real, or within noise?
+
+    The four durations are near-copies of each other (Peak and 1-Day correlate
+    at about r = 0.997), so the ranking alone says little. Steiger's test for
+    dependent correlations sharing one variable asks whether each duration is
+    DISTINGUISHABLE from the best one at this sample size.
+    """
+    best_label = fits.loc[fits["log_r2"].idxmax(), "duration"]
+    key = lambda lab: "unreg_%s" % lab.replace(" ", "_").replace("(", "").replace(")", "")
+    sub = data.dropna(subset=["reg_peak"] + [key(l) for l, _ in DURATIONS])
+    if len(sub) < 6:
+        return pd.DataFrame()
+    y = np.log10(sub["reg_peak"].values)
+    x = {label: np.log10(sub[key(label)].values) for label, _ in DURATIONS}
+    n = len(y)
+    r = {label: stats.pearsonr(v, y).statistic for label, v in x.items()}
+    rows = []
+    for label, _ in DURATIONS:
+        if label == best_label:
+            rows.append({"duration": label, "r2": r[label] ** 2,
+                         "vs_best": "(best)", "r_with_best": 1.0,
+                         "p_value": np.nan, "distinguishable": ""})
+            continue
+        r12, r13 = r[best_label], r[label]
+        r23 = stats.pearsonr(x[best_label], x[label]).statistic
+        det = (1 - r12 ** 2 - r13 ** 2 - r23 ** 2) + 2 * r12 * r13 * r23
+        rbar = (r12 + r13) / 2.0
+        t = (r12 - r13) * np.sqrt(((n - 1) * (1 + r23))
+                                  / ((2 * (n - 1) / (n - 3)) * det
+                                     + rbar ** 2 * (1 - r23) ** 3))
+        p = 2 * (1 - stats.t.cdf(abs(t), n - 3))
+        rows.append({"duration": label, "r2": r13 ** 2, "vs_best": best_label,
+                     "r_with_best": r23, "p_value": p,
+                     "distinguishable": "yes" if p < 0.05 else "NO"})
+    return pd.DataFrame(rows)
+
+
 def plot_scatter(data, fits, stem):
     """Log-log scatter with the fitted power law, one panel per duration."""
     labels = [d[0] for d in DURATIONS]
@@ -417,6 +455,32 @@ def main():
              best["log_exponent_b"]))
     print("   scatter about the fit: x/%.3f (1 sigma, multiplicative)"
           % best["log_se_factor"])
+
+    compare = compare_correlations(data, fits)
+    if len(compare):
+        compare.to_csv(os.path.join(OUT_DIR,
+                                    "critical_duration_adjusted_significance.csv"),
+                       index=False, float_format="%.5f")
+        print("\nIS THE RANKING REAL? (Steiger's test vs the best duration)")
+        print(compare.round(4).to_string(index=False))
+        ties = compare[compare["distinguishable"] == "NO"]
+        if len(ties):
+            print("   %s cannot be distinguished from %s at n=%d -- the durations"
+                  % (", ".join(ties["duration"]), best["duration"], int(best["n_log"])))
+            print("   are near-copies of each other, so report the SHORT durations")
+            print("   as critical rather than naming one.")
+
+    # extrapolation warning: the power law is only supported over the fitted range
+    key = "unreg_%s" % best["duration"].replace(" ", "_").replace("(", "").replace(")", "")
+    lo, hi = data[key].min(), data[key].max()
+    print("\nFITTED RANGE: unregulated %s from %.0f to %.0f cfs"
+          % (best["duration"], lo, hi))
+    print("   Applying the fit above %.0f cfs is EXTRAPOLATION. With an exponent"
+          % hi)
+    print("   of %.3f the curve flattens with magnitude, so extrapolated"
+          % best["log_exponent_b"])
+    print("   regulated flows are increasingly conservative-looking. Check the")
+    print("   unregulated AEP flows against this range before transferring them.")
 
     # ---- cross-check against the flow frequency study's unregulated record --
     if os.path.isfile(MASSBAL_CSV):
