@@ -44,7 +44,7 @@ RSS_ROOT = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
 
 CONFIG_BY_SET = {
     "ResSim_WCM_RC": {
-        "mapping": r"../output/ensemble_unreg_mapping.csv",
+        "mapping": r"../output/ensemble_wcm_rc_mapping.csv",
         "sim_dss": RSS_ROOT + r"\WCM_RC\simulation.dss",
     },
     "ResSim_Obs_RC": {
@@ -104,6 +104,11 @@ CHECK_TOLERANCE_REL = 0.0001   # or this fraction of the record peak, whichever 
 # A member returning more than this multiple of its mapped length means the
 # simulation and the ensemble do not belong together.
 WINDOW_TOLERANCE = 1.5
+
+# ...and a member returning less than this fraction of its mapped length means
+# the read is truncated. If EVERY member is short by the same factor the cause
+# is structural (a block-level pathname, a wrong mapping), not missing data.
+WINDOW_SHORT_FRACTION = 0.5
 
 SENTINEL = -901.0
 SENTINEL_TOL = 0.5
@@ -211,6 +216,16 @@ def build_catalog(dss):
         parts = path.split("/")
         if len(parts) < 8:
             continue
+        # The catalog lists ONE PATHNAME PER STORAGE BLOCK -- a 1HOUR record
+        # covering 01 Oct -> 01 May appears eight times, once per month, each
+        # with its own D part. Reading a block-specific pathname returns only
+        # that block, so blank the D part here and let DSS assemble the whole
+        # record. Keeping the first D part seen instead silently returns ~1
+        # month per member, and because catalog order differs per record the
+        # surviving month differs too -- which is how Flow and Flow-UNREG ended
+        # up on non-overlapping dates.
+        parts[4] = ""
+        path = "/".join(parts)
         f_part = parts[6]
         if "|" not in f_part or not f_part.upper().startswith("C:"):
             continue
@@ -262,7 +277,7 @@ def read_member(dss, catalog, suffix, part_b, part_c, member):
 
 
 def load_mapping(csv_path):
-    """Mapping rows written by #Create_Unreg_Ensembles.py."""
+    """Mapping rows written by the matching #Create_*_Ensembles.py."""
     table = pd.read_csv(csv_path, parse_dates=["real_start", "real_end",
                                                "ensemble_start"])
     return table.sort_values("member").reset_index(drop=True)
@@ -380,6 +395,24 @@ def main():
                 print("   Skipping this record -- the result would be wrong, not"
                       " merely short.")
                 continue
+            mapped = dict(zip(mapping["member"].astype(int),
+                               mapping["hours"].astype(int)))
+            short = [(m, n, mapped.get(m, member_hours)) for m, _, _, n in offsets
+                     if n < mapped.get(m, member_hours) * WINDOW_SHORT_FRACTION]
+            if short and len(short) == len(offsets):
+                print("   *** STOP: every member came back short -- e.g. member"
+                      " %d returned %d of %d mapped hours ***"
+                      % (short[0][0], short[0][1], short[0][2]))
+                print("   All members short by the same factor is structural, not"
+                      " missing data: usually the pathname carries a D part, so")
+                print("   DSS returns a single storage block instead of the whole"
+                      " record. Skipping -- the result would be a wrong slice.")
+                continue
+            if short:
+                print("   NOTE: %d of %d members returned under %.0f%% of their"
+                      " mapped hours (first: member %d, %d of %d)"
+                      % (len(short), len(offsets), 100 * WINDOW_SHORT_FRACTION,
+                         short[0][0], short[0][1], short[0][2]))
             print("   run window   : starts %s after ensemble_start, ends %s after"
                   % (sorted(leads)[0], sorted(tails)[-1]))
             if len(leads) > 1 or len(tails) > 1:

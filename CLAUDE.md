@@ -77,6 +77,17 @@ Check the header directly when unsure -- byte 12 of the file is the version:
   `<= -900` as missing. Write missing as `-3.4028234663852886e38`.
 - `search_path('/*/*/*/*/*/*/')` is the catalog call. There is no
   `getPathnameList`.
+- THE CATALOG RETURNS ONE PATHNAME PER STORAGE BLOCK, NOT ONE PER RECORD. A
+  1HOUR series covering 01 Oct -> 01 May comes back eight times, once per month,
+  each with its own D part. Reading a block-specific pathname returns ONLY that
+  block. Blank the D part before reading (`parts[4] = ""`) and let DSS assemble
+  the record; `read_ts` on `//B/C//1HOUR/F/` returns the whole thing. Indexing
+  the catalog by (B, C, F) and keeping the first path seen returns roughly one
+  month per record, and since catalog order differs per record, DIFFERENT
+  months for different records -- two series from the same run land on
+  non-overlapping dates and look like they used different mappings. This bit
+  #Extract_Ensemble_To_Timeseries.py in Aug 2026; it now blanks the D part and
+  stops if every member comes back under half its mapped hours.
 - `import pydsstools` emits a `rasterio` ImportError on stderr. Harmless.
 - Pathname case is inconsistent across records (`1Hour` vs `1HOUR`). Compare
   case-insensitively or you will report false mismatches.
