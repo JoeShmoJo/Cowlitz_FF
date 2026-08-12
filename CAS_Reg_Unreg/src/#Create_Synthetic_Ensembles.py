@@ -67,6 +67,7 @@ OBS_DSS = r"../../CAS_Unreg_FF/data/obsData.dss"
 OUT_DSS = (r"../output/ensemble_synthetic.dss")
 OUT_DSS_VERSION = 7
 
+OUT_DSS_ALT = OUT_DSS.replace(".dss", "_lineartaper.dss")
 MAPPING_CSV = r"../output/ensemble_synthetic_mapping.csv"
 PLOT_STEM = r"../output/diagnostics/ensemble_synthetic"
 
@@ -87,21 +88,60 @@ SOURCE_EVENTS = [
 WINDOW_BEFORE_DAYS = 10       # lead-in, so the pool responds before the peak
 WINDOW_AFTER_DAYS = 20        # recession, long enough to pass the flood
 
+# --- how the events are scaled ----------------------------------------------
+# "volume_matched": the multiplier is a function of FLOW, not of time --
+#     f(Q) = f_out + (f_peak - f_out) * (Q - Qmin) / (Qmax - Qmin)
+#     so the peak scales by f_peak exactly and every lower flow scales by less
+#     (or more) in a way that is monotone in Q. That matters: a time-based taper
+#     can scale a shoulder harder than the peak and lift it ABOVE the peak,
+#     inventing a new maximum and breaking the target. A flow-based multiplier
+#     cannot reorder the hydrograph, so the peak stays the peak and the result
+#     still looks like a flood.
+#     f_out is solved so the 5-day volume about the peak hits its own target,
+#     then refined by iteration because changing the shape moves which 5-day
+#     window is the maximum one.
+# "linear_taper": the simple fallback. The multiplier is f_peak at the peak and
+#     falls linearly to 1.0 at +/- TAPER_HALF_WIDTH_DAYS, leaving everything
+#     outside untouched. Only the peak target is met; volume lands where it
+#     lands. Written to its own DSS so the two can be compared.
+SCALING_METHOD = "volume_matched"
+ALSO_WRITE_LINEAR_TAPER = True          # second DSS using the fallback method
+VOLUME_HALF_WIDTH_DAYS = 2.5            # +/- window the 5-day volume is matched over
+TAPER_HALF_WIDTH_DAYS = 2.5             # fallback taper half width
+VOLUME_ITERATIONS = 12                  # refine f_out against the true rolling max
+VOLUME_TOLERANCE = 0.002                # stop when the 5-day is within 0.2%
+SHAPE_STRAIN_WARN = 2.0                 # warn when f_out/f_peak is beyond this or its inverse
+
+# --- starting pool elevation -------------------------------------------------
+# "rulecurve"  : the WCM rule curve on the event's start date.
+# "median_por" : the MEDIAN simulated pool for that calendar day, taken from the
+#                unregulated period-of-record ResSim run. Not available until
+#                that run exists -- the script says so and falls back rather
+#                than failing.
+START_ELEV_MODE = "rulecurve"
+POR_ELEV_DSS = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
+                r"\watershed\NWP_CowlitzLewis_ResSim4\rss\Unreg_POR_FIS\simulation.dss")
+POR_ELEV_PATH = "//Mossyrock-Pool/Elev/*/1Hour/Ensemble--0/"
+POR_ELEV_MIN_YEARS = 10
+
 # --- target unregulated PEAK magnitudes -------------------------------------
 # From CAS_Unreg_FF/output/CAS_Unreg_frequency_table.csv, Duration = Peak.
-TARGETS = [
-    ("100yr", 0.010, 168884.0),
-    ("250yr", 0.004, 195000.0),
-    ("500yr", 0.002, 211932.0),
-    ("beyond", None, 255000.0),   # past the reported curve, to anchor the end slope
-]
+# Peak AND 5-day targets are read from the unregulated frequency table, so the
+# two constraints always come from the same curve and column.
+UNREG_FREQ_CSV = r"../../CAS_Unreg_FF/output/CAS_Unreg_frequency_table.csv"
+FREQ_VALUE_COL = "Expected"
+TARGET_AEPS = [("100yr", 0.010), ("250yr", 0.004), ("500yr", 0.002)]
+# One target beyond the reported curve, to anchor the end slope of the drawn
+# curve. Given as a multiple of the smallest-AEP value on the table.
+BEYOND_LABEL = "beyond"
+BEYOND_FACTOR = 1.20
 
 # --- starting pool bases ----------------------------------------------------
 # "rulecurve" : the WCM rule curve on that calendar date
 # "duration50": the 50% exceedance pool elevation for that calendar date,
 #               computed from the observed daily record
 # "observed"  : the observed pool on that calendar date
-POOL_BASES = ["rulecurve", "duration50", "observed"]
+POOL_BASES = [START_ELEV_MODE]
 # The conservative convention from the workflow email is the HIGHER of the
 # three. Set this True to add that as a fourth basis.
 ADD_HIGHEST_OF_ALL = False
@@ -244,6 +284,111 @@ def duration_50_on_index(table, index):
     return pd.Series(out, index=index).interpolate(limit_direction="both").values
 
 
+def read_targets(csv_path, value_col):
+    """Peak and 5-day unregulated targets per AEP, from one frequency table."""
+    table = pd.read_csv(csv_path)
+    out = {}
+    for label, aep in TARGET_AEPS:
+        row = {}
+        for duration, key in [("Peak", "peak"), ("5-Day", "vol5")]:
+            sub = table[table["Duration"] == duration].dropna(subset=[value_col])
+            pick = sub.iloc[(sub["AEP"] - aep).abs().argsort()[:1]]
+            row[key] = float(pick[value_col].iloc[0])
+            row["aep"] = float(pick["AEP"].iloc[0])
+        out[label] = row
+    smallest = min(a for _, a in TARGET_AEPS)
+    base = out[[l for l, a in TARGET_AEPS if a == smallest][0]]
+    out[BEYOND_LABEL] = {"peak": base["peak"] * BEYOND_FACTOR,
+                         "vol5": base["vol5"] * BEYOND_FACTOR, "aep": np.nan}
+    return out
+
+
+def rolling_max_mean(values, index, hours):
+    """Largest N-hour mean of a series (the same statistic the targets are)."""
+    return float(pd.Series(values, index=index)
+                 .rolling(hours, min_periods=int(hours * 0.9)).mean().max())
+
+
+def scale_volume_matched(flow, index, target_peak, target_vol5):
+    """Flow-dependent multiplier hitting the peak exactly and the 5-day by iteration.
+
+    f(Q) = f_out + (f_peak - f_out) * w,  w = (Q - Qmin) / (Qmax - Qmin)
+
+    Monotone in Q, so the peak cannot be overtaken by a shoulder and the
+    hydrograph keeps its ordering. f_out is solved from the 5-day volume over
+    +/- VOLUME_HALF_WIDTH_DAYS, then refined: reshaping moves which 5-day window
+    is the maximum, so the closed-form answer is only a first guess.
+    """
+    peak_time = index[int(np.argmax(flow))]
+    offset_days = (index - peak_time) / pd.Timedelta(days=1)
+    inside = np.abs(offset_days) <= VOLUME_HALF_WIDTH_DAYS
+    span = flow.max() - flow.min()
+    weight = (flow - flow.min()) / span if span > 0 else np.ones_like(flow)
+    f_peak = target_peak / flow.max()
+
+    hi = float((flow * weight)[inside].sum())
+    lo = float((flow * (1.0 - weight))[inside].sum())
+    f_out = ((target_vol5 * VOLUME_HALF_WIDTH_DAYS * 2 * 24 - f_peak * hi) / lo
+             if lo > 0 else f_peak)
+
+    best = None
+    for _ in range(VOLUME_ITERATIONS):
+        scaled = (f_out + (f_peak - f_out) * weight) * flow
+        got5 = rolling_max_mean(scaled, index, 120)
+        err = got5 / target_vol5 - 1.0
+        if best is None or abs(err) < abs(best[2]):
+            best = (f_out, scaled, err)
+        if abs(err) <= VOLUME_TOLERANCE:
+            break
+        # f_out moves the shoulders; nudge it against the residual
+        step = (target_vol5 - got5) / max(got5, 1.0)
+        f_out = f_out * (1.0 + 0.8 * step) if f_out > 0 else f_out + 0.05 * step
+    f_out, scaled, err = best
+    # peak is exact by construction, but rescale to be certain after iteration
+    scaled = scaled * (target_peak / scaled.max())
+    return scaled, {"f_peak": f_peak, "f_out": f_out,
+                    "shape_strain": f_out / f_peak if f_peak else np.nan,
+                    "vol5_err": err,
+                    "vol5_got": rolling_max_mean(scaled, index, 120)}
+
+
+def scale_linear_taper(flow, index, target_peak):
+    """Fallback: multiplier is f_peak at the peak, falling linearly to 1.0.
+
+    Everything beyond +/- TAPER_HALF_WIDTH_DAYS is left untouched. Meets the
+    peak target only; the 5-day volume lands wherever it lands.
+    """
+    peak_time = index[int(np.argmax(flow))]
+    offset_days = np.abs((index - peak_time) / pd.Timedelta(days=1))
+    ramp = np.clip(1.0 - offset_days / TAPER_HALF_WIDTH_DAYS, 0.0, 1.0)
+    f_peak = target_peak / flow.max()
+    scaled = (1.0 + (f_peak - 1.0) * ramp) * flow
+    return scaled, {"f_peak": f_peak, "f_out": 1.0,
+                    "shape_strain": 1.0 / f_peak if f_peak else np.nan,
+                    "vol5_err": np.nan,
+                    "vol5_got": rolling_max_mean(scaled, index, 120)}
+
+
+def median_pool_by_dayofyear(dss_file, pathname, min_years):
+    """Median simulated pool for each calendar day from the POR run."""
+    series = read_dss_series(dss_file, pathname).dropna()
+    frame = pd.DataFrame({"elev": series.values, "month": series.index.month,
+                          "day": series.index.day, "year": series.index.year})
+    daily = frame.groupby(["year", "month", "day"])["elev"].mean().reset_index()
+    grouped = daily.groupby(["month", "day"])["elev"]
+    median, counts = grouped.median(), grouped.count()
+    return median[counts >= min_years]
+
+
+def pool_on_date(table, when):
+    key = (int(when.month), int(when.day))
+    if key in table.index:
+        return float(table.loc[key])
+    if key == (2, 29) and (2, 28) in table.index:
+        return float(table.loc[(2, 28)])
+    return np.nan
+
+
 def build_container(pathname, values, start_time, units, data_type, interval_min):
     """TimeSeriesContainer built the way the installed pydsstools accepts."""
     try:
@@ -283,10 +428,14 @@ def plot_events(events, mapping, stem):
         ax = axes[k // 2][k % 2]
         hours = np.arange(len(ev["total"])) / 24.0
         for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
-            if row["pool_basis"] != POOL_BASES[0]:
-                continue
-            ax.plot(hours, ev["total"].values * row["scale_factor"],
-                    lw=1.2, label="%s  x%.2f" % (row["target"], row["scale_factor"]))
+            scaled, _ = (scale_volume_matched(ev["total"].values, ev["index"],
+                                              row["target_unreg_peak_cfs"],
+                                              row["target_unreg_5day_cfs"])
+                         if row["scaling_method"] == "volume_matched"
+                         else scale_linear_taper(ev["total"].values, ev["index"],
+                                                 row["target_unreg_peak_cfs"]))
+            ax.plot(hours, scaled, lw=1.2,
+                    label="%s  strain %.2f" % (row["target"], row["shape_strain"]))
         ax.plot(hours, ev["total"].values, color="k", lw=1.8, label="observed x1.00")
         ax.plot(hours, ev["cas"].fillna(0.0).values, color="0.6", lw=0.9, ls=":",
                 label="local (observed)")
@@ -308,7 +457,7 @@ def plot_pools(events, stem):
     fig, ax = plt.subplots(figsize=(11, 5.5))
     x = np.arange(len(events))
     width = 0.26
-    colors = {"rulecurve": "#8e44ad", "duration50": "#16a085", "observed": "#2c7fb8"}
+    colors = {"rulecurve": "#8e44ad", "median_por": "#16a085"}
     for i, basis in enumerate(POOL_BASES):
         vals = [ev["pools"].get(basis, np.nan) for ev in events]
         ax.bar(x + (i - 1) * width, vals, width, color=colors.get(basis, "0.5"),
@@ -349,15 +498,29 @@ def main():
     flow_write = (ens_start + pd.Timedelta(hours=1)).strftime("%d%b%Y %H:%M:%S").upper()
     elev_write = (elev_ens_start + pd.Timedelta(hours=1)).strftime("%d%b%Y %H:%M:%S").upper()
 
-    bases = list(POOL_BASES) + (["highest"] if ADD_HIGHEST_OF_ALL else [])
+    bases = list(POOL_BASES)
+    targets = read_targets(UNREG_FREQ_CSV, FREQ_VALUE_COL)
+    por_medians = None
+    if START_ELEV_MODE == "median_por":
+        if os.path.isfile(POR_ELEV_DSS):
+            por_medians = median_pool_by_dayofyear(POR_ELEV_DSS, POR_ELEV_PATH,
+                                                   POR_ELEV_MIN_YEARS)
+            print("Median POR pool: %d calendar days from %s"
+                  % (len(por_medians), POR_ELEV_DSS))
+        else:
+            print("START_ELEV_MODE is 'median_por' but the POR run was not found:")
+            print("   %s" % POR_ELEV_DSS)
+            print("   Falling back to the rule curve; every member is tagged so.")
 
     print("=" * 78)
     print("Window     : %d days before / %d days after the peak (%d hours)"
           % (WINDOW_BEFORE_DAYS, WINDOW_AFTER_DAYS, n_hours))
     print("Design     : %d events x %d magnitudes x %d pool bases = %d members"
-          % (len(SOURCE_EVENTS), len(TARGETS), len(bases),
-             len(SOURCE_EVENTS) * len(TARGETS) * len(bases)))
-    print("Scaling    : BOTH Mossyrock inflow and Castle Rock local, same factor")
+          % (len(SOURCE_EVENTS), len(TARGET_AEPS) + 1, len(bases),
+             len(SOURCE_EVENTS) * (len(TARGET_AEPS) + 1) * len(bases)))
+    print("Scaling    : %s -- both records scaled, hourly proportion preserved"
+          % SCALING_METHOD)
+    print("Start pool : %s" % START_ELEV_MODE)
     print("Output     : %s" % OUT_DSS)
     print("=" * 78)
 
@@ -374,16 +537,15 @@ def main():
         obs_pool = elev_hourly.reindex(elev_index)
         rc_pool = pd.Series(rule_curve_on_index(elev_index), index=elev_index)
         d50_pool = pd.Series(duration_50_on_index(dur50, elev_index), index=elev_index)
-        pools = {"rulecurve": float(rc_pool.loc[start]),
-                 "duration50": float(d50_pool.loc[start]),
-                 "observed": float(obs_pool.loc[start])
-                 if np.isfinite(obs_pool.loc[start]) else np.nan}
-        pools["highest"] = float(np.nanmax([pools["rulecurve"], pools["duration50"],
-                                            pools["observed"]]))
-        series_by_basis = {"rulecurve": rc_pool, "duration50": d50_pool,
-                           "observed": obs_pool}
-        # "highest" holds a constant at the highest of the three from the start
-        series_by_basis["highest"] = pd.Series(pools["highest"], index=elev_index)
+        pools = {"rulecurve": float(rc_pool.loc[start])}
+        series_by_basis = {"rulecurve": rc_pool}
+        if por_medians is not None:
+            value = pool_on_date(por_medians, start)
+            pools["median_por"] = value
+            series_by_basis["median_por"] = pd.Series(value, index=elev_index)
+        else:
+            pools["median_por"] = np.nan
+            series_by_basis["median_por"] = rc_pool
         events.append({"label": label, "note": note, "peak_date": centre,
                        "start": start, "index": index, "elev_index": elev_index,
                        "mos": mos_w, "cas": cas_w, "total": total,
@@ -393,86 +555,129 @@ def main():
                        "pools": pools, "pool_series": series_by_basis,
                        "missing": int(mos_w.isna().sum() + cas_w.isna().sum())})
 
-    mapping_rows = []
-    member = 0
-    with HecDss.Open(OUT_DSS, version=OUT_DSS_VERSION) as dst:
-        for ev in events:
-            for target_label, aep, target_peak in TARGETS:
-                factor = target_peak / ev["obs_peak"]
-                for basis in bases:
-                    pool = ev["pools"].get(basis, np.nan)
-                    basis_used = basis
-                    if not np.isfinite(pool):
-                        # Dec 1933 predates the observed pool record (starts Oct
-                        # 1973). Substitute the rule curve and record that the
-                        # member is not on the basis its label implies.
-                        pool = ev["pools"]["rulecurve"]
-                        basis_used = "%s->rulecurve (no observed pool)" % basis
-                    member += 1
-                    f_part = "C:%06d|%s" % (member, ENS_SUFFIX)
-                    mos_v = to_dss_values(ev["mos"].values * factor)
-                    cas_v = to_dss_values(ev["cas"].values * factor)
-                    pool_series = ev["pool_series"][basis]
-                    if basis_used != basis:
-                        pool_series = ev["pool_series"]["rulecurve"]
-                    elev_v = to_dss_values(pool_series.values)
-                    rc_v = to_dss_values(rule_curve_on_index(ev["elev_index"]))
-                    for parts, vals, units, dpart, wstart in [
-                            (("", "MOSSYROCK", "FLOW-IN"), mos_v, "CFS", flow_d, flow_write),
-                            (("", "CASTLE ROCK", "FLOW-LOCAL"), cas_v, "CFS", flow_d, flow_write),
-                            (("", "MOS", "ELEV"), elev_v, "FEET", elev_d, elev_write),
-                            (("", "MOS", "ELEV-RULECURVE"), rc_v, "FEET", elev_d, elev_write)]:
-                        pathname = "/%s/%s/%s/%s/1HOUR/%s/" % (
-                            parts[0], parts[1], parts[2], dpart, f_part)
-                        dst.put_ts(build_container(pathname, vals, wstart, units,
-                                                   "INST-VAL", 60))
-                    synth_year = SYNTH_YEAR_BASE + member
-                    synth_start = ev["start"] + pd.DateOffset(
-                        years=synth_year - ev["start"].year)
-                    mapping_rows.append({
-                        "member": member, "ensemble_f_part": f_part,
-                        "event": ev["label"], "event_note": ev["note"],
-                        "target": target_label, "target_aep": aep,
-                        "target_unreg_peak_cfs": target_peak,
-                        "scale_factor": round(factor, 4),
-                        "observed_unreg_peak_cfs": round(ev["obs_peak"], 1),
-                        "scaled_unreg_peak_cfs": round(ev["obs_peak"] * factor, 1),
-                        "local_share_at_peak": round(ev["local_share"], 4),
-                        "pool_basis": basis,
-                        "pool_basis_used": basis_used,
-                        "start_pool_ft": round(pool, 2),
-                        "synth_water_year": synth_year,
-                        "real_start": synth_start,
-                        "real_end": synth_start + pd.Timedelta(hours=n_hours - 1),
-                        "source_start": ev["start"],
-                        "source_peak_date": ev["peak_date"],
-                        "ensemble_start": ens_start, "hours": n_hours,
-                        "elev_ensemble_start": elev_ens_start,
-                        "elev_hours": elev_hours,
-                        "missing_input_hours": ev["missing"]})
+    def build_set(out_dss, method):
+      mapping_rows = []
+      member = 0
+      with HecDss.Open(out_dss, version=OUT_DSS_VERSION) as dst:
+          for ev in events:
+              for target_label, target in targets.items():
+                  target_peak, target_vol5 = target["peak"], target["vol5"]
+                  if method == "volume_matched":
+                      tot_scaled, info = scale_volume_matched(
+                          ev["total"].values, ev["index"], target_peak, target_vol5)
+                  else:
+                      tot_scaled, info = scale_linear_taper(
+                          ev["total"].values, ev["index"], target_peak)
+                  # split the scaled total back onto the two records in the
+                  # observed proportion at each hour, so the coincidence between
+                  # reservoir inflow and local is preserved exactly
+                  share = np.divide(ev["mos"].fillna(0.0).values,
+                                    np.maximum(ev["total"].values, 1e-9))
+                  mos_scaled = tot_scaled * share
+                  cas_scaled = tot_scaled * (1.0 - share)
+                  factor = float(np.nanmedian(np.divide(
+                      tot_scaled, np.maximum(ev["total"].values, 1e-9))))
+                  for basis in bases:
+                      pool = ev["pools"].get(basis, np.nan)
+                      basis_used = basis
+                      if not np.isfinite(pool):
+                          pool = ev["pools"]["rulecurve"]
+                          basis_used = "%s->rulecurve (unavailable)" % basis
+                      member += 1
+                      f_part = "C:%06d|%s" % (member, ENS_SUFFIX)
+                      mos_v = to_dss_values(mos_scaled)
+                      cas_v = to_dss_values(cas_scaled)
+                      pool_series = ev["pool_series"][basis]
+                      if basis_used != basis:
+                          pool_series = ev["pool_series"]["rulecurve"]
+                      elev_v = to_dss_values(pool_series.values)
+                      rc_v = to_dss_values(rule_curve_on_index(ev["elev_index"]))
+                      for parts, vals, units, dpart, wstart in [
+                              (("", "MOSSYROCK", "FLOW-IN"), mos_v, "CFS", flow_d, flow_write),
+                              (("", "CASTLE ROCK", "FLOW-LOCAL"), cas_v, "CFS", flow_d, flow_write),
+                              (("", "MOS", "ELEV"), elev_v, "FEET", elev_d, elev_write),
+                              (("", "MOS", "ELEV-RULECURVE"), rc_v, "FEET", elev_d, elev_write)]:
+                          pathname = "/%s/%s/%s/%s/1HOUR/%s/" % (
+                              parts[0], parts[1], parts[2], dpart, f_part)
+                          dst.put_ts(build_container(pathname, vals, wstart, units,
+                                                     "INST-VAL", 60))
+                      synth_year = SYNTH_YEAR_BASE + member
+                      synth_start = ev["start"] + pd.DateOffset(
+                          years=synth_year - ev["start"].year)
+                      mapping_rows.append({
+                          "member": member, "ensemble_f_part": f_part,
+                          "event": ev["label"], "event_note": ev["note"],
+                          "target": target_label, "target_aep": target["aep"],
+                          "scaling_method": method,
+                          "target_unreg_peak_cfs": round(target_peak, 1),
+                          "target_unreg_5day_cfs": round(target_vol5, 1),
+                          "f_peak": round(info["f_peak"], 4),
+                          "f_out": round(info["f_out"], 4),
+                          "shape_strain": round(info["shape_strain"], 3),
+                          "scaled_unreg_peak_cfs": round(float(tot_scaled.max()), 1),
+                          "scaled_unreg_5day_cfs": round(info["vol5_got"], 1),
+                          "vol5_error_pct": (round(100 * info["vol5_err"], 2)
+                                             if np.isfinite(info["vol5_err"]) else np.nan),
+                          "scale_factor": round(factor, 4),
+                          "observed_unreg_peak_cfs": round(ev["obs_peak"], 1),
+                          "local_share_at_peak": round(ev["local_share"], 4),
+                          "pool_basis": basis,
+                          "pool_basis_used": basis_used,
+                          "start_pool_ft": round(pool, 2),
+                          "synth_water_year": synth_year,
+                          "real_start": synth_start,
+                          "real_end": synth_start + pd.Timedelta(hours=n_hours - 1),
+                          "source_start": ev["start"],
+                          "source_peak_date": ev["peak_date"],
+                          "ensemble_start": ens_start, "hours": n_hours,
+                          "elev_ensemble_start": elev_ens_start,
+                          "elev_hours": elev_hours,
+                          "missing_input_hours": ev["missing"]})
 
-    mapping = pd.DataFrame(mapping_rows)
+      return pd.DataFrame(mapping_rows)
+
+    mapping = build_set(OUT_DSS, SCALING_METHOD)
     mapping.to_csv(MAPPING_CSV, index=False)
+    if ALSO_WRITE_LINEAR_TAPER and SCALING_METHOD != "linear_taper":
+        alt = build_set(OUT_DSS_ALT, "linear_taper")
+        alt.to_csv(MAPPING_CSV.replace(".csv", "_lineartaper.csv"), index=False)
+        print("\nFallback set written: %s" % OUT_DSS_ALT)
+        print("   peak targets met; 5-day lands at %.0f-%.0f%% of target"
+              % (100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).min(),
+                 100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).max()))
     plot_events(events, mapping, PLOT_STEM)
     plot_pools(events, PLOT_STEM)
 
     print("\nSOURCE EVENTS")
     for ev in events:
-        print("   %-8s peak %7.0f  local %4.1f%%  gaps %d  pools: rc %.1f / d50 %.1f / obs %s"
-              % (ev["label"], ev["obs_peak"], 100 * ev["local_share"], ev["missing"],
-                 ev["pools"]["rulecurve"], ev["pools"]["duration50"],
-                 "%.1f" % ev["pools"]["observed"]
-                 if np.isfinite(ev["pools"]["observed"]) else "n/a"))
-    print("\nSCALE FACTORS")
-    pivot = mapping[mapping["pool_basis"] == bases[0]].pivot(
-        index="event", columns="target", values="scale_factor")
-    print(pivot.to_string())
-    big = mapping[mapping["scale_factor"] > 2.0]
-    if len(big):
-        print("\n   NOTE: %d members scale by more than 2x. The further a factor is"
-              % len(big))
-        print("   from 1, the more the synthetic depends on the assumption that")
-        print("   hydrograph shape is preserved with magnitude.")
+        pool_txt = "  ".join(
+            "%s %.1f" % (k, v) if np.isfinite(v) else "%s n/a" % k
+            for k, v in ev["pools"].items())
+        print("   %-8s peak %7.0f  local %4.1f%%  gaps %d  pools: %s"
+              % (ev["label"], ev["obs_peak"], 100 * ev["local_share"],
+                 ev["missing"], pool_txt))
+    print("\nSCALING -- f_peak at the peak, f_out at low flow, and the shape")
+    print("strain between them (1.0 = uniform scaling, far from 1 = reshaped)")
+    show = mapping[["event", "target", "f_peak", "f_out", "shape_strain",
+                    "scaled_unreg_peak_cfs", "target_unreg_peak_cfs",
+                    "scaled_unreg_5day_cfs", "target_unreg_5day_cfs",
+                    "vol5_error_pct"]].copy()
+    print(show.round(3).to_string(index=False))
+    strained = mapping[(mapping["shape_strain"] > SHAPE_STRAIN_WARN) |
+                       (mapping["shape_strain"] < 1.0 / SHAPE_STRAIN_WARN)]
+    if len(strained):
+        print("\n   %d members reshape by more than %.1fx between peak and"
+              % (len(strained), SHAPE_STRAIN_WARN))
+        print("   shoulder. Sharp events pushed to a volume target get their")
+        print("   shoulders inflated; sustained events pushed to a peak target")
+        print("   get them cut. Inspect those hydrographs before using them:")
+        for _, r in strained.iterrows():
+            print("      %-8s %-7s strain %.2f" % (r["event"], r["target"],
+                                                   r["shape_strain"]))
+    worst = mapping["vol5_error_pct"].abs().max()
+    if np.isfinite(worst):
+        print("\n   5-day volume: worst miss %.2f%% (tolerance %.1f%%)"
+              % (worst, 100 * VOLUME_TOLERANCE))
     print("\nSynthetic water years %d-%d, one per member, so reassembled blocks"
           % (mapping["synth_water_year"].min(), mapping["synth_water_year"].max()))
     print("never overlap. source_start holds the true event date.")
