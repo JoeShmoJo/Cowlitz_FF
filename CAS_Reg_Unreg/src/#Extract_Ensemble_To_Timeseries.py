@@ -32,7 +32,7 @@ from pydsstools.core import TimeSeriesContainer
 # --- which ensemble set is being reassembled ---------------------------------
 # ResSim_WCM_RC  : WCM rule curve run, 01 Oct -> 01 May windows
 # ResSim_Obs_RC  : observed rule curve run, 31-day windows on the rising limb
-SET_NAME = "ResSim_WCM_RC"
+SET_NAME = "ResSim_Synth"  # one of the keys in CONFIG_BY_SET below
 
 # Everything that differs between the runs lives in ONE table. SIM_DSS belongs
 # here too: pairing one run's simulation with the other run's mapping produces a
@@ -56,7 +56,7 @@ CONFIG_BY_SET = {
     # navigates by event / magnitude / pool basis.
     "ResSim_Synth": {
         "mapping": r"../output/ensemble_synthetic_mapping.csv",
-        "sim_dss": RSS_ROOT + r"\SYNTH\simulation.dss",
+        "sim_dss": RSS_ROOT + r"\CAS_Synthetics\simulation.dss",
     },
 }
 MAPPING_CSV = CONFIG_BY_SET[SET_NAME]["mapping"]

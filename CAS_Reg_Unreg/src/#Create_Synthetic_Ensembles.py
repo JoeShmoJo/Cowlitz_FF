@@ -64,8 +64,7 @@ IN_DSS = r"../output/ResSimInflows.dss"
 OBS_DSS = r"../../CAS_Unreg_FF/data/obsData.dss"
 
 # EXTERNAL: requires the ResSim watershed (not in this repository)
-OUT_DSS = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
-           r"\watershed\NWP_CowlitzLewis\shared\ensemble_synthetic.dss")
+OUT_DSS = (r"../output/ensemble_synthetic.dss")
 OUT_DSS_VERSION = 7
 
 MAPPING_CSV = r"../output/ensemble_synthetic_mapping.csv"
