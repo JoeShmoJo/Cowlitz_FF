@@ -56,12 +56,12 @@ CONFIG_BY_SET = {
     # navigates by event / magnitude / pool basis.
     "ResSim_Synth": {
         "mapping": r"../output/ensemble_synthetic_mapping.csv",
-        "sim_dss": RSS_ROOT + r"\CAS_Synthetics\simulation.dss",
+        "sim_dss": r"../output/simulation.dss",
     },
 }
 MAPPING_CSV = CONFIG_BY_SET[SET_NAME]["mapping"]
 SIM_DSS = CONFIG_BY_SET[SET_NAME]["sim_dss"]
-SIM_DSS_VERSION = 6
+SIM_DSS_VERSION = None   # None = detect from the file header
 OUT_DSS = r"../output/%s.dss" % SET_NAME
 OUT_DSS_VERSION = 6
 SUMMARY_CSV = r"../output/diagnostics/%s_summary.csv" % SET_NAME
@@ -71,25 +71,29 @@ SUMMARY_CSV = r"../output/diagnostics/%s_summary.csv" % SET_NAME
 # but ResSim replaces whatever follows the pipe on OUTPUT with its own
 # alternative tag. Check the actual F-part in simulation.dss before running:
 # it may be "ENSEMBLE--0", or it may now carry the input tag through.
-ENS_SUFFIX = "ENSEMBLE--0"
+# ResSim echoes the INPUT records back under the input's own suffix
+# (C:000001|SYNTH-Ensemble--0) but writes its COMPUTED results under a plain
+# C:000001|Ensemble--0. The computed ones are what get reassembled.
+ENS_SUFFIX = "Ensemble--0"
 
 # Locations to pull back. (part_a, part_b, part_c, units, out_f_part)
+# B and C parts are matched CASE-INSENSITIVELY against the file's catalog, so
+# these do not have to match ResSim's capitalisation.
 RECORDS = [
-    ("", "CASTLEROCK_NWS",  "FLOW",       "CFS",  SET_NAME),
-    ("", "MOSSYROCK-POOL",  "FLOW-OUT",   "CFS",  SET_NAME),
+    ("", "CastleRock_NWS", "Flow",       "CFS",  SET_NAME),
+    ("", "Mossyrock-Pool", "Flow-OUT",   "CFS",  SET_NAME),
+    ("", "Mossyrock-Pool", "Elev",       "FEET", SET_NAME),
     # passed straight through ResSim -- reassemble them to check the mapping
-    ("", "MOSSYROCK-POOL",  "FLOW-IN",    "CFS",  SET_NAME),
-    ("", "CASTLEROCK_NWS",  "FLOW-LOCAL", "CFS",  SET_NAME),
-    # add for the Obs_RC set once that run exists:
-    # ("", "MOSSYROCK-POOL", "ELEV",       "FEET", SET_NAME),
+    ("", "Mossyrock-Pool", "Flow-IN",    "CFS",  SET_NAME),
+    ("", "CastleRock_NWS", "Flow-Local", "CFS",  SET_NAME),
 ]
 
 # Round-trip check: reassembled record vs. the record it was built from.
 # (out_part_b, out_part_c, source_dss, source_pathname)
-CHECK_AGAINST = [
-    ("MOSSYROCK-POOL", "FLOW-IN", r"../output/ResSimInflows.dss",
+CHECK_AGAINST = [] if SET_NAME == "ResSim_Synth" else [
+    ("Mossyrock-Pool", "Flow-IN", r"../output/ResSimInflows.dss",
      "//MOSSYROCK/FLOW-IN/*/1HOUR/FOR_RESSIM/"),
-    ("CASTLEROCK_NWS", "FLOW-LOCAL", r"../output/ResSimInflows.dss",
+    ("CastleRock_NWS", "Flow-Local", r"../output/ResSimInflows.dss",
      "//CASTLE ROCK/FLOW-LOCAL/*/1HOUR/FOR_RESSIM/"),
 ]
 SOURCE_DSS_VERSION = 6
@@ -105,6 +109,19 @@ SENTINEL_TOL = 0.5
 DROP_NEGATIVE = False    # True = treat negative values as missing
 
 # ----------------------------------------------------------------------------
+
+
+def dss_version(path):
+    """DSS file version from the header: byte 12 is 6 for v6, 0 for v7.
+
+    The ResSim runs are a mix -- simulation.dss is v7 while the older ensembles
+    are v6 -- and pydsstools needs the version passed explicitly on Linux.
+    """
+    with open(path, "rb") as handle:
+        head = handle.read(16)
+    if len(head) < 16 or head[:4] != b"ZDSS":
+        return None
+    return 6 if head[12] == 6 else 7
 
 
 def first_stamp(ts):
@@ -140,10 +157,57 @@ def series_step(ts, pathname):
     return pd.Timedelta(lookup.get(e_part, "1h"))
 
 
-def read_member(dss, part_a, part_b, part_c, member):
+def build_catalog(dss):
+    """Index the file's real pathnames by (B, C, member) folded to lower case.
+
+    DSS lookups here are CASE SENSITIVE and ResSim does not preserve the case
+    used on input -- a run may hold /CastleRock_NWS/Flow/ while an earlier one
+    held /CASTLEROCK_NWS/FLOW/. Constructing pathnames therefore fails silently
+    on a case change. Resolving them from the catalog does not.
+    """
+    index = {}
+    suffixes = {}
+    for path in dss.search_path("/*/*/*/*/*/*/"):
+        parts = path.split("/")
+        if len(parts) < 8:
+            continue
+        f_part = parts[6]
+        if "|" not in f_part or not f_part.upper().startswith("C:"):
+            continue
+        member_text, suffix = f_part.split("|", 1)
+        try:
+            member = int(member_text[2:])
+        except ValueError:
+            continue
+        key = (parts[2].strip().lower(), parts[3].strip().lower(), member, suffix.lower())
+        index.setdefault(key, path)
+        suffixes[suffix] = suffixes.get(suffix, 0) + 1
+    return index, suffixes
+
+
+def resolve_suffix(suffixes, wanted):
+    """Pick the F-part suffix to use, preferring an exact match on ENS_SUFFIX.
+
+    ResSim carries the INPUT tag through onto the records it echoes back (here
+    C:000001|SYNTH-Ensemble--0) but writes its own COMPUTED results under a
+    different suffix (C:000001|Ensemble--0). Taking the most common suffix would
+    pick the wrong family, so prefer the configured one, then the one attached
+    to the most records that is not an echo of the input tag.
+    """
+    if wanted and wanted.lower() in {k.lower() for k in suffixes}:
+        for key in suffixes:
+            if key.lower() == wanted.lower():
+                return key
+    return max(suffixes, key=lambda k: suffixes[k]) if suffixes else wanted
+
+
+def read_member(dss, catalog, suffix, part_b, part_c, member):
     """Read one ensemble member as a Series on the SYNTHETIC calendar."""
-    f_part = "C:%06d|%s" % (member, ENS_SUFFIX)
-    pathname = "/%s/%s/%s/*/1HOUR/%s/" % (part_a, part_b, part_c, f_part)
+    pathname = catalog.get((part_b.strip().lower(), part_c.strip().lower(),
+                            member, suffix.lower()))
+    if pathname is None:
+        raise KeyError("no /%s/%s/ for member %d with suffix %s"
+                       % (part_b, part_c, member, suffix))
     ts = dss.read_ts(pathname)
     values = np.atleast_1d(np.array(ts.values, dtype=float))
     nodata = np.atleast_1d(np.array(ts.nodata, dtype=bool))
@@ -182,7 +246,7 @@ def build_container(pathname, values, start_time, units, data_type, interval_min
     return tsc
 
 
-def reassemble(dss, mapping, part_a, part_b, part_c):
+def reassemble(dss, catalog, suffix, mapping, part_a, part_b, part_c):
     """Move every member back to its real dates; returns a real-dated Series.
 
     ResSim decides its own simulation window, which is usually NOT the window the
@@ -197,7 +261,7 @@ def reassemble(dss, mapping, part_a, part_b, part_c):
     for _, row in mapping.iterrows():
         member = int(row["member"])
         try:
-            synth = read_member(dss, part_a, part_b, part_c, member)
+            synth = read_member(dss, catalog, suffix, part_b, part_c, member)
         except Exception as exc:
             misses.append((member, str(exc).strip()[:60]))
             continue
@@ -240,13 +304,22 @@ def main():
     print("=" * 78)
 
     summary = []
-    src = HecDss.Open(SIM_DSS, version=SIM_DSS_VERSION)
+    version = SIM_DSS_VERSION or dss_version(SIM_DSS)
+    src = HecDss.Open(SIM_DSS, version=version)
+    catalog, suffixes = build_catalog(src)
+    suffix = resolve_suffix(suffixes, ENS_SUFFIX)
+    print("F-part suffixes in the file: %s"
+          % ", ".join("%s (%d)" % (k, v) for k, v in
+                      sorted(suffixes.items(), key=lambda kv: -kv[1])[:6]))
+    print("Using suffix   : %s%s"
+          % (suffix, "" if suffix.lower() == (ENS_SUFFIX or "").lower()
+             else "   (ENS_SUFFIX was %r -- not present, fell back)" % ENS_SUFFIX))
     dst = HecDss.Open(OUT_DSS, version=OUT_DSS_VERSION)
     try:
         for part_a, part_b, part_c, units, out_f in RECORDS:
             print("\n%s/%s" % (part_b, part_c))
-            series, misses, collisions, offsets = reassemble(src, mapping, part_a,
-                                                             part_b, part_c)
+            series, misses, collisions, offsets = reassemble(
+                src, catalog, suffix, mapping, part_a, part_b, part_c)
             if series is None:
                 print("   no members read -- check the pathname parts and ENS_SUFFIX")
                 for member, why in misses[:5]:
