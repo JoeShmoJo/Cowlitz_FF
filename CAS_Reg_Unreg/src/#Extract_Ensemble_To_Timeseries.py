@@ -51,6 +51,13 @@ CONFIG_BY_SET = {
         "mapping": r"../output/ensemble_obs_rc_mapping.csv",
         "sim_dss": RSS_ROOT + r"\OBS_RC\simulation.dss",
     },
+    # Synthetics: each member has its own synthetic water year (1801+), so the
+    # reassembled series is a run of non-overlapping blocks that the mapping CSV
+    # navigates by event / magnitude / pool basis.
+    "ResSim_Synth": {
+        "mapping": r"../output/ensemble_synthetic_mapping.csv",
+        "sim_dss": RSS_ROOT + r"\SYNTH\simulation.dss",
+    },
 }
 MAPPING_CSV = CONFIG_BY_SET[SET_NAME]["mapping"]
 SIM_DSS = CONFIG_BY_SET[SET_NAME]["sim_dss"]

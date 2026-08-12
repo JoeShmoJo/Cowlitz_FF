@@ -117,6 +117,14 @@ DURATION_50_MIN_YEARS = 10     # min years of record behind a duration-curve val
 # Synthetic calendar the members are labelled on (any non-leap year)
 ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)
 
+# Every member shares its source event's real dates, so the 12 members built
+# from one event would collide when results are reassembled. Each member is
+# therefore given its own synthetic water year: the month and day of the source
+# event are kept, so seasonality stays visible, and only the year is replaced.
+# Years start well before the record so they can never be mistaken for real
+# ones. The mapping CSV carries the synthetic date AND the true source date.
+SYNTH_YEAR_BASE = 1800
+
 CLIP_NEGATIVE_FLOW = True
 SENTINEL = -901.0
 
@@ -419,6 +427,9 @@ def main():
                             parts[0], parts[1], parts[2], dpart, f_part)
                         dst.put_ts(build_container(pathname, vals, wstart, units,
                                                    "INST-VAL", 60))
+                    synth_year = SYNTH_YEAR_BASE + member
+                    synth_start = ev["start"] + pd.DateOffset(
+                        years=synth_year - ev["start"].year)
                     mapping_rows.append({
                         "member": member, "ensemble_f_part": f_part,
                         "event": ev["label"], "event_note": ev["note"],
@@ -431,9 +442,11 @@ def main():
                         "pool_basis": basis,
                         "pool_basis_used": basis_used,
                         "start_pool_ft": round(pool, 2),
-                        "real_start": ev["start"],
-                        "real_end": ev["start"] + pd.Timedelta(hours=n_hours - 1),
-                        "real_peak_date": ev["peak_date"],
+                        "synth_water_year": synth_year,
+                        "real_start": synth_start,
+                        "real_end": synth_start + pd.Timedelta(hours=n_hours - 1),
+                        "source_start": ev["start"],
+                        "source_peak_date": ev["peak_date"],
                         "ensemble_start": ens_start, "hours": n_hours,
                         "elev_ensemble_start": elev_ens_start,
                         "elev_hours": elev_hours,
@@ -461,6 +474,9 @@ def main():
               % len(big))
         print("   from 1, the more the synthetic depends on the assumption that")
         print("   hydrograph shape is preserved with magnitude.")
+    print("\nSynthetic water years %d-%d, one per member, so reassembled blocks"
+          % (mapping["synth_water_year"].min(), mapping["synth_water_year"].max()))
+    print("never overlap. source_start holds the true event date.")
     print("\nMembers written : %d   records: %d (4 per member)"
           % (len(mapping), len(mapping) * 4))
     print("Mapping CSV     : %s" % MAPPING_CSV)
