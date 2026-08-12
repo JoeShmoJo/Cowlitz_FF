@@ -1,8 +1,8 @@
 WY,usgs,wcm,obs,delta_wcm_minus_obs,adjusted_peak,adjusted,screen_passed,spread_days,t_usgs,t_wcm,t_obs,low_peak_year,decision
 1974,68600.0,33207.4,19208.5,13999.0,82599.0,True,True,1.0,1974-01-16,1974-01-15,1974-01-15,False,adjusted +13999 cfs
 1975,58900.0,57074.8,56713.6,361.3,59261.3,True,True,0.0,1975-01-14,1975-01-14,1975-01-14,False,adjusted +361 cfs
-1976,86700.0,75596.9,103012.1,-27415.2,86700.0,False,True,1.0,1975-12-04,1975-12-05,1975-12-05,False,"no adjustment: Obs_RC peak exceeds WCM_RC by 27415 cfs -- observed pool started above the rule curve, so the observed peak is not reduced"
-1977,15000.0,,,,15000.0,False,False,,1977-03-10,,,True,no adjustment: no simulated data within 3 days of the observed peak 1977-03-10 -- the Obs_RC window does not cover this storm
+1976,86700.0,75596.9,105149.8,-29553.0,86700.0,False,True,1.0,1975-12-04,1975-12-05,1975-12-05,False,"no adjustment: Obs_RC peak exceeds WCM_RC by 29553 cfs -- observed pool started above the rule curve, so the observed peak is not reduced"
+1977,15000.0,14186.9,12186.9,2000.0,17000.0,True,True,1.0,1977-03-10,1977-03-09,1977-03-09,True,adjusted +2000 cfs
 1978,86400.0,79778.4,79778.4,0.0,86400.0,False,True,0.0,1977-12-02,1977-12-02,1977-12-02,False,no adjustment: difference below 1 cfs
 1979,39400.0,42971.6,40971.6,2000.0,41400.0,True,True,0.0,1979-02-07,1979-02-07,1979-02-07,False,adjusted +2000 cfs
 1980,97000.0,,,,97000.0,False,False,,1980-05-18,,,False,no adjustment: no simulated data within 3 days of the observed peak 1980-05-18 -- the Obs_RC window does not cover this storm
@@ -10,7 +10,7 @@ WY,usgs,wcm,obs,delta_wcm_minus_obs,adjusted_peak,adjusted,screen_passed,spread_
 1982,65500.0,64483.2,63822.4,660.8,66160.8,True,True,1.0,1982-01-24,1982-01-24,1982-01-24,False,adjusted +661 cfs
 1983,67300.0,59456.9,59456.9,0.0,67300.0,False,True,0.0,1982-12-04,1982-12-04,1982-12-04,False,no adjustment: difference below 1 cfs
 1984,49600.0,,,,49600.0,False,False,,1983-11-18,,,False,no adjustment: no simulated data within 3 days of the observed peak 1983-11-18 -- the Obs_RC window does not cover this storm
-1985,23600.0,24934.2,18003.5,6930.7,30530.7,True,True,0.0,1984-11-28,1984-11-28,1984-11-28,False,adjusted +6931 cfs
+1985,23600.0,24934.2,13723.9,11210.3,23600.0,False,False,3.0,1984-11-28,1984-11-28,1984-11-25,False,no adjustment: USGS peak 1984-11-28 outside the Obs_RC window 1984-10-25..1984-11-25
 1986,62700.0,62205.6,60656.6,1549.0,64249.0,True,True,0.0,1986-02-24,1986-02-24,1986-02-24,False,adjusted +1549 cfs
 1987,77600.0,73774.7,73059.2,715.5,78315.5,True,True,0.0,1986-11-24,1986-11-24,1986-11-24,False,adjusted +715 cfs
 1988,42100.0,52818.0,38879.7,13938.4,56038.4,True,True,0.0,1987-12-10,1987-12-10,1987-12-10,False,adjusted +13938 cfs
@@ -31,7 +31,7 @@ WY,usgs,wcm,obs,delta_wcm_minus_obs,adjusted_peak,adjusted,screen_passed,spread_
 2003,69000.0,62340.5,62077.2,263.3,69263.3,True,True,1.0,2003-01-31,2003-02-01,2003-02-01,False,adjusted +263 cfs
 2004,38100.0,48301.2,34301.6,13999.6,52099.6,True,True,0.0,2004-01-30,2004-01-30,2004-01-30,False,adjusted +14000 cfs
 2005,29600.0,40940.4,26911.5,14028.9,43628.9,True,True,1.0,2005-01-18,2005-01-18,2005-01-18,False,adjusted +14029 cfs
-2006,56200.0,53267.5,42414.6,10852.9,67052.9,True,True,0.0,2006-01-30,2006-01-30,2006-01-30,False,adjusted +10853 cfs
+2006,56200.0,,,,56200.0,False,False,,2006-01-30,,,False,no adjustment: no simulated data within 3 days of the observed peak 2006-01-30 -- the Obs_RC window does not cover this storm
 2007,77300.0,94856.7,70843.7,24013.0,101313.0,True,True,1.0,2006-11-07,2006-11-08,2006-11-07,False,adjusted +24013 cfs
 2008,64300.0,61128.6,60052.6,1076.1,65376.1,True,True,1.0,2007-12-03,2007-12-04,2007-12-04,False,adjusted +1076 cfs
 2009,106000.0,81855.3,81470.0,385.4,106385.4,True,True,0.0,2009-01-08,2009-01-08,2009-01-08,False,adjusted +385 cfs

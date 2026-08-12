@@ -144,7 +144,7 @@ RULE_CURVE_PART_C = "ELEV-RULECURVE"
 
 REQUIRE_START_ELEVATION = True
 MAX_ELEV_MISSING_HOURS = 72     # tolerate short gaps inside the window
-CLIP_NEGATIVE_FLOW = True
+CLIP_NEGATIVE_FLOW = False # LEAVE THEM IN -  THE CALCULATION IS VOLUME CORRECT.  The MOS inflow record contains negative values, which are physically impossible, but they are small and the volume is correct.  Clipping them to zero would introduce a bias in the volume calculation.
 
 SENTINEL = -901.0
 PLOTS_PER_PAGE = 24

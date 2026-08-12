@@ -64,7 +64,7 @@ ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)   # hour-beginning
 FIRST_YEAR = None        # None = earliest year with full coverage
 LAST_YEAR = None         # None = latest year with a complete window
 MIN_COVERAGE_PCT = 0.0   # skip members below this % of non-missing hours
-CLIP_NEGATIVE_FLOW = True   # MOSSYROCK FLOW-IN contains negative values
+CLIP_NEGATIVE_FLOW = False   # MOSSYROCK FLOW-IN contains negative values LEAVE THEM IN - THE CALCULATION IS VOLUME CORRECT
 
 SENTINEL = -901.0
 SENTINEL_TOL = 0.5
