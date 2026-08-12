@@ -42,8 +42,8 @@ IN_DSS_VERSION = 6
 # EXTERNAL: requires the ResSim watershed (not in this repository)
 OUT_DSS = r"../output/ensemble_wcm_rc.dss"
 OUT_DSS_VERSION = 6
-MAPPING_CSV = r"../output/ensemble_unreg_mapping.csv"
-COVERAGE_CSV = r"../output/diagnostics/ensemble_unreg_coverage.csv"
+MAPPING_CSV = r"../output/ensemble_wcm_rc_mapping.csv"
+COVERAGE_CSV = r"../output/diagnostics/ensemble_wcm_rc_coverage.csv"
 
 PATH_MOS_IN = "//MOSSYROCK/FLOW-IN/01JUN1928 - 01MAY2026/1HOUR/FOR_RESSIM/"
 PATH_CAS_LOCAL = "//CASTLE ROCK/FLOW-LOCAL/01Jul1928 - 12May2026/1HOUR/FOR_RESSIM/"

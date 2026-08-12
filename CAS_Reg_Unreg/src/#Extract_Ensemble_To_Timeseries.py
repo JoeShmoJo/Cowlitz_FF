@@ -32,7 +32,7 @@ from pydsstools.core import TimeSeriesContainer
 # --- which ensemble set is being reassembled ---------------------------------
 # ResSim_WCM_RC  : WCM rule curve run, 01 Oct -> 01 May windows
 # ResSim_Obs_RC  : observed rule curve run, 31-day windows on the rising limb
-SET_NAME = "ResSim_Synth"  # one of the keys in CONFIG_BY_SET below
+SET_NAME = "ResSim_WCM_RC"  # one of the keys in CONFIG_BY_SET below
 
 # Everything that differs between the runs lives in ONE table. SIM_DSS belongs
 # here too: pairing one run's simulation with the other run's mapping produces a
@@ -40,7 +40,7 @@ SET_NAME = "ResSim_Synth"  # one of the keys in CONFIG_BY_SET below
 # members onto run B's dates. That is not hypothetical -- it happened.
 # EXTERNAL: the ResSim simulation output (too large for the repository)
 RSS_ROOT = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
-            r"\watershed\NWP_CowlitzLewis\rss")
+            r"\watershed\NWP_CowlitzLewis_ResSim4\rss")
 
 CONFIG_BY_SET = {
     "ResSim_WCM_RC": {
@@ -86,6 +86,7 @@ RECORDS = [
     # passed straight through ResSim -- reassemble them to check the mapping
     ("", "Mossyrock-Pool", "Flow-IN",    "CFS",  SET_NAME),
     ("", "CastleRock_NWS", "Flow-Local", "CFS",  SET_NAME),
+    ("", "CastleRock_NWS", "Flow-UNREG", "CFS",  SET_NAME),
 ]
 
 # Round-trip check: reassembled record vs. the record it was built from.
