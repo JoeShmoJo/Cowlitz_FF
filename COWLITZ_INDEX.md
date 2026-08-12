@@ -2,7 +2,10 @@
 
 Compact context for the Cowlitz flow frequency work in repo
 `JoeShmoJo/Claude`. Read this INSTEAD of crawling the tree; fetch
-individual files only as needed. Last updated 24 Jul 2026.
+individual files only as needed. Last updated 12 Aug 2026.
+
+Full run order for both projects -- every script and every ResSim run, in
+sequence, with a flow chart: `RUN_ORDER.md` at the repo root.
 
 ## The three project folders
 

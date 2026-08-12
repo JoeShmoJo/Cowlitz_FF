@@ -57,10 +57,25 @@ flagged explicitly in the output so the reason is recorded rather than inferred.
 Whether WY1980 belongs in a flood frequency analysis at all is a separate
 question this script does not decide.
 
+REGULATED vs UNREGULATED CHECK
+------------------------------
+The reservoir cannot make a flood bigger, so the adjusted regulated peak must
+sit below the unregulated peak for the same event. A regulated peak above the
+unregulated peak is only defensible at the extreme low end, where a minimum
+release or a refill drawdown puts more water in the river than nature would.
+Every year is therefore compared against the unregulated peak from the ResSim
+unregulated period-of-record run -- both the peak of the SAME event (within
+UNREG_WINDOW_DAYS of the observed peak) and the water-year unregulated maximum,
+so a timing mismatch cannot hide a violation. The check is reported and recorded
+in the CSV; it does not change any value. If the unregulated run is not
+available, UNREG_FALLBACK_CSV (the adopted unregulated record from
+CAS_Unreg_FF) is used instead and the source is recorded per year.
+
 OUTPUTS
 -------
   adjusted_peaks.csv        every shared year, all three peaks, the adjustment,
-                            screening results and the reason for each decision
+                            screening results, the reason for each decision, and
+                            the unregulated comparison
   adjusted_peaks_ssp.csv    WY and adjusted peak only, for HEC-SSP import
   adjusted_peaks.png        comparison and adjustment magnitude plots
   event_screening.png       timing spread per year, with the screen threshold
@@ -133,6 +148,32 @@ LOW_PEAK_CFS = 20000.0
 # Differences smaller than this are not worth recording as an adjustment.
 MIN_ADJUSTMENT_CFS = 1.0
 
+# --- regulated vs unregulated check -----------------------------------------
+CHECK_UNREG = True
+# EXTERNAL: the ResSim unregulated period-of-record run (not in the repository).
+# "Ensemble--0" in the F-part is a ResSim artifact; this is a single POR run.
+# Same source #Critical_Duration_Adjusted.py uses, so the two agree by
+# construction.
+UNREG_DSS = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
+             r"\watershed\NWP_CowlitzLewis_ResSim4\rss\Unreg_POR_FIS\simulation.dss")
+UNREG_PATH = "//CastleRock_NWS/Flow-UNREG/*/1Hour/Ensemble--0/"
+# Used when UNREG_DSS is not reachable: the adopted unregulated record from the
+# flow frequency study. Annual values only -- no event matching is possible, so
+# only the water-year comparison is made and the source is recorded per year.
+UNREG_FALLBACK_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
+UNREG_FALLBACK_COLS = ("WY", "Peak")
+# The unregulated peak for the SAME event: the unregulated maximum within this
+# many days of the observed peak. Wider than EVENT_WINDOW_DAYS on purpose -- the
+# unregulated peak leads the regulated one, and a too-tight window would report
+# a false violation instead of a real one.
+UNREG_WINDOW_DAYS = 5
+# Ignore crossings below this; DSS is single precision and the two records take
+# different routes through ResSim.
+UNREG_TOL_CFS = 1.0
+# Above this the crossing cannot be explained by minimum releases or refill
+# drawdown, and is called out as a hard failure rather than a note.
+UNREG_LOW_FLOW_CFS = 20000.0
+
 # Years never to adjust regardless of screening, with the reason recorded.
 # 1980: Mount St. Helens eruption, 18 May 1980 -- not a meteorological event.
 MANUAL_EXCLUSIONS = {
@@ -175,6 +216,20 @@ def series_step(ts, pathname):
     lookup = {"1MIN": "1min", "15MIN": "15min", "30MIN": "30min",
               "1HOUR": "1h", "6HOUR": "6h", "12HOUR": "12h", "1DAY": "1D"}
     return pd.Timedelta(lookup.get(e_part, "1h"))
+
+
+def dss_version(path):
+    """DSS file version from the header: byte 12 is 6 for v6, 0 for v7.
+
+    The ResSim runs are a mix -- the newer simulation.dss files are v7 while the
+    reassembled result files here are v6 -- and pydsstools needs the version
+    passed explicitly on Linux, so detect rather than assume.
+    """
+    with open(path, "rb") as handle:
+        head = handle.read(16)
+    if len(head) < 16 or head[:4] != b"ZDSS":
+        return None
+    return 6 if head[12] == 6 else 7
 
 
 def read_dss_series(dss_file, pathname, version):
@@ -252,6 +307,96 @@ def build_container(pathname, values, start_time, units, data_type, interval_min
     return tsc
 
 
+def load_unreg():
+    """Unregulated Castle Rock flow for the check. Returns (kind, data).
+
+    kind is "hourly" (a ResSim POR series, event matching possible), "annual"
+    (the adopted CAS_Unreg_FF record, water-year comparison only) or None.
+    """
+    if not CHECK_UNREG:
+        return None, None
+    if os.path.isfile(UNREG_DSS):
+        try:
+            series = read_dss_series(UNREG_DSS, UNREG_PATH, dss_version(UNREG_DSS))
+            print("Unreg   ResSim unregulated POR run, %s .. %s   %d hours"
+                  % (series.index[0].date(), series.index[-1].date(), len(series)))
+            return "hourly", series
+        except Exception as exc:
+            print("Unreg   could not read %s -- %s" % (UNREG_DSS, exc))
+    else:
+        print("Unreg   not found: %s" % UNREG_DSS)
+    if os.path.isfile(UNREG_FALLBACK_CSV):
+        wy_col, peak_col = UNREG_FALLBACK_COLS
+        table = pd.read_csv(UNREG_FALLBACK_CSV)
+        data = {int(row[wy_col]): float(row[peak_col])
+                for _, row in table.iterrows() if pd.notna(row[peak_col])}
+        print("Unreg   FALLBACK to the adopted annual record %s (%d years)"
+              % (UNREG_FALLBACK_CSV, len(data)))
+        print("        annual values only -- the same-event comparison is skipped")
+        return "annual", data
+    print("Unreg   no unregulated source available; the check is skipped")
+    return None, None
+
+
+def unreg_for_year(kind, data, wy_peaks, wy, t_usgs):
+    """Unregulated peak for one year: same-event value and water-year maximum."""
+    if kind == "hourly":
+        p_evt, t_evt = event_peak(data, t_usgs, UNREG_WINDOW_DAYS)
+        if wy_peaks is not None and wy in wy_peaks.index:
+            p_wy = float(wy_peaks.loc[wy, "peak"])
+            t_wy = pd.Timestamp(wy_peaks.loc[wy, "time"])
+        else:
+            p_wy, t_wy = np.nan, pd.NaT
+        return p_evt, t_evt, p_wy, t_wy, "ressim_unreg_por"
+    if kind == "annual":
+        return np.nan, pd.NaT, float(data.get(wy, np.nan)), pd.NaT, "cas_unreg_record"
+    return np.nan, pd.NaT, np.nan, pd.NaT, "none"
+
+
+def unreg_columns(p_adj, p_usgs, p_evt, t_evt, p_wy, t_wy, source):
+    """Compare a regulated peak against the unregulated peak. Reports only.
+
+    The same-event unregulated peak is the reference where it exists, because it
+    is the like-for-like comparison. The water-year maximum is carried alongside
+    it as the timing-independent backstop: if the event value is missing, or if
+    the adjusted peak clears the event value but not the year's unregulated
+    maximum, that shows up here rather than being lost.
+    """
+    ref = p_evt if np.isfinite(p_evt) else p_wy
+    over_adj = p_adj - ref if np.isfinite(ref) else np.nan
+    over_usgs = p_usgs - ref if np.isfinite(ref) else np.nan
+    flag = bool(np.isfinite(over_adj) and over_adj > UNREG_TOL_CFS)
+    hard = bool(flag and ref >= UNREG_LOW_FLOW_CFS)
+    if not np.isfinite(ref):
+        note = "no unregulated value for this year"
+    elif not flag:
+        note = "ok: adjusted %.0f <= unreg %.0f" % (p_adj, ref)
+    elif hard:
+        note = ("*** adjusted %.0f EXCEEDS unreg %.0f by %.0f cfs (%.1f%%) at a "
+                "flood peak -- the reservoir cannot raise a flood, so either the "
+                "adjustment, the ResSim runs or the unregulated record is wrong"
+                % (p_adj, ref, over_adj, 100.0 * over_adj / ref))
+    else:
+        note = ("adjusted %.0f exceeds unreg %.0f by %.0f cfs, but the unreg peak "
+                "is below %.0f cfs -- consistent with minimum release or refill "
+                "drawdown" % (p_adj, ref, over_adj, UNREG_LOW_FLOW_CFS))
+    return {
+        "unreg_event": p_evt,
+        "t_unreg_event": t_evt.date() if pd.notna(t_evt) else pd.NaT,
+        "unreg_wy_max": p_wy,
+        "t_unreg_wy": t_wy.date() if pd.notna(t_wy) else pd.NaT,
+        "unreg_ref": ref,
+        "unreg_source": source,
+        "adj_minus_unreg": over_adj,
+        "usgs_minus_unreg": over_usgs,
+        "adj_over_unreg": flag,
+        "adj_over_unreg_at_flood": hard,
+        "usgs_over_unreg": bool(np.isfinite(over_usgs) and over_usgs > UNREG_TOL_CFS),
+        "adj_unreg_ratio": p_adj / ref if np.isfinite(ref) and ref > 0 else np.nan,
+        "unreg_check": note,
+    }
+
+
 def screen_year(wy, t_usgs, t_wcm, t_obs, obs_windows):
     """Do all three peaks describe the same event? Returns (passed, reason)."""
     if wy in MANUAL_EXCLUSIONS:
@@ -275,6 +420,67 @@ def screen_year(wy, t_usgs, t_wcm, t_obs, obs_windows):
     return True, "same event"
 
 
+def report_unreg(table):
+    """Print the regulated vs unregulated check."""
+    if "unreg_ref" not in table.columns:
+        return
+    have = table[table["unreg_ref"].notna()]
+    print("\n" + "=" * 78)
+    print("REGULATED vs UNREGULATED CHECK")
+    print("=" * 78)
+    if have.empty:
+        print("   no unregulated values available -- nothing compared")
+        return
+    sources = ", ".join("%s (%d)" % (k, v) for k, v in
+                        have["unreg_source"].value_counts().items())
+    print("   years compared : %d of %d   source: %s"
+          % (len(have), len(table), sources))
+
+    hard = have[have["adj_over_unreg_at_flood"]]
+    soft = have[have["adj_over_unreg"] & ~have["adj_over_unreg_at_flood"]]
+    print("   adjusted peak ABOVE unregulated at a flood peak (>= %.0f cfs): %d"
+          % (UNREG_LOW_FLOW_CFS, len(hard)))
+    for _, row in hard.sort_values("adj_minus_unreg", ascending=False).iterrows():
+        print("      WY%d  adjusted %.0f vs unreg %.0f  (+%.0f cfs, %.2fx)"
+              % (row["WY"], row["adjusted_peak"], row["unreg_ref"],
+                 row["adj_minus_unreg"], row["adj_unreg_ratio"]))
+        if row["adjusted"]:
+            print("            the adjustment (+%.0f) is what pushes it over: "
+                  "USGS %.0f vs unreg %.0f"
+                  % (row["delta_wcm_minus_obs"], row["usgs"], row["unreg_ref"]))
+        if bool(row["usgs_over_unreg"]):
+            print("            the OBSERVED peak already exceeds the "
+                  "unregulated peak -- the problem is upstream of this script")
+    if len(hard):
+        print("      A reservoir cannot raise a flood peak. Look at, in order:")
+        print("        1. the unregulated record -- is it the same event, and "
+              "does the POR run cover this year?")
+        print("        2. the ResSim runs -- WCM_RC releasing more than the "
+              "operation set intends")
+        print("        3. the adjustment itself -- WCM_RC and Obs_RC peaking on "
+              "different storms inside the window")
+    print("   adjusted peak above unregulated at a low peak (< %.0f cfs): %d"
+          % (UNREG_LOW_FLOW_CFS, len(soft)))
+    for _, row in soft.sort_values("WY").iterrows():
+        print("      WY%d  adjusted %.0f vs unreg %.0f  (+%.0f cfs)"
+              % (row["WY"], row["adjusted_peak"], row["unreg_ref"],
+                 row["adj_minus_unreg"]))
+    if not len(hard) and not len(soft):
+        print("   OK -- every adjusted peak sits at or below its unregulated peak")
+
+    # Event vs water-year backstop: a peak that clears the same-event unreg value
+    # but not the year's unreg maximum means the two records peak on different
+    # storms, which is a timing problem rather than a magnitude one.
+    both = have[have["unreg_event"].notna() & have["unreg_wy_max"].notna()]
+    if len(both):
+        mismatch = both[(both["adjusted_peak"] <= both["unreg_event"])
+                        & (both["adjusted_peak"] > both["unreg_wy_max"])]
+        if len(mismatch):
+            print("   %d year(s) clear the same-event unreg peak but exceed the "
+                  "water-year unreg maximum: %s"
+                  % (len(mismatch), ", ".join("WY%d" % w for w in mismatch["WY"])))
+
+
 def plot_peaks(table, stem):
     """Three peak records and the adjustment applied."""
     fig, axes = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
@@ -291,6 +497,14 @@ def plot_peaks(table, stem):
             label="ResSim Obs_RC (observed pool start)")
     ax.plot(x[adjusted], table.loc[adjusted, "adjusted_peak"], color="#16a085",
             lw=0, marker="*", ms=11, label="Adjusted peak")
+    if "unreg_ref" in table.columns and table["unreg_ref"].notna().any():
+        ax.plot(x, table["unreg_ref"], color="#8e44ad", lw=1.0, ls="--",
+                marker="v", ms=3, alpha=0.8, label="Unregulated peak (ceiling)")
+        over = table["adj_over_unreg"].fillna(False).values.astype(bool)
+        if over.any():
+            ax.plot(x[over], table.loc[over, "adjusted_peak"], lw=0, marker="o",
+                    ms=14, mfc="none", mec="#c0392b", mew=1.6,
+                    label="Adjusted peak ABOVE unregulated")
     for _, row in table[~table["screen_passed"]].iterrows():
         ax.axvspan(row["WY"] - 0.4, row["WY"] + 0.4, color="0.85", alpha=0.5, zorder=0)
     ax.set_ylabel("Peak flow (cfs)")
@@ -355,6 +569,8 @@ def main():
     peaks_obs = annual_peaks(obs)
     usgs = load_usgs_peaks(USGS_PEAKS_CSV)
     obs_windows = load_obs_windows(OBS_MAPPING_CSV)
+    unreg_kind, unreg_data = load_unreg()
+    unreg_wy_peaks = annual_peaks(unreg_data) if unreg_kind == "hourly" else None
 
     shared = sorted(set(peaks_wcm.index) & set(peaks_obs.index) & set(usgs.index))
 
@@ -378,11 +594,13 @@ def main():
     for wy in shared:
         t_usgs = pd.Timestamp(usgs.loc[wy, "Peak_Date"])
         p_usgs = float(usgs.loc[wy, "Peak_cfs"])
+        u_evt, u_t_evt, u_wy, u_t_wy, u_src = unreg_for_year(
+            unreg_kind, unreg_data, unreg_wy_peaks, wy, t_usgs)
         if PEAK_METHOD == "event":
             p_wcm, t_wcm = event_peak(wcm, t_usgs, EVENT_WINDOW_DAYS)
             p_obs, t_obs = event_peak(obs, t_usgs, EVENT_WINDOW_DAYS)
             if not (np.isfinite(p_wcm) and np.isfinite(p_obs)):
-                rows.append({
+                row = {
                     "WY": wy, "usgs": p_usgs, "wcm": np.nan, "obs": np.nan,
                     "delta_wcm_minus_obs": np.nan, "adjusted_peak": p_usgs,
                     "adjusted": False, "screen_passed": False,
@@ -392,7 +610,10 @@ def main():
                     "decision": ("no adjustment: no simulated data within %d days "
                                  "of the observed peak %s -- the Obs_RC window "
                                  "does not cover this storm"
-                                 % (EVENT_WINDOW_DAYS, t_usgs.date()))})
+                                 % (EVENT_WINDOW_DAYS, t_usgs.date()))}
+                row.update(unreg_columns(p_usgs, p_usgs, u_evt, u_t_evt,
+                                         u_wy, u_t_wy, u_src))
+                rows.append(row)
                 continue
         else:
             t_wcm = pd.Timestamp(peaks_wcm.loc[wy, "time"])
@@ -418,18 +639,22 @@ def main():
             decision = "no adjustment: difference below %.0f cfs" % MIN_ADJUSTMENT_CFS
         else:
             decision = "no adjustment: %s" % reason
-        rows.append({
+        p_adjusted = p_usgs + delta if adjust else p_usgs
+        row = {
             "WY": wy,
             "usgs": p_usgs, "wcm": p_wcm, "obs": p_obs,
             "delta_wcm_minus_obs": delta,
-            "adjusted_peak": p_usgs + delta if adjust else p_usgs,
+            "adjusted_peak": p_adjusted,
             "adjusted": adjust,
             "screen_passed": passed,
             "spread_days": spread,
             "t_usgs": t_usgs.date(), "t_wcm": t_wcm.date(), "t_obs": t_obs.date(),
             "low_peak_year": p_usgs < LOW_PEAK_CFS,
             "decision": decision,
-        })
+        }
+        row.update(unreg_columns(p_adjusted, p_usgs, u_evt, u_t_evt,
+                                 u_wy, u_t_wy, u_src))
+        rows.append(row)
 
     table = pd.DataFrame(rows)
     if DROP_FAILED_SCREEN:
@@ -500,6 +725,8 @@ def main():
                   % (len(big), ", ".join("WY%d +%.0f%%" % (r["WY"],
                      100 * r["delta_wcm_minus_obs"] / r["usgs"])
                      for _, r in big.iterrows())))
+    report_unreg(table)
+
     print("-" * 78)
     print("Peaks CSV   : %s" % OUT_CSV)
     print("SSP CSV     : %s" % OUT_SSP_CSV)

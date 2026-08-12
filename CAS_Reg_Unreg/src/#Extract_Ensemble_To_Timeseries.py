@@ -110,6 +110,39 @@ WINDOW_TOLERANCE = 1.5
 # is structural (a block-level pathname, a wrong mapping), not missing data.
 WINDOW_SHORT_FRACTION = 0.5
 
+# --- regulated vs unregulated sanity check -----------------------------------
+# The reservoir cannot make a flood bigger. At a flood event the regulated flow
+# at Castle Rock must sit at or below the unregulated flow for the same hour,
+# and the regulated PEAK must sit below the unregulated peak for the year. The
+# legitimate exceptions are narrow: evacuating storage on a falling limb, and
+# low-flow periods where a minimum release or a refill drawdown puts more water
+# in the river than nature would. Anything else -- above all a regulated peak
+# above the unregulated peak at a large event -- means the two records do not
+# belong together: a mismatched member, a mis-mapped window, or an operation
+# set releasing more than it should.
+#
+# Checked pairs are (part_b, regulated part_c, unregulated part_c). Both parts
+# must appear in RECORDS above; a pair naming a record that was not built is
+# skipped with a note rather than failing.
+REG_UNREG_CHECKS = [
+    ("CastleRock_NWS", "Flow", "Flow-UNREG"),
+]
+# Ignore differences below this -- DSS is single precision and the two records
+# take slightly different routes through ResSim.
+REG_UNREG_TOL_CFS = 1.0
+# Hourly exceedances where the UNREGULATED flow is below this are expected
+# behaviour (minimum release, refill drawdown) and are counted separately rather
+# than flagged. Annual PEAK exceedances are flagged regardless of magnitude.
+REG_UNREG_LOW_FLOW_CFS = 20000.0
+# Contiguous exceedance runs shorter than this are timing noise, not a real
+# crossing, and are left out of the episode table.
+REG_UNREG_MIN_EPISODE_HOURS = 3
+REG_UNREG_WY_CSV = r"../output/diagnostics/%s_reg_vs_unreg_wy.csv" % SET_NAME
+REG_UNREG_EPISODE_CSV = (r"../output/diagnostics/%s_reg_gt_unreg_episodes.csv"
+                         % SET_NAME)
+
+WATER_YEAR_START_MONTH = 10
+
 SENTINEL = -901.0
 SENTINEL_TOL = 0.5
 DROP_NEGATIVE = False    # True = treat negative values as missing
@@ -345,6 +378,182 @@ def to_continuous(series):
     return series.reindex(full)
 
 
+def water_year(stamp):
+    return stamp.year + (1 if stamp.month >= WATER_YEAR_START_MONTH else 0)
+
+
+def exceedance_episodes(diff, reg, unreg, min_hours):
+    """Contiguous hourly runs where regulated exceeds unregulated.
+
+    Works on the gap-filled hourly index, so a NaN hour breaks an episode rather
+    than being bridged -- two crossings either side of a data gap are two
+    episodes, not one long one.
+    """
+    over = (diff > REG_UNREG_TOL_CFS).values
+    stamps = diff.index
+    d_values = diff.values
+    r_values = reg.values
+    u_values = unreg.values
+    episodes = []
+    i, n = 0, len(over)
+    while i < n:
+        if not over[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and over[j + 1]:
+            j += 1
+        hours = j - i + 1
+        if hours >= min_hours:
+            k = i + int(np.nanargmax(d_values[i:j + 1]))
+            episodes.append({
+                "WY": water_year(stamps[i]),
+                "start": stamps[i],
+                "end": stamps[j],
+                "hours": hours,
+                "max_exceed_cfs": float(d_values[k]),
+                "max_exceed_time": stamps[k],
+                "reg_at_max": float(r_values[k]),
+                "unreg_at_max": float(u_values[k]),
+                "unreg_below_low_flow": bool(u_values[k] < REG_UNREG_LOW_FLOW_CFS),
+            })
+        i = j + 1
+    return episodes
+
+
+def check_reg_vs_unreg(built):
+    """Flag every hour and every water year where regulated exceeds unregulated.
+
+    Two separate questions, reported separately because they fail for different
+    reasons:
+
+      PEAK   the water-year regulated maximum against the water-year
+             unregulated maximum. This is the one that matters -- a regulated
+             peak above the unregulated peak at a flood event is not physical.
+      HOURLY every hour where the regulated flow exceeds the unregulated flow.
+             Some of these are legitimate (storage evacuation, minimum release),
+             so they are split by whether the unregulated flow at that hour is
+             above REG_UNREG_LOW_FLOW_CFS.
+    """
+    print("\n" + "=" * 78)
+    print("REGULATED vs UNREGULATED CHECK")
+    print("=" * 78)
+
+    all_rows, all_episodes = [], []
+    for part_b, reg_c, unreg_c in REG_UNREG_CHECKS:
+        reg_raw = built.get((part_b, reg_c))
+        unreg_raw = built.get((part_b, unreg_c))
+        if reg_raw is None or unreg_raw is None:
+            missing = reg_c if reg_raw is None else unreg_c
+            print("\n%s: /%s/ was not built -- add it to RECORDS to run this "
+                  "check" % (part_b, missing))
+            continue
+
+        span = pd.date_range(min(reg_raw.index[0], unreg_raw.index[0]),
+                             max(reg_raw.index[-1], unreg_raw.index[-1]), freq="h")
+        reg = reg_raw.reindex(span)
+        unreg = unreg_raw.reindex(span)
+        diff = reg - unreg                      # NaN where either is missing
+        keys = np.array([water_year(t) for t in span])
+
+        print("\n%s:  %s vs %s" % (part_b, reg_c, unreg_c))
+        print("   comparable hours: %d of %d"
+              % (int(diff.notna().sum()), len(span)))
+
+        rows = []
+        for wy in np.unique(keys):
+            block = keys == wy
+            r_wy = reg[block].dropna()
+            u_wy = unreg[block].dropna()
+            d_wy = diff[block].dropna()
+            if r_wy.empty or u_wy.empty:
+                continue
+            reg_peak = float(r_wy.max())
+            unreg_peak = float(u_wy.max())
+            t_reg = r_wy.idxmax()
+            t_unreg = u_wy.idxmax()
+            peak_diff = reg_peak - unreg_peak
+            over = d_wy[d_wy > REG_UNREG_TOL_CFS]
+            over_high = over[unreg.reindex(over.index) >= REG_UNREG_LOW_FLOW_CFS]
+            rows.append({
+                "part_b": part_b,
+                "WY": int(wy),
+                "reg_peak": reg_peak,
+                "unreg_peak": unreg_peak,
+                "reg_peak_time": t_reg,
+                "unreg_peak_time": t_unreg,
+                "peak_offset_hrs": (t_reg - t_unreg).total_seconds() / 3600.0,
+                "reg_at_unreg_peak": float(reg.get(t_unreg, np.nan)),
+                "peak_diff_cfs": peak_diff,
+                "peak_ratio": reg_peak / unreg_peak if unreg_peak > 0 else np.nan,
+                "REG_PEAK_EXCEEDS": bool(peak_diff > REG_UNREG_TOL_CFS),
+                "hours_reg_gt_unreg": int(len(over)),
+                "hours_reg_gt_unreg_above_lowflow": int(len(over_high)),
+                "max_hourly_exceed_cfs": float(over.max()) if len(over) else 0.0,
+                "max_hourly_exceed_time": over.idxmax() if len(over) else pd.NaT,
+                "valid_hours": int(len(d_wy)),
+            })
+
+        table = pd.DataFrame(rows)
+        if table.empty:
+            print("   no overlapping water years")
+            continue
+        episodes = exceedance_episodes(diff, reg, unreg,
+                                       REG_UNREG_MIN_EPISODE_HOURS)
+        for ep in episodes:
+            ep["part_b"] = part_b
+        all_rows.append(table)
+        all_episodes.extend(episodes)
+
+        bad = table[table["REG_PEAK_EXCEEDS"]]
+        print("   water years compared        : %d" % len(table))
+        print("   REG PEAK ABOVE UNREG PEAK   : %d" % len(bad))
+        for _, row in bad.sort_values("peak_diff_cfs", ascending=False).iterrows():
+            note = "  [low flow year]" if row["unreg_peak"] < REG_UNREG_LOW_FLOW_CFS else ""
+            print("      WY%d  reg %.0f > unreg %.0f  (+%.0f cfs, %.2fx)  "
+                  "reg %s / unreg %s%s"
+                  % (row["WY"], row["reg_peak"], row["unreg_peak"],
+                     row["peak_diff_cfs"], row["peak_ratio"],
+                     pd.Timestamp(row["reg_peak_time"]).strftime("%Y-%m-%d %H:%M"),
+                     pd.Timestamp(row["unreg_peak_time"]).strftime("%Y-%m-%d %H:%M"),
+                     note))
+        big = bad[bad["unreg_peak"] >= REG_UNREG_LOW_FLOW_CFS]
+        if len(big):
+            print("      *** %d of these are at unreg peaks >= %.0f cfs -- not a"
+                  " low-flow artefact ***" % (len(big), REG_UNREG_LOW_FLOW_CFS))
+            print("      The reservoir cannot raise a flood peak. Check that"
+                  " SIM_DSS and MAPPING_CSV are the same run, that the")
+            print("      unregulated record was reassembled on the same"
+                  " members, and the ResSim operation set for that year.")
+        elif len(bad):
+            print("      all at unreg peaks below %.0f cfs -- consistent with"
+                  " minimum release / refill drawdown"
+                  % REG_UNREG_LOW_FLOW_CFS)
+
+        total_hours = int(table["hours_reg_gt_unreg"].sum())
+        high_hours = int(table["hours_reg_gt_unreg_above_lowflow"].sum())
+        print("   hours reg > unreg           : %d (%d with unreg >= %.0f cfs)"
+              % (total_hours, high_hours, REG_UNREG_LOW_FLOW_CFS))
+        print("   exceedance episodes >= %dh   : %d"
+              % (REG_UNREG_MIN_EPISODE_HOURS, len(episodes)))
+        worst = sorted(episodes, key=lambda e: -e["max_exceed_cfs"])[:5]
+        for ep in worst:
+            print("      WY%d  %s -> %s  %dh  max +%.0f cfs "
+                  "(reg %.0f vs unreg %.0f)"
+                  % (ep["WY"], ep["start"].strftime("%Y-%m-%d %H:%M"),
+                     ep["end"].strftime("%Y-%m-%d %H:%M"), ep["hours"],
+                     ep["max_exceed_cfs"], ep["reg_at_max"], ep["unreg_at_max"]))
+
+    if all_rows:
+        combined = pd.concat(all_rows, ignore_index=True)
+        combined.to_csv(REG_UNREG_WY_CSV, index=False, float_format="%.2f")
+        print("\n   water-year table : %s" % REG_UNREG_WY_CSV)
+    if all_episodes:
+        pd.DataFrame(all_episodes).to_csv(REG_UNREG_EPISODE_CSV, index=False,
+                                          float_format="%.2f")
+        print("   episode table    : %s" % REG_UNREG_EPISODE_CSV)
+
+
 def main():
     for path in (os.path.dirname(OUT_DSS), os.path.dirname(SUMMARY_CSV)):
         if path and not os.path.isdir(path):
@@ -359,6 +568,7 @@ def main():
     print("=" * 78)
 
     summary = []
+    built = {}          # (part_b, part_c) -> reassembled hourly series
     version = SIM_DSS_VERSION or dss_version(SIM_DSS)
     src = HecDss.Open(SIM_DSS, version=version)
     catalog, suffixes = build_catalog(src)
@@ -428,6 +638,7 @@ def main():
             pathname = "/%s/%s/%s//1HOUR/%s/" % (part_a, part_b, part_c, out_f)
             dst.put_ts(build_container(pathname, out_values, start_time,
                                        units, "INST-VAL", 60))
+            built[(part_b, part_c)] = full
 
             print("   members read : %d of %d" % (n_members, len(mapping)))
             print("   real span    : %s -> %s" % (full.index[0].date(),
@@ -461,6 +672,9 @@ def main():
         dst.close()
 
     pd.DataFrame(summary).to_csv(SUMMARY_CSV, index=False)
+
+    if REG_UNREG_CHECKS:
+        check_reg_vs_unreg(built)
 
     if CHECK_AGAINST:
         run_checks()

@@ -39,7 +39,7 @@ PATH_MOS_ELEV_DAILY = "//MOS/ELEV/*/1DAY/USGS/"
 TARGETS = [
     {"set_name": "ResSim_WCM_RC",
      "result_dss": r"../output/ResSim_WCM_RC.dss",
-     "mapping": r"../output/ensemble_unreg_mapping.csv",
+     "mapping": r"../output/ensemble_wcm_rc_mapping.csv",
      "rule_curve": True, "observed_pool": False},
     {"set_name": "ResSim_Obs_RC",
      "result_dss": r"../output/ResSim_Obs_RC.dss",
