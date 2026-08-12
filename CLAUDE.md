@@ -59,6 +59,14 @@ Check the header directly when unsure -- byte 12 of the file is the version:
   faster on a 859k-value record. See `first_stamp` / `series_step` in
   `#Create_Unreg_Ensembles.py`.
 - `ts.times` is a generator: `len()` fails, so use `next(iter(ts.times))`.
+- The CATALOG API differs between builds too. This sandbox has `search_path`;
+  the user's build does NOT and raises
+  `AttributeError: 'Open' object has no attribute 'search_path'`. Their build
+  has `path_dict(pattern)`, which returns a dict of record-type -> list of
+  pathnames (the regular time series are under `'ts-reg'`). Use the
+  `catalog_paths()` helper in `#Extract_Ensemble_To_Timeseries.py`, which tries
+  `search_path`, then `path_dict`, then `getPathnameList`. Never call a
+  pydsstools catalog method directly.
 - DSS uses **midnight-as-2400**, so a string stamp can be `01Oct1973 24:00:00`,
   which means 02Oct1973 00:00. `pd.Timestamp` raises
   `DateParseError: hour must be in 0..23` on it. Rewrite the hour to 00 and add
@@ -97,6 +105,19 @@ The user's machine may be on pandas 2, where the mixed version happens to work.
 Do not rely on that.
 
 Always verify an interpolated series against its input anchors before shipping.
+
+
+## Anything that runs on BOTH machines must be API-agnostic
+
+Three pydsstools differences have now cost a round trip each: `ts.times`
+(HecTime here, strings there), midnight-as-2400 date strings, and `search_path`
+(present here, absent there). The pattern is the same every time -- code that
+works in the sandbox fails on Windows because a pydsstools API differs.
+
+Before shipping anything that touches pydsstools, ask which API is being called
+and whether a different build might name it differently. Prefer `getattr` with
+fallbacks over a direct call. There is no way to test the user's build from
+here, so defensive code is the only protection.
 
 
 ## Repo conventions

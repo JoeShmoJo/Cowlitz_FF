@@ -157,6 +157,45 @@ def series_step(ts, pathname):
     return pd.Timedelta(lookup.get(e_part, "1h"))
 
 
+def catalog_paths(dss):
+    """Every pathname in the file, across pydsstools versions.
+
+    The catalog API is not stable between builds: some expose search_path,
+    some path_dict, older ones getPathnameList. Try each rather than assume --
+    this sandbox has search_path while the user's build does not.
+    """
+    getter = getattr(dss, "search_path", None)
+    if getter is not None:
+        try:
+            return list(getter("/*/*/*/*/*/*/"))
+        except Exception:
+            pass
+    getter = getattr(dss, "path_dict", None)
+    if getter is not None:
+        try:
+            grouped = getter("/*/*/*/*/*/*/")
+            paths = []
+            for value in grouped.values():
+                paths.extend(list(value))
+            if paths:
+                return paths
+        except Exception:
+            pass
+    for name in ("getPathnameList", "getCatalogedPathnames", "get_pathnames"):
+        getter = getattr(dss, name, None)
+        if getter is None:
+            continue
+        for args in (("/*/*/*/*/*/*/",), ()):
+            try:
+                return list(getter(*args))
+            except Exception:
+                continue
+    raise RuntimeError(
+        "Could not list pathnames: this pydsstools build exposes none of "
+        "search_path / path_dict / getPathnameList. Available: %s"
+        % ", ".join(m for m in dir(dss) if "path" in m.lower()))
+
+
 def build_catalog(dss):
     """Index the file's real pathnames by (B, C, member) folded to lower case.
 
@@ -167,7 +206,7 @@ def build_catalog(dss):
     """
     index = {}
     suffixes = {}
-    for path in dss.search_path("/*/*/*/*/*/*/"):
+    for path in catalog_paths(dss):
         parts = path.split("/")
         if len(parts) < 8:
             continue
