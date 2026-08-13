@@ -284,6 +284,26 @@ def check_member_alignment(results):
     """
     if "target_miss_frac" not in results.columns:
         return
+    # A member whose unregulated peak fell back to the target cannot be checked:
+    # the comparison would be the target against itself. Treat that as a
+    # failure, not a pass -- a check that cannot fail is not a check.
+    if "unreg_peak_source" in results.columns:
+        blind = results[results["unreg_peak_source"] != "sim"]
+        if len(blind):
+            print("=" * 78)
+            print("MEMBER ALIGNMENT CANNOT BE CHECKED -- %d of %d members"
+                  % (len(blind), len(results)))
+            print("=" * 78)
+            print("No simulated unregulated peak for these members, so there is")
+            print("nothing independent to compare the target against.")
+            print("\nThis needs Flow-Local at Castle Rock and Flow-IN at Mossyrock,")
+            print("summed hour by hour -- NOT a Flow-UNREG record. Both are ordinary")
+            print("ResSim outputs, so there is no need to make ResSim write all")
+            print("records. Check that these two paths exist in the reassembled DSS:")
+            print("   %s" % PATH_LOCAL)
+            print("   %s" % PATH_MOS_IN)
+            raise SystemExit("alignment check has no simulated peak to test against")
+
     miss = results["target_miss_frac"].abs()
     bad = results[miss > ALIGNMENT_TOLERANCE_FRAC]
     worst = float(miss.max()) if len(miss.dropna()) else np.nan
@@ -349,13 +369,21 @@ def main():
                      + b.reindex(a.index.union(b.index)).fillna(0.0)).dropna()
             if len(joint):
                 unreg_peak, unreg_time = float(joint.max()), pd.Timestamp(joint.idxmax())
+        # If the unregulated peak cannot be derived from the SIMULATION, the
+        # alignment check has nothing independent to test against. Falling back
+        # to the target here would make the check compare the target with
+        # itself and pass every time, no matter which members were read -- so
+        # record the fallback instead of hiding it.
+        unreg_source = "sim"
         if not np.isfinite(unreg_peak):
             unreg_peak = row["scaled_unreg_peak_cfs"]
+            unreg_source = "target-fallback"
         entry = dict(row)
         entry.update({
             "reg_peak": reg_peak, "reg_peak_time": reg_time,
             "local_peak": loc_peak, "mos_in_peak": mos_peak,
             "unreg_peak_from_sim": unreg_peak,
+            "unreg_peak_source": unreg_source,
             "unreg_peak_time": unreg_time,
             "sum_of_maxima_cfs": loc_peak + mos_peak
             if np.isfinite(loc_peak) and np.isfinite(mos_peak) else np.nan,
