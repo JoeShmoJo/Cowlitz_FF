@@ -21,12 +21,22 @@ DESIGN -- a full factorial over the three things that could matter:
               curve is not extrapolating past its final point exactly where the
               answer is needed.
 
-    POOL      3 starting elevations: the WCM rule curve, the 50% pool duration
-              curve for that date, and the observed pool on that date. Written
-              as separate members so the results can be compared, or pooled into
-              a Monte Carlo over starting conditions.
+    POOL      starting pool elevation. FIVE bases are available and each is
+              switched on or off individually in POOL_BASES_ENABLED: the WCM
+              rule curve, the 50% pool duration curve for that calendar date,
+              the observed pool on that date, the median pool from the
+              unregulated POR run, and the highest of whichever are on. Each
+              enabled basis is written as its own member so the results can be
+              compared, or pooled into a Monte Carlo over starting conditions.
 
-    -> 4 x 4 x 3 = 48 members.
+    -> the member count is 4 events x 4 magnitudes x (bases switched on).
+       With only the rule curve on, that is 16 members; with all five, 80.
+       The script prints the on/off list and the resulting count at the top of
+       its run, so what was actually built is never in doubt.
+
+       A basis that is enabled but has no value for an event (no POR run, no
+       observed record that far back) falls back to POOL_FALLBACK_BASIS, and
+       the member is tagged in pool_basis_used rather than substituted quietly.
 
 SCALING
 -------
@@ -151,13 +161,39 @@ OUTSIDE_RETURN_POWER = 2.0
 # member window with no return at all.
 APPLY_OUTSIDE_RETURN = True
 
-# --- starting pool elevation -------------------------------------------------
-# "rulecurve"  : the WCM rule curve on the event's start date.
-# "median_por" : the MEDIAN simulated pool for that calendar day, taken from the
-#                unregulated period-of-record ResSim run. Not available until
-#                that run exists -- the script says so and falls back rather
-#                than failing.
-START_ELEV_MODE = "rulecurve"
+# --- starting pool bases -- TOGGLE HERE --------------------------------------
+# One member is written per source event x magnitude x ENABLED basis, so this
+# block is what sets the member count. Turning one off removes it entirely; it
+# is not written and not plotted.
+#
+#   "rulecurve"  the WCM rule curve on the event's start date. Always available.
+#   "duration50" the 50% exceedance pool for that calendar date, from the
+#                observed daily elevation record. Needs DURATION_50_MIN_YEARS
+#                of record behind that calendar day.
+#   "observed"   the observed pool on that calendar date, from the same record.
+#   "median_por" the MEDIAN simulated pool for that calendar day from the
+#                unregulated period-of-record ResSim run. Needs POR_ELEV_DSS,
+#                which is external to this repository.
+#   "highest"    the highest of whichever of the above are enabled AND
+#                available -- the conservative convention from the workflow
+#                email. Not a record in its own right; it picks one per event.
+#
+# A basis that is enabled but unavailable for an event falls back to the rule
+# curve, and the member is tagged in pool_basis_used so the substitution is on
+# the record rather than silent.
+POOL_BASES_ENABLED = {
+    "rulecurve": True,
+    "duration50": False,
+    "observed": False,
+    "median_por": False,
+    "highest": False,
+}
+# Where an enabled basis has no value for an event.
+POOL_FALLBACK_BASIS = "rulecurve"
+
+# The order members are written in, for any basis switched on above.
+POOL_BASIS_ORDER = ["rulecurve", "duration50", "observed", "median_por", "highest"]
+
 POR_ELEV_DSS = (r"C:\Projects\2026_Cowlitz_Flow_Frequency\ResSim\NWP_CowlitzLewis"
                 r"\watershed\NWP_CowlitzLewis_ResSim4\rss\Unreg_POR_FIS\simulation.dss")
 POR_ELEV_PATH = "//Mossyrock-Pool/Elev/*/1Hour/Ensemble--0/"
@@ -174,16 +210,6 @@ TARGET_AEPS = [("100yr", 0.010), ("250yr", 0.004), ("500yr", 0.002)]
 # curve. Given as a multiple of the smallest-AEP value on the table.
 BEYOND_LABEL = "beyond"
 BEYOND_FACTOR = 1.20
-
-# --- starting pool bases ----------------------------------------------------
-# "rulecurve" : the WCM rule curve on that calendar date
-# "duration50": the 50% exceedance pool elevation for that calendar date,
-#               computed from the observed daily record
-# "observed"  : the observed pool on that calendar date
-POOL_BASES = [START_ELEV_MODE]
-# The conservative convention from the workflow email is the HIGHER of the
-# three. Set this True to add that as a fourth basis.
-ADD_HIGHEST_OF_ALL = False
 
 RULE_CURVE_ANCHORS = [
     (1, 1, 745.5), (1, 31, 745.5), (6, 1, 778.5), (9, 30, 778.5), (12, 1, 745.5),
@@ -582,22 +608,34 @@ def plot_events(events, mapping, stem):
     plt.close(fig)
 
 
-def plot_pools(events, stem):
-    """The three starting pool bases for each event date."""
+def plot_pools(events, bases, highest_pick, stem):
+    """Starting pool for every ENABLED basis, per event date."""
     fig, ax = plt.subplots(figsize=(11, 5.5))
     x = np.arange(len(events))
-    width = 0.26
-    colors = {"rulecurve": "#8e44ad", "median_por": "#16a085"}
-    for i, basis in enumerate(POOL_BASES):
+    width = min(0.26, 0.8 / max(len(bases), 1))
+    colors = {"rulecurve": "#8e44ad", "duration50": "#2c7fb8",
+              "observed": "#c0392b", "median_por": "#16a085",
+              "highest": "#e67e22"}
+    offset0 = (len(bases) - 1) / 2.0
+    for i, basis in enumerate(bases):
         vals = [ev["pools"].get(basis, np.nan) for ev in events]
-        ax.bar(x + (i - 1) * width, vals, width, color=colors.get(basis, "0.5"),
-               label=basis)
+        ax.bar(x + (i - offset0) * width, vals, width,
+               color=colors.get(basis, "0.5"), label=basis)
     ax.set_xticks(x)
     ax.set_xticklabels([ev["label"] for ev in events])
     ax.set_ylim(700, 790)
     ax.set_ylabel("Starting pool elevation (ft)")
+    off = [b for b in POOL_BASIS_ORDER if b not in bases]
     ax.set_title("Starting pool basis by source event -- each becomes its own "
-                 "ensemble member")
+                 "ensemble member\non: %s%s"
+                 % (", ".join(bases),
+                    "     off: %s" % ", ".join(off) if off else ""))
+    if "highest" in bases and highest_pick:
+        ax.text(0.995, 0.02,
+                "highest picked: %s" % ", ".join("%s=%s" % (k, v) for k, v
+                                                 in highest_pick.items()),
+                transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+                color=colors["highest"])
     ax.legend(fontsize=9)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -628,19 +666,30 @@ def main():
     flow_write = (ens_start + pd.Timedelta(hours=1)).strftime("%d%b%Y %H:%M:%S").upper()
     elev_write = (elev_ens_start + pd.Timedelta(hours=1)).strftime("%d%b%Y %H:%M:%S").upper()
 
-    bases = list(POOL_BASES)
+    bases = [b for b in POOL_BASIS_ORDER if POOL_BASES_ENABLED.get(b, False)]
+    if not bases:
+        raise SystemExit("POOL_BASES_ENABLED has nothing switched on -- "
+                         "there would be no members to write.")
+    if bases == ["highest"]:
+        raise SystemExit("'highest' picks among the OTHER enabled bases -- "
+                         "switch at least one of those on as well.")
+    if POOL_FALLBACK_BASIS not in ("rulecurve",) and POOL_FALLBACK_BASIS not in bases:
+        raise SystemExit("POOL_FALLBACK_BASIS is '%s', which is not switched on "
+                         "in POOL_BASES_ENABLED." % POOL_FALLBACK_BASIS)
+    highest_pick = {}
     targets = read_targets(UNREG_FREQ_CSV, FREQ_VALUE_COL)
     por_medians = None
-    if START_ELEV_MODE == "median_por":
+    if "median_por" in bases:
         if os.path.isfile(POR_ELEV_DSS):
             por_medians = median_pool_by_dayofyear(POR_ELEV_DSS, POR_ELEV_PATH,
                                                    POR_ELEV_MIN_YEARS)
             print("Median POR pool: %d calendar days from %s"
                   % (len(por_medians), POR_ELEV_DSS))
         else:
-            print("START_ELEV_MODE is 'median_por' but the POR run was not found:")
+            print("'median_por' is switched on but the POR run was not found:")
             print("   %s" % POR_ELEV_DSS)
-            print("   Falling back to the rule curve; every member is tagged so.")
+            print("   Falling back to %s; every member is tagged so."
+                  % POOL_FALLBACK_BASIS)
 
     print("=" * 78)
     print("Window     : %d days before / %d days after the peak (%d hours)"
@@ -650,7 +699,13 @@ def main():
              len(SOURCE_EVENTS) * (len(TARGET_AEPS) + 1) * len(bases)))
     print("Scaling    : %s -- both records scaled, hourly proportion preserved"
           % SCALING_METHOD)
-    print("Start pool : %s" % START_ELEV_MODE)
+    print("Start pool : %d of %d bases ON"
+          % (len(bases), len(POOL_BASIS_ORDER)))
+    for basis in POOL_BASIS_ORDER:
+        on = POOL_BASES_ENABLED.get(basis, False)
+        print("             [%s] %-11s %s"
+              % ("x" if on else " ", basis,
+                 "" if on else "(off -- no members written)"))
     print("Output     : %s" % OUT_DSS)
     print("=" * 78)
 
@@ -669,13 +724,41 @@ def main():
         d50_pool = pd.Series(duration_50_on_index(dur50, elev_index), index=elev_index)
         pools = {"rulecurve": float(rc_pool.loc[start])}
         series_by_basis = {"rulecurve": rc_pool}
-        if por_medians is not None:
-            value = pool_on_date(por_medians, start)
+
+        if "duration50" in bases:
+            value = float(d50_pool.loc[start]) if np.isfinite(
+                d50_pool.loc[start]) else np.nan
+            pools["duration50"] = value
+            series_by_basis["duration50"] = d50_pool
+
+        if "observed" in bases:
+            value = (float(obs_pool.loc[start])
+                     if start in obs_pool.index and np.isfinite(obs_pool.loc[start])
+                     else np.nan)
+            pools["observed"] = value
+            # full-length lookback record, same convention as #Create_ObsRC_Ensembles
+            series_by_basis["observed"] = obs_pool
+
+        if "median_por" in bases:
+            value = pool_on_date(por_medians, start) if por_medians is not None \
+                else np.nan
             pools["median_por"] = value
-            series_by_basis["median_por"] = pd.Series(value, index=elev_index)
-        else:
-            pools["median_por"] = np.nan
-            series_by_basis["median_por"] = rc_pool
+            series_by_basis["median_por"] = (pd.Series(value, index=elev_index)
+                                             if np.isfinite(value) else rc_pool)
+
+        if "highest" in bases:
+            # the highest of the OTHER enabled bases that actually have a value
+            candidates = {k: pools[k] for k in bases
+                          if k != "highest" and np.isfinite(pools.get(k, np.nan))}
+            if candidates:
+                pick = max(candidates, key=candidates.get)
+                pools["highest"] = candidates[pick]
+                series_by_basis["highest"] = series_by_basis[pick]
+                highest_pick[label] = pick
+            else:
+                pools["highest"] = np.nan
+                series_by_basis["highest"] = rc_pool
+                highest_pick[label] = "none"
         events.append({"label": label, "note": note, "peak_date": centre,
                        "start": start, "index": index, "elev_index": elev_index,
                        "mos": mos_w, "cas": cas_w, "total": total,
@@ -711,15 +794,16 @@ def main():
                       pool = ev["pools"].get(basis, np.nan)
                       basis_used = basis
                       if not np.isfinite(pool):
-                          pool = ev["pools"]["rulecurve"]
-                          basis_used = "%s->rulecurve (unavailable)" % basis
+                          pool = ev["pools"][POOL_FALLBACK_BASIS]
+                          basis_used = "%s->%s (unavailable)" % (
+                              basis, POOL_FALLBACK_BASIS)
                       member += 1
                       f_part = "C:%06d|%s" % (member, ENS_SUFFIX)
                       mos_v = to_dss_values(mos_scaled)
                       cas_v = to_dss_values(cas_scaled)
                       pool_series = ev["pool_series"][basis]
                       if basis_used != basis:
-                          pool_series = ev["pool_series"]["rulecurve"]
+                          pool_series = ev["pool_series"][POOL_FALLBACK_BASIS]
                       elev_v = to_dss_values(pool_series.values)
                       rc_v = to_dss_values(rule_curve_on_index(ev["elev_index"]))
                       for parts, vals, units, dpart, wstart in [
@@ -781,13 +865,13 @@ def main():
               % (100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).min(),
                  100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).max()))
     plot_events(events, mapping, PLOT_STEM)
-    plot_pools(events, PLOT_STEM)
+    plot_pools(events, bases, highest_pick, PLOT_STEM)
 
     print("\nSOURCE EVENTS")
     for ev in events:
         pool_txt = "  ".join(
-            "%s %.1f" % (k, v) if np.isfinite(v) else "%s n/a" % k
-            for k, v in ev["pools"].items())
+            "%s %.1f" % (k, ev["pools"][k]) if np.isfinite(ev["pools"].get(k, np.nan))
+            else "%s n/a" % k for k in bases)
         print("   %-8s peak %7.0f  local %4.1f%%  gaps %d  pools: %s"
               % (ev["label"], ev["obs_peak"], 100 * ev["local_share"],
                  ev["missing"], pool_txt))
