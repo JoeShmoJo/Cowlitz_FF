@@ -61,8 +61,8 @@ built from the difference between the WCM_RC and Obs_RC runs, and where there
 is no Obs_RC data there is no correction to apply. They are simulated flows
 carrying whatever bias the model carries, with nothing observed to anchor them.
 Treat them as context for the shape of the relationship, not as evidence for
-its position. Set INCLUDE_WCM_IN_FIT = True to fit them anyway -- and say so in
-the memo if you do.
+its position. FIT_SOURCES["wcm_rc"] = True fits them anyway -- and say so in the
+memo if you do.
 
 The same reg-above-unreg screen used in #Adjusted_Peak_Record.py is applied to
 them, at the same threshold, so a non-physical simulated pair is not shown as
@@ -108,9 +108,36 @@ ENFORCE_SCREENING = True
 WCM_WY_CSV = r"../output/diagnostics/ResSim_WCM_RC_reg_vs_unreg_wy.csv"
 WCM_PART_B = "CastleRock_NWS"
 SHOW_WCM_POINTS = True
-# Fit them as well? Default False -- there is no Obs_RC data behind them, so
-# there is no adjustment available to correct them.
-INCLUDE_WCM_IN_FIT = False
+
+# --- synthetic ResSim results ------------------------------------------------
+# The routed synthetic members: each was BUILT to an unregulated peak taken off
+# the unregulated frequency curve, then routed through ResSim. That makes them
+# the only (unreg, reg) pairs that exist above the observed record, which is
+# exactly the range the regulated curve has to be drawn through.
+SYNTH_RESULTS_CSV = r"../output/synthetic_results.csv"
+SHOW_SYNTH_POINTS = True
+# Unregulated side: the peak the member was scaled to hit, which is a point on
+# the unregulated frequency curve by construction. Regulated side: what ResSim
+# routed it to.
+SYNTH_UNREG_COL = "target_unreg_peak_cfs"
+SYNTH_REG_COL = "reg_peak"
+# Restrict to one scaling method when both were run.
+SYNTH_SCALING_METHOD = "volume_matched"
+
+# --- WHICH POINTS DRAW THE REGULATED LINE ------------------------------------
+# Showing a point and fitting a point are different decisions, so they are
+# separate settings. Everything switched on above is DRAWN; only what is
+# switched on here MOVES THE LINE.
+#
+#   "adjusted"  the historic adjusted record -- observed peaks corrected by the
+#               WCM_RC/Obs_RC difference, screened. Real events, real routing.
+#   "wcm_rc"    the raw WCM_RC simulated pairs. These are the PRE-ADJUSTMENT
+#               points: no Obs_RC data exists behind them, so no correction was
+#               ever applied and their position carries the model's bias. Shown
+#               for shape, never used to place the line.
+#   "synthetic" the routed synthetic members. The only evidence above the
+#               observed record.
+FIT_SOURCES = {"adjusted": True, "wcm_rc": False, "synthetic": True}
 # Restrict them to the regulated era (e.g. 1974) or None for the whole record.
 WCM_FIRST_WY = None
 # Apply the same reg-above-unreg screen used on the adjusted record.
@@ -178,7 +205,11 @@ FLOW_LIMITS = (10000.0, 400000.0)
 C_UNREG = "#2c7fb8"
 C_REG = "#c0392b"
 C_WCM = "#7d3c98"          # WCM_RC simulated pairs -- deliberately distinct
+C_SYNTH = "#d68910"        # routed synthetic members
 C_2009 = "#117a65"
+
+# The clean figure: regulated and unregulated lines only, no scatter.
+MAKE_FINAL_CURVE_PLOT = True
 
 # ----------------------------------------------------------------------------
 
@@ -354,6 +385,56 @@ def interp_2009(aep, table_2009):
     return 10.0 ** out
 
 
+def load_synthetic_points(csv_path):
+    """Routed synthetic members as (unreg, reg) pairs.
+
+    The unregulated side is the peak the member was BUILT to hit, not a peak
+    read back out of a simulation, so it is exact by construction and sits on
+    the unregulated frequency curve. The regulated side is what ResSim did with
+    it.
+    """
+    if not (SHOW_SYNTH_POINTS and os.path.isfile(csv_path)):
+        if SHOW_SYNTH_POINTS:
+            print("Synthetic : not found: %s -- points not drawn" % csv_path)
+        return None
+    table = pd.read_csv(csv_path)
+    if SYNTH_SCALING_METHOD and "scaling_method" in table.columns:
+        table = table[table["scaling_method"] == SYNTH_SCALING_METHOD]
+    for col in (SYNTH_UNREG_COL, SYNTH_REG_COL):
+        if col not in table.columns:
+            print("Synthetic : %s has no '%s' column -- points not drawn"
+                  % (os.path.basename(csv_path), col))
+            return None
+    table = table.dropna(subset=[SYNTH_UNREG_COL, SYNTH_REG_COL]).copy()
+    table = table[(table[SYNTH_UNREG_COL] > 0) & (table[SYNTH_REG_COL] > 0)]
+    return table.reset_index(drop=True)
+
+
+def assemble_fit_points(data, wcm, synth):
+    """Stack the point sets that are switched on in FIT_SOURCES.
+
+    Returns the arrays and a per-source count, so the log states exactly what
+    moved the line rather than leaving it to be inferred from the plot.
+    """
+    xs, ys, used = [], [], {}
+    if FIT_SOURCES.get("adjusted", False) and data is not None and len(data):
+        xs.append(np.asarray(data[UNREG_COL].values, dtype=float))
+        ys.append(np.asarray(data["reg_peak"].values, dtype=float))
+        used["adjusted"] = len(data)
+    if FIT_SOURCES.get("wcm_rc", False) and wcm is not None and len(wcm):
+        xs.append(np.asarray(wcm["unreg_peak"].values, dtype=float))
+        ys.append(np.asarray(wcm["reg_peak"].values, dtype=float))
+        used["wcm_rc"] = len(wcm)
+    if FIT_SOURCES.get("synthetic", False) and synth is not None and len(synth):
+        xs.append(np.asarray(synth[SYNTH_UNREG_COL].values, dtype=float))
+        ys.append(np.asarray(synth[SYNTH_REG_COL].values, dtype=float))
+        used["synthetic"] = len(synth)
+    if not xs:
+        raise SystemExit("FIT_SOURCES leaves nothing to fit -- switch at least "
+                         "one point set on.")
+    return np.concatenate(xs), np.concatenate(ys), used
+
+
 def annotate_points(ax, x, y, labels):
     """Callouts placed alternately above and below to reduce collisions."""
     for i, (xi, yi, text) in enumerate(zip(x, y, labels)):
@@ -363,7 +444,7 @@ def annotate_points(ax, x, y, labels):
                     arrowprops=dict(arrowstyle="-", color=C_REG, lw=0.7))
 
 
-def plot_scatter(data, fit, wcm, stem):
+def plot_scatter(data, fit, wcm, synth, stem):
     """Arithmetic and log-log scatter, each with a 1:1 line and callouts."""
     x = data[UNREG_COL].values
     y = data["reg_peak"].values
@@ -378,11 +459,19 @@ def plot_scatter(data, fit, wcm, stem):
         if wcm is not None and len(wcm):
             ax.scatter(wcm["unreg_peak"], wcm["reg_peak"], s=30, marker="D",
                        facecolor="none", edgecolor=C_WCM, lw=0.9, zorder=2,
-                       label="WCM_RC simulated pair (no Obs_RC correction, "
-                             "not fitted)" if not INCLUDE_WCM_IN_FIT
-                             else "WCM_RC simulated pair (fitted)")
+                       label="WCM_RC simulated pair (no Obs_RC correction%s)"
+                             % ("" if FIT_SOURCES.get("wcm_rc") else ", not fitted"))
             lo += [wcm["unreg_peak"].min(), wcm["reg_peak"].min()]
             hi += [wcm["unreg_peak"].max(), wcm["reg_peak"].max()]
+        if synth is not None and len(synth):
+            ax.scatter(synth[SYNTH_UNREG_COL], synth[SYNTH_REG_COL], s=64,
+                       marker="^", facecolor=C_SYNTH, edgecolor="0.2", lw=0.6,
+                       zorder=4,
+                       label="Synthetic member, routed (n=%d)%s"
+                             % (len(synth),
+                                "" if FIT_SOURCES.get("synthetic") else ", not fitted"))
+            lo += [synth[SYNTH_UNREG_COL].min(), synth[SYNTH_REG_COL].min()]
+            hi += [synth[SYNTH_UNREG_COL].max(), synth[SYNTH_REG_COL].max()]
 
         ax.scatter(x, y, s=46, facecolor=C_UNREG, edgecolor="0.25", lw=0.6,
                    zorder=3, label="Water year (adjusted regulated peak)")
@@ -445,7 +534,7 @@ def aep_from_unreg_curve(values, unreg_curve, aep_values):
                      aep_values[order])
 
 
-def plot_frequency(freq, data, fit, wcm, table_2009, stem):
+def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
     """Unregulated and inferred regulated frequency curves, SSP idiom."""
     fig, ax = plt.subplots(figsize=(11.5, 8.8))
 
@@ -501,6 +590,18 @@ def plot_frequency(freq, data, fit, wcm, table_2009, stem):
                     mfc="none", mec=C_WCM, mew=1.0, zorder=5,
                     label="WCM_RC simulated regulated peaks "
                           "(no Obs_RC correction)")
+        # --- routed synthetics, at the AEP their unreg target came from ------
+        if synth is not None and len(synth):
+            aep_s = aep_from_unreg_curve(synth[SYNTH_UNREG_COL].values,
+                                         unreg_curve, aep_values)
+            zs = stats.norm.ppf(1.0 - np.clip(aep_s, 1e-6, 1 - 1e-6))
+            ax.plot(zs, synth[SYNTH_REG_COL].values, ls="none", marker="^",
+                    ms=7, mfc=C_SYNTH, mec="0.2", mew=0.6, zorder=7,
+                    label="Synthetic members, routed%s"
+                          % ("" if FIT_SOURCES.get("synthetic") else " (not fitted)"))
+            ax.plot(zs, synth[SYNTH_UNREG_COL].values, ls="none", marker="^",
+                    ms=5, mfc="none", mec=C_SYNTH, mew=0.9, zorder=6,
+                    label="Synthetic unregulated targets (on the curve)")
     else:
         uv, ua = weibull_plotting_positions(data[UNREG_COL].values)
         rv, ra = weibull_plotting_positions(data["reg_peak"].values)
@@ -553,6 +654,46 @@ def plot_frequency(freq, data, fit, wcm, table_2009, stem):
     fig.savefig("%s_frequency.png" % stem, dpi=150)
     plt.close(fig)
     return reg_curve
+
+
+def plot_final_curves(freq, fit, table_2009, stem):
+    """The adopted figure: regulated and unregulated lines, nothing else.
+
+    No scatter. Everything that went into placing these two lines is on
+    unreg_reg_frequency.png; this is the one that goes in the report, where the
+    points are a distraction from the result.
+    """
+    fig, ax = plt.subplots(figsize=(10.5, 8.2))
+    aep_values = freq["AEP"].values
+    z = stats.norm.ppf(1.0 - aep_values)
+    unreg_curve = freq[FREQ_VALUE_COL].values
+    reg_curve = apply_transform(fit, unreg_curve)
+
+    ax.plot(z, unreg_curve, color=C_UNREG, lw=2.6, zorder=4,
+            label="Unregulated")
+    ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=4, label="Regulated")
+    band = 10 ** fit["se_dex"]
+    ax.fill_between(z, reg_curve / band, reg_curve * band, color=C_REG,
+                    alpha=0.13, zorder=1, label="Regulated, +/- 1 std error")
+    if table_2009 is not None and len(table_2009):
+        ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
+                table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
+                zorder=3, label=CURVE_2009_LABEL)
+
+    ax.set_yscale("log")
+    ax.set_ylim(FLOW_LIMITS)
+    probability_axis(ax, AEP_TICKS, AEP_LIMITS)
+    ax.yaxis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: format(int(v), ",")))
+    ax.grid(which="major", alpha=0.45, lw=0.8)
+    ax.grid(which="minor", alpha=0.2, lw=0.5)
+    ax.set_ylabel("Peak flow (cfs)")
+    ax.set_title("Castle Rock peak flow frequency, regulated and unregulated",
+                 fontsize=12)
+    ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
+    fig.tight_layout()
+    fig.savefig("%s_final_curves.png" % stem, dpi=150)
+    plt.close(fig)
 
 
 def plot_2009_comparison(out, stem):
@@ -615,11 +756,13 @@ def main():
             print("            screened: %s"
                   % ", ".join("WY%d" % w for w in wcm_dropped["WY"]))
 
-    fit_x = data[UNREG_COL].values
-    fit_y = data["reg_peak"].values
-    if INCLUDE_WCM_IN_FIT and wcm is not None and len(wcm):
-        fit_x = np.concatenate([fit_x, wcm["unreg_peak"].values])
-        fit_y = np.concatenate([fit_y, wcm["reg_peak"].values])
+    synth = load_synthetic_points(SYNTH_RESULTS_CSV)
+    if synth is not None:
+        print("Synthetic : %d routed members, unregulated %s to %s cfs"
+              % (len(synth), format(int(synth[SYNTH_UNREG_COL].min()), ","),
+                 format(int(synth[SYNTH_UNREG_COL].max()), ",")))
+
+    fit_x, fit_y, used = assemble_fit_points(data, wcm, synth)
     fit = build_transform(fit_x, fit_y, TRANSFORM_METHOD)
 
     freq = pd.read_csv(UNREG_FREQ_CSV)
@@ -628,9 +771,16 @@ def main():
     table_2009 = curve_2009_frame()
 
     print("=" * 78)
-    print("Transform : %s   n = %d%s"
-          % (TRANSFORM_METHOD, fit["n"],
-             "  (WCM_RC pairs INCLUDED in the fit)" if INCLUDE_WCM_IN_FIT else ""))
+    print("Transform : %s   n = %d" % (TRANSFORM_METHOD, fit["n"]))
+    print("Line drawn from:")
+    for source in ("adjusted", "wcm_rc", "synthetic"):
+        on = FIT_SOURCES.get(source, False)
+        note = ("%d points" % used[source]) if source in used else (
+            "on, but no points available" if on else "shown only, does not move the line")
+        print("             [%s] %-10s %s" % ("x" if on else " ", source, note))
+    if not FIT_SOURCES.get("wcm_rc", False):
+        print("             wcm_rc is the pre-adjustment set -- no Obs_RC data")
+        print("             exists behind it, so it carries an uncorrected bias.")
     if TRANSFORM_METHOD == "loess":
         print("            LOESS span %.2f, pseudo r2 = %.4f" % (LOESS_SPAN, fit["r2"]))
         print("            power law for reference: reg = %.4g x unreg^%.4f, r2 = %.4f"
@@ -645,8 +795,11 @@ def main():
           % (ENFORCE_MONOTONIC, CLIP_TO_UNREG))
     print("=" * 78)
 
-    plot_scatter(data, fit, wcm, PLOT_STEM)
-    reg_curve = plot_frequency(freq, data, fit, wcm, table_2009, PLOT_STEM)
+    plot_scatter(data, fit, wcm, synth, PLOT_STEM)
+    reg_curve = plot_frequency(freq, data, fit, wcm, synth, table_2009,
+                               PLOT_STEM)
+    if MAKE_FINAL_CURVE_PLOT:
+        plot_final_curves(freq, fit, table_2009, PLOT_STEM)
 
     out = freq[["AEP", "Value", FREQ_VALUE_COL]].copy()
     out = out.rename(columns={"Value": "unreg_computed_cfs",
@@ -712,6 +865,8 @@ def main():
     print("Plots : %s_scatter_linear.png, %s_scatter_loglog.png,"
           % (PLOT_STEM, PLOT_STEM))
     print("        %s_frequency.png, %s_2009_comparison.png" % (PLOT_STEM, PLOT_STEM))
+    if MAKE_FINAL_CURVE_PLOT:
+        print("Final : %s_final_curves.png  (lines only, no points)" % PLOT_STEM)
     print("Table : %s/regulated_frequency_inferred.csv" % OUT_DIR)
 
 
