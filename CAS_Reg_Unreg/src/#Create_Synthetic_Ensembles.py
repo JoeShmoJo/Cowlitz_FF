@@ -168,15 +168,22 @@ APPLY_OUTSIDE_RETURN = True
 #
 #   "rulecurve"  the WCM rule curve on the event's start date. Always available.
 #   "duration50" the 50% exceedance pool for that calendar date, from the
-#                observed daily elevation record. Needs DURATION_50_MIN_YEARS
-#                of record behind that calendar day.
+#                OBSERVED daily elevation record (PATH_MOS_ELEV_DAILY in
+#                obsData.dss). Needs DURATION_50_MIN_YEARS of record behind that
+#                calendar day.
 #   "observed"   the observed pool on that calendar date, from the same record.
-#   "median_por" the MEDIAN simulated pool for that calendar day from the
-#                unregulated period-of-record ResSim run. Needs POR_ELEV_DSS,
-#                which is external to this repository.
+#   "median_por" the same statistic -- the median pool for that calendar day --
+#                but computed from the unregulated period-of-record ResSim run
+#                instead. Needs POR_ELEV_DSS, which is external to this
+#                repository.
 #   "highest"    the highest of whichever of the above are enabled AND
 #                available -- the conservative convention from the workflow
 #                email. Not a record in its own right; it picks one per event.
+#
+# NOTE: 50% exceedance, 50% non-exceedance and the median are the same number,
+# so "duration50" and "median_por" are the SAME STATISTIC from two different
+# sources -- observed record vs POR simulation. Switch both on to compare them;
+# do not treat them as two different concepts.
 #
 # A basis that is enabled but unavailable for an event falls back to the rule
 # curve, and the member is tagged in pool_basis_used so the substitution is on
@@ -190,6 +197,18 @@ POOL_BASES_ENABLED = {
 }
 # Where an enabled basis has no value for an event.
 POOL_FALLBACK_BASIS = "rulecurve"
+
+# What the ELEV lookback record written into the ensemble looks like, for the
+# statistic-based bases (duration50, median_por).
+#   "trace" : the day-varying statistic itself -- a member whose window starts
+#             15 Dec gets 15 Dec's median at its first stamp, 16 Dec's the next
+#             day, and so on. The record IS the median-by-calendar-day curve.
+#   "flat"  : the start date's value held constant across the whole window.
+# ResSim reads only the value at the simulation start, and that value is
+# IDENTICAL either way, so this does not change a run. It changes what the
+# record looks like in DSSVue and what anything reading the full series sees.
+# "trace" is the honest one: the record then says what it claims to be.
+POOL_SERIES_STYLE = "trace"
 
 # The order members are written in, for any basis switched on above.
 POOL_BASIS_ORDER = ["rulecurve", "duration50", "observed", "median_por", "highest"]
@@ -337,8 +356,12 @@ def duration_50_by_dayofyear(daily_elev, min_years):
     return median[counts >= min_years]
 
 
-def duration_50_on_index(table, index):
-    """Look up the 50% duration curve for a DatetimeIndex (Feb 29 -> Feb 28)."""
+def dayofyear_on_index(table, index):
+    """Day-of-year statistic as a series on a DatetimeIndex (Feb 29 -> Feb 28).
+
+    Serves both the observed duration curve and the POR median, which are the
+    same kind of table: keyed on (month, day).
+    """
     out = np.full(len(index), np.nan)
     for i in range(len(index)):
         key = (int(index.month[i]), int(index.day[i]))
@@ -347,6 +370,21 @@ def duration_50_on_index(table, index):
         elif key == (2, 29) and (2, 28) in table.index:
             out[i] = table.loc[(2, 28)]
     return pd.Series(out, index=index).interpolate(limit_direction="both").values
+
+
+def pool_series_for(table, index, start, style):
+    """The ELEV lookback record for a statistic-based basis.
+
+    "trace" writes the day-varying statistic, so the record starting on the
+    event's start date carries that date's value at its first stamp and follows
+    the calendar-day curve from there. "flat" holds the start value across the
+    window. The value AT THE START -- the only one ResSim reads -- is the same
+    either way.
+    """
+    start_value = pool_on_date(table, start)
+    if style == "trace":
+        return pd.Series(dayofyear_on_index(table, index), index=index), start_value
+    return pd.Series(start_value, index=index), start_value
 
 
 def read_targets(csv_path, value_col):
@@ -721,15 +759,14 @@ def main():
                                    periods=elev_hours, freq="h")
         obs_pool = elev_hourly.reindex(elev_index)
         rc_pool = pd.Series(rule_curve_on_index(elev_index), index=elev_index)
-        d50_pool = pd.Series(duration_50_on_index(dur50, elev_index), index=elev_index)
         pools = {"rulecurve": float(rc_pool.loc[start])}
         series_by_basis = {"rulecurve": rc_pool}
 
         if "duration50" in bases:
-            value = float(d50_pool.loc[start]) if np.isfinite(
-                d50_pool.loc[start]) else np.nan
+            series, value = pool_series_for(dur50, elev_index, start,
+                                            POOL_SERIES_STYLE)
             pools["duration50"] = value
-            series_by_basis["duration50"] = d50_pool
+            series_by_basis["duration50"] = series if np.isfinite(value) else rc_pool
 
         if "observed" in bases:
             value = (float(obs_pool.loc[start])
@@ -737,14 +774,16 @@ def main():
                      else np.nan)
             pools["observed"] = value
             # full-length lookback record, same convention as #Create_ObsRC_Ensembles
-            series_by_basis["observed"] = obs_pool
+            series_by_basis["observed"] = obs_pool if np.isfinite(value) else rc_pool
 
         if "median_por" in bases:
-            value = pool_on_date(por_medians, start) if por_medians is not None \
-                else np.nan
+            if por_medians is not None:
+                series, value = pool_series_for(por_medians, elev_index, start,
+                                                POOL_SERIES_STYLE)
+            else:
+                series, value = rc_pool, np.nan
             pools["median_por"] = value
-            series_by_basis["median_por"] = (pd.Series(value, index=elev_index)
-                                             if np.isfinite(value) else rc_pool)
+            series_by_basis["median_por"] = series if np.isfinite(value) else rc_pool
 
         if "highest" in bases:
             # the highest of the OTHER enabled bases that actually have a value
