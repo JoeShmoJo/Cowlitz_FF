@@ -60,6 +60,11 @@ PATH_LOCAL = "//CASTLEROCK_NWS/FLOW-LOCAL/*/1Hour/ResSim_Synth/"
 PATH_MOS_IN = "//MOSSYROCK-POOL/FLOW-IN/*/1Hour/ResSim_Synth/"
 PATH_POOL = "//MOSSYROCK-POOL/ELEV/*/1Hour/ResSim_Synth/"   # optional
 
+# A member's routed unregulated peak must match the peak it was built to. Above
+# this fraction the run is reading the wrong members and the script stops.
+# 0.005 = half a percent, which is rounding; real misalignment is percent-scale.
+ALIGNMENT_TOLERANCE_FRAC = 0.005
+
 # Period-of-record context, for the curve placement plot
 POR_DATASET = r"../output/diagnostics/critical_duration_adjusted_dataset.csv"
 POR_FIT_CSV = r"../output/critical_duration_adjusted_fits.csv"
@@ -258,6 +263,59 @@ def plot_curve(results, stem):
     plt.close(fig)
 
 
+def check_member_alignment(results):
+    """Abort if a member's routed unregulated peak is not the peak it was built to.
+
+    THE CHECK THAT MATTERS. Every synthetic member was scaled to hit an exact
+    unregulated peak, and ResSim routes that same inflow, so the unregulated
+    peak read back out has to match the target to within rounding. When it does
+    not, the numbers are being read from the WRONG MEMBER, and the regulated
+    peaks -- the whole point of the exercise -- belong to a different flood.
+
+    That is not hypothetical. The synthetic results committed on 13 Aug 2026
+    missed their targets by 3% to 29% and were used anyway; reading the members
+    straight out of CAS_Synthetics.dss showed the regulated peaks were wrong by
+    up to 130,000 cfs and were non-monotonic in every source event.
+
+    The usual cause is stale members. ResSim does not clear old ensemble members
+    when a smaller ensemble is run into the same simulation, so member numbers
+    from a previous, larger run survive and the extract happily reads them.
+    Rebuild the ResSim simulation, or delete the old members, and re-run.
+    """
+    if "target_miss_frac" not in results.columns:
+        return
+    miss = results["target_miss_frac"].abs()
+    bad = results[miss > ALIGNMENT_TOLERANCE_FRAC]
+    worst = float(miss.max()) if len(miss.dropna()) else np.nan
+    if bad.empty:
+        print("Member alignment  : OK -- every routed unregulated peak matches its")
+        print("                    target (worst miss %.2f%%, tolerance %.2f%%)"
+              % (100 * worst, 100 * ALIGNMENT_TOLERANCE_FRAC))
+        return
+    print("=" * 78)
+    print("MEMBER ALIGNMENT FAILED -- %d of %d members" % (len(bad), len(results)))
+    print("=" * 78)
+    print("Each member was BUILT to an exact unregulated peak. ResSim routes that")
+    print("same inflow, so the unregulated peak read back must match. It does not,")
+    print("which means these results were read from the wrong ensemble members and")
+    print("the regulated peaks belong to different floods.\n")
+    for _, row in bad.iterrows():
+        print("   member %-3d %-9s %-7s target %10s  read back %10s   %+.1f%%"
+              % (row["member"], row["event"], row["target"],
+                 format(int(row["target_unreg_peak_cfs"]), ","),
+                 format(int(row["unreg_peak_from_sim"]), ","),
+                 100 * row["target_miss_frac"]))
+    print("\nMost likely cause: STALE MEMBERS. ResSim does not clear old ensemble")
+    print("members when a smaller ensemble is run into the same simulation, so")
+    print("member numbers from a previous run survive alongside the new ones and")
+    print("the extract reads whatever is at that number.")
+    print("\nTo fix: confirm the member count in the ResSim simulation matches the")
+    print("mapping CSV (%d members), clear the old members, re-run ResSim, then")
+    print("re-run #Extract_Ensemble_To_Timeseries.py and this script.")
+    print("\n%s was still written, for inspection. Do NOT use it." % OUT_CSV)
+    raise SystemExit("member alignment check failed -- results not usable")
+
+
 def main():
     if not os.path.isdir(DIAG_DIR):
         os.makedirs(DIAG_DIR)
@@ -313,6 +371,8 @@ def main():
         rows.append(entry)
     results = pd.DataFrame(rows)
     results.to_csv(OUT_CSV, index=False, float_format="%.2f")
+
+    check_member_alignment(results)
 
     got = results.dropna(subset=["reg_peak"])
     print("=" * 78)
