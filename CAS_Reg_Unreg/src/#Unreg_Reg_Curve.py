@@ -119,7 +119,15 @@ SHOW_SYNTH_POINTS = True
 # Unregulated side: the peak the member was scaled to hit, which is a point on
 # the unregulated frequency curve by construction. Regulated side: what ResSim
 # routed it to.
-SYNTH_UNREG_COL = "target_unreg_peak_cfs"
+# The ROUTED unregulated peak at Castle Rock, from ResSim's Flow-UNREG record.
+# This is the right partner for reg_peak: same quantity, same point, so the
+# ratio of the two is the reservoir effect and nothing else. The build target
+# (target_unreg_peak_cfs) is an unrouted sum of Mossyrock inflow and local, so
+# it sits 1-3% above what actually arrives at Castle Rock -- using it would
+# credit the reservoir with an attenuation the river reach did.
+SYNTH_UNREG_COL = "unreg_peak_routed_cfs"
+# Used if the routed record is missing from an older results CSV.
+SYNTH_UNREG_COL_FALLBACK = "target_unreg_peak_cfs"
 SYNTH_REG_COL = "reg_peak"
 # Restrict to one scaling method when both were run.
 SYNTH_SCALING_METHOD = "volume_matched"
@@ -400,6 +408,14 @@ def load_synthetic_points(csv_path):
     table = pd.read_csv(csv_path)
     if SYNTH_SCALING_METHOD and "scaling_method" in table.columns:
         table = table[table["scaling_method"] == SYNTH_SCALING_METHOD]
+    global SYNTH_UNREG_COL
+    if SYNTH_UNREG_COL not in table.columns or table[SYNTH_UNREG_COL].isna().all():
+        print("Synthetic : no '%s' -- falling back to '%s'. That column is the"
+              % (SYNTH_UNREG_COL, SYNTH_UNREG_COL_FALLBACK))
+        print("            UNROUTED build target, so the pairs will overstate")
+        print("            attenuation by the routing loss. Re-run")
+        print("            #Synthetic_Diagnostics.py to get the routed peak.")
+        SYNTH_UNREG_COL = SYNTH_UNREG_COL_FALLBACK
     for col in (SYNTH_UNREG_COL, SYNTH_REG_COL):
         if col not in table.columns:
             print("Synthetic : %s has no '%s' column -- points not drawn"

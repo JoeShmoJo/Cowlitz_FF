@@ -59,10 +59,21 @@ PATH_REG = "//CASTLEROCK_NWS/FLOW/*/1Hour/ResSim_Synth/"
 PATH_LOCAL = "//CASTLEROCK_NWS/FLOW-LOCAL/*/1Hour/ResSim_Synth/"
 PATH_MOS_IN = "//MOSSYROCK-POOL/FLOW-IN/*/1Hour/ResSim_Synth/"
 PATH_POOL = "//MOSSYROCK-POOL/ELEV/*/1Hour/ResSim_Synth/"   # optional
+# The unregulated flow AT CASTLE ROCK, routed by ResSim. This is the correct
+# partner for the regulated peak: both are the same quantity at the same point,
+# so their ratio is the reservoir effect and nothing else. Reported everywhere,
+# and it is what #Unreg_Reg_Curve.py pairs with reg_peak.
+PATH_UNREG = "//CASTLEROCK_NWS/FLOW-UNREG/*/1Hour/ResSim_Synth/"
 
-# A member's routed unregulated peak must match the peak it was built to. Above
-# this fraction the run is reading the wrong members and the script stops.
-# 0.005 = half a percent, which is rounding; real misalignment is percent-scale.
+# ALIGNMENT CHECK BASIS -- deliberately NOT the routed record.
+# The member was scaled so that Mossyrock inflow + Castle Rock local, summed
+# hour by hour and UNROUTED, hits the target exactly. Routing then attenuates
+# that by 1-3%, varying by event and by magnitude. Checking the ROUTED peak
+# against the target would be measuring routing, and it would need a tolerance
+# loose enough to let a genuinely mis-read member slip through. The unrouted sum
+# reproduces the target to 0.0%, which makes this an identity test: any
+# departure at all means a wrong member was read.
+# So: Flow-UNREG is the number reported; the unrouted sum is the number checked.
 ALIGNMENT_TOLERANCE_FRAC = 0.005
 
 # Period-of-record context, for the curve placement plot
@@ -308,8 +319,9 @@ def check_member_alignment(results):
     bad = results[miss > ALIGNMENT_TOLERANCE_FRAC]
     worst = float(miss.max()) if len(miss.dropna()) else np.nan
     if bad.empty:
-        print("Member alignment  : OK -- every routed unregulated peak matches its")
-        print("                    target (worst miss %.2f%%, tolerance %.2f%%)"
+        print("Member alignment  : OK -- every member's UNROUTED unregulated peak")
+        print("                    matches its build target (worst miss %.2f%%, "
+              "tolerance %.2f%%)"
               % (100 * worst, 100 * ALIGNMENT_TOLERANCE_FRAC))
         return
     print("=" * 78)
@@ -350,6 +362,7 @@ def main():
     local = try_read(SYNTH_DSS, PATH_LOCAL)
     mos_in = try_read(SYNTH_DSS, PATH_MOS_IN)
     pool = try_read(SYNTH_DSS, PATH_POOL)
+    unreg_routed = try_read(SYNTH_DSS, PATH_UNREG)
 
     rows = []
     for _, row in mapping.iterrows():
@@ -374,6 +387,7 @@ def main():
         # to the target here would make the check compare the target with
         # itself and pass every time, no matter which members were read -- so
         # record the fallback instead of hiding it.
+        routed_peak, routed_time = block_stats(unreg_routed, start, end)
         unreg_source = "sim"
         if not np.isfinite(unreg_peak):
             unreg_peak = row["scaled_unreg_peak_cfs"]
@@ -382,11 +396,22 @@ def main():
         entry.update({
             "reg_peak": reg_peak, "reg_peak_time": reg_time,
             "local_peak": loc_peak, "mos_in_peak": mos_peak,
-            "unreg_peak_from_sim": unreg_peak,
+            "unreg_peak_unrouted_cfs": unreg_peak,
             "unreg_peak_source": unreg_source,
             "unreg_peak_time": unreg_time,
+            "unreg_peak_routed_cfs": routed_peak,
+            "unreg_peak_routed_time": routed_time,
+            "unreg_peak_from_sim": routed_peak if np.isfinite(routed_peak)
+            else unreg_peak,
+            "routing_loss_pct": (100.0 * (1.0 - routed_peak / unreg_peak)
+                                 if np.isfinite(routed_peak) and unreg_peak
+                                 else np.nan),
+            "atten_ratio_routed": (reg_peak / routed_peak
+                                   if np.isfinite(reg_peak) and routed_peak
+                                   else np.nan),
             "sum_of_maxima_cfs": loc_peak + mos_peak
             if np.isfinite(loc_peak) and np.isfinite(mos_peak) else np.nan,
+            # unrouted on purpose -- see ALIGNMENT_TOLERANCE_FRAC
             "target_miss_frac": (unreg_peak / row["target_unreg_peak_cfs"] - 1.0)
             if np.isfinite(unreg_peak) else np.nan,
             "atten_ratio": reg_peak / unreg_peak
@@ -401,6 +426,12 @@ def main():
     results.to_csv(OUT_CSV, index=False, float_format="%.2f")
 
     check_member_alignment(results)
+    if "routing_loss_pct" in results.columns and results["routing_loss_pct"].notna().any():
+        loss = results["routing_loss_pct"]
+        print("Routing to Castle Rock: unregulated peak attenuates %.2f%% to %.2f%%"
+              % (loss.min(), loss.max()))
+        print("                    (reported pairs use the routed peak; the")
+        print("                     alignment check uses the unrouted sum)")
 
     got = results.dropna(subset=["reg_peak"])
     print("=" * 78)

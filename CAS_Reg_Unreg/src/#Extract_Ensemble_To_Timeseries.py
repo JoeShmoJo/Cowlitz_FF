@@ -56,7 +56,10 @@ CONFIG_BY_SET = {
     # navigates by event / magnitude / pool basis.
     "ResSim_Synth": {
         "mapping": r"../output/ensemble_synthetic_mapping.csv",
-        "sim_dss": r"../output/simulation.dss",
+        # The live ResSim output, same as the other two sets. Reading a copy
+        # that has been moved into the repository is how a run gets extracted
+        # against a stale simulation without anyone noticing.
+        "sim_dss": RSS_ROOT + r"\Synthetics\simulation.dss",
     },
 }
 MAPPING_CSV = CONFIG_BY_SET[SET_NAME]["mapping"]
