@@ -189,10 +189,10 @@ APPLY_OUTSIDE_RETURN = True
 # curve, and the member is tagged in pool_basis_used so the substitution is on
 # the record rather than silent.
 POOL_BASES_ENABLED = {
-    "rulecurve": True,
+    "rulecurve": False,
     "duration50": False,
     "observed": False,
-    "median_por": False,
+    "median_por": True,
     "highest": False,
 }
 # Where an enabled basis has no value for an event.
@@ -248,7 +248,7 @@ ENS_LABEL_START = datetime(1999, 10, 1, 0, 0)
 # ones. The mapping CSV carries the synthetic date AND the true source date.
 SYNTH_YEAR_BASE = 1800
 
-CLIP_NEGATIVE_FLOW = True
+CLIP_NEGATIVE_FLOW = False
 SENTINEL = -901.0
 
 # ----------------------------------------------------------------------------
