@@ -957,7 +957,7 @@ def main():
     print("   volume outside the window vs observed: %+.2f%% to %+.2f%%"
           % (sub["outside_vol_change_pct"].min(),
              sub["outside_vol_change_pct"].max()))
-    print("   (hours changed by more than 1%: max %d of %d in a member)"
+    print("   (hours changed by more than 1%%: max %d of %d in a member)"
           % (sub["outside_hours_changed"].max(),
              (WINDOW_BEFORE_DAYS + WINDOW_AFTER_DAYS) * 24))
     print("   Turn OUTSIDE_RETURN_DAYS down to rejoin sooner, up for a gentler "
