@@ -133,9 +133,9 @@ flowchart TD
 | 16 | `#Extract_Ensemble_To_Timeseries.py` `SET_NAME="ResSim_Obs_RC"` | CAS_Reg_Unreg | `simulation.dss` + mapping | `ResSim_Obs_RC.dss` | Check 1 runs here too. |
 | 17 | `#Add_Reference_Series.py` | CAS_Reg_Unreg | `obsData.dss` | `ResSim_Obs_RC.dss` | Adds rule curve + observed pool. |
 | 18 | **ResSim** Unreg_POR_FIS | — | `ResSimInflows.dss` | `rss\Unreg_POR_FIS\simulation.dss` | Manual. Needed by steps 19, 20 and 22. |
-| 19 | `#Adjusted_Peak_Record.py` | CAS_Reg_Unreg | both result DSS, USGS peaks, unreg POR | `adjusted_peaks.csv/.dss` | **CHECK 2 runs here.** |
+| 19 | `#Adjusted_Peak_Record.py` | CAS_Reg_Unreg | both result DSS, USGS peaks, unreg POR | `adjusted_peaks.csv/.dss`, `adjusted_peaks_screened_out.csv` | **CHECK 2 runs here**, and it screens. Step 20 refuses a CSV without `screen_code`. |
 | 20 | `#Critical_Duration_Adjusted.py` | CAS_Reg_Unreg | `adjusted_peaks.csv`, unreg POR | `critical_duration_adjusted_fits.csv` | Peak and 1-day tied; peak-to-peak adopted. |
-| 21 | `#Unreg_Reg_Curve.py` | CAS_Reg_Unreg | step 20 + `CAS_Unreg_frequency_table.csv` | `regulated_frequency_inferred.csv` | Regulated AEP is inherited, not fitted. |
+| 21 | `#Unreg_Reg_Curve.py` | CAS_Reg_Unreg | step 20 + `CAS_Unreg_frequency_table.csv` + `ResSim_WCM_RC_reg_vs_unreg_wy.csv` | `regulated_frequency_inferred.csv` | Regulated AEP is inherited, not fitted. LOESS centre-of-mass line, not a straight power law. Compares against the 2009 curve. |
 | 22 | `#Create_Synthetic_Ensembles.py` | CAS_Reg_Unreg | `ResSimInflows.dss`, unreg POR elev | `ensemble_synthetic.dss` + mapping | Populates above the 100-year. |
 | 23 | **ResSim** synthetic alternative | — | ensemble | `simulation.dss` | Manual. Copy result to `output/simulation.dss`. |
 | 24 | `#Extract_Ensemble_To_Timeseries.py` `SET_NAME="ResSim_Synth"` | CAS_Reg_Unreg | `simulation.dss` + mapping | `ResSim_Synth.dss` | Synthetic years are 1801+; round-trip check is off. |
@@ -176,6 +176,21 @@ POR run is not reachable, and records which source each year used. Reported in
 on `adjusted_peaks.png` as the unregulated ceiling. A hard failure is an
 adjusted peak above the unregulated peak at a flood; look at the unregulated
 record first, then the ResSim runs, then the adjustment itself.
+
+This check is also a SCREEN. A year whose adjusted peak exceeds the
+unregulated peak AND is at or above `REG_OVER_UNREG_THRESHOLD_CFS` (default
+60,000, a user setting) is screened out, because a reservoir cannot raise a
+flood. Below the threshold the crossing is expected — minimum release, refill
+drawdown — and the year is kept. At 60,000 cfs this catches WY1974 and WY2013;
+WY1980 is already out on the event screen.
+
+`screen_passed` is the AND of the same-event screens and this one, and it is
+what keeps a year out of everything downstream: `#Critical_Duration_Adjusted.py`
+filters on it, and `#Unreg_Reg_Curve.py` re-reads `adjusted_peaks.csv` and drops
+anything not eligible, so a stale dataset CSV cannot put a screened year back on
+the scatter or the frequency plot. Every omission is listed with its reason in
+`adjusted_peaks_screened_out.csv`; the SSP CSV and the DSS record carry eligible
+years only.
 
 ---
 
