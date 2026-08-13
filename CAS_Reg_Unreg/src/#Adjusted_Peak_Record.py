@@ -42,9 +42,37 @@ Two independent screens are applied, and a year must pass both:
      falls outside that window, the Obs_RC "annual peak" is not the same event
      by construction -- no matter how the dates happen to line up.
 
-Years failing either screen are carried through UNADJUSTED, with the reason
-recorded, rather than dropped. That keeps the record complete and makes every
-decision auditable. Set DROP_FAILED_SCREEN = True to omit them instead.
+THE THIRD SCREEN -- REGULATED ABOVE UNREGULATED AT A LARGE EVENT
+----------------------------------------------------------------
+A third screen is applied after the adjustment, because it can only be
+evaluated once the adjusted peak exists:
+
+  3. PHYSICALITY. If the adjusted regulated peak sits ABOVE the unregulated
+     peak for the same event AND is at or above REG_OVER_UNREG_THRESHOLD_CFS,
+     the year is screened out. A reservoir cannot make a flood bigger, so at a
+     large event this combination means something in the chain is wrong -- the
+     unregulated record, the ResSim runs, or the adjustment itself -- and the
+     year cannot be used to describe the unreg-reg relationship. Below the
+     threshold the crossing is expected and is NOT screened: minimum releases
+     and refill drawdown legitimately put more water in the river than nature
+     would, and the record is wanted for large events anyway.
+
+     The threshold is a user setting. It typically screens only a couple of
+     years, but those are exactly the years that would distort the upper end of
+     the unreg-reg relationship, which is the part being relied on.
+
+SCREENED YEARS DO NOT GO DOWNSTREAM
+-----------------------------------
+`screen_passed` is the AND of all three screens, and it is what
+`#Critical_Duration_Adjusted.py` filters on, so a screened year reaches neither
+the critical duration fits nor the unreg-reg scatter and frequency plots.
+Screened years stay in `adjusted_peaks.csv` with their values, their
+`screen_code` and the reason -- nothing is silently dropped -- and are listed
+again on their own in `adjusted_peaks_screened_out.csv`. With
+OMIT_SCREENED_FROM_EXPORTS they are held out of the SSP CSV and the DSS record,
+which are the products a later step consumes. Set DROP_FAILED_SCREEN = True to
+drop them from `adjusted_peaks.csv` as well (not recommended -- it destroys the
+paper trail).
 
 KNOWN CASE -- WY1980
 --------------------
@@ -76,7 +104,11 @@ OUTPUTS
   adjusted_peaks.csv        every shared year, all three peaks, the adjustment,
                             screening results, the reason for each decision, and
                             the unregulated comparison
+  adjusted_peaks_screened_out.csv
+                            the omitted years only, with the screen that caught
+                            each one -- the documentation of what was left out
   adjusted_peaks_ssp.csv    WY and adjusted peak only, for HEC-SSP import
+                            (screened years omitted)
   adjusted_peaks.png        comparison and adjustment magnitude plots
   event_screening.png       timing spread per year, with the screen threshold
   //CASTLE ROCK/FLOW-ANNUAL PEAK-ADJUSTED//IR-CENTURY/<F>/  written to DSS
@@ -109,6 +141,7 @@ USGS_PEAKS_CSV = r"../../CAS_Unreg_FF/data/CastleRock_USGS_peaks.csv"
 OBS_MAPPING_CSV = r"../output/ensemble_obs_rc_mapping.csv"
 
 OUT_CSV = r"../output/adjusted_peaks.csv"
+OUT_SCREENED_CSV = r"../output/adjusted_peaks_screened_out.csv"
 OUT_SSP_CSV = r"../output/adjusted_peaks_ssp.csv"
 OUT_DSS = r"../output/adjusted_peaks.dss"
 OUT_DSS_VERSION = 6
@@ -139,8 +172,31 @@ PEAK_METHOD = "event"
 EVENT_WINDOW_DAYS = 3
 # The USGS peak must also fall inside the Obs_RC simulation window for the year.
 REQUIRE_IN_OBS_WINDOW = True
-# Years failing a screen: False = carry through unadjusted, True = omit entirely
+# Years failing a screen: False = keep the row in adjusted_peaks.csv flagged and
+# unadjusted (recommended -- it is the paper trail), True = drop it from that
+# file too. Either way a screened year is excluded from everything downstream,
+# because #Critical_Duration_Adjusted.py filters on screen_passed.
 DROP_FAILED_SCREEN = False
+# Hold screened years out of the products a later step reads: the SSP CSV and
+# the DSS record. adjusted_peaks.csv always keeps them (unless DROP_FAILED_SCREEN).
+OMIT_SCREENED_FROM_EXPORTS = True
+
+# --- screen 3: regulated peak above unregulated at a large event ------------
+# Applied AFTER the adjustment, since it is the ADJUSTED peak that has to sit
+# below the unregulated peak. A year is screened out when BOTH hold:
+#     adjusted peak  >  unregulated peak for the same event (by UNREG_TOL_CFS)
+#     adjusted peak  >= REG_OVER_UNREG_THRESHOLD_CFS
+# Below the threshold the crossing is expected -- minimum release and refill
+# drawdown put more water in the river than nature would -- so those years are
+# reported but kept. This is the setting to move if the screen is catching too
+# much or too little; it is deliberately separate from UNREG_LOW_FLOW_CFS,
+# which only controls how the crossing is REPORTED.
+SCREEN_REG_OVER_UNREG = True
+REG_OVER_UNREG_THRESHOLD_CFS = 60000.0
+# Test the threshold against the adjusted regulated peak ("reg") or against the
+# unregulated peak it is being compared with ("unreg"). "reg" matches the way
+# the screen is described: screen where the REGULATED peak is large.
+REG_OVER_UNREG_THRESHOLD_ON = "reg"
 # Years whose USGS peak is below this are reported separately -- low-flow years
 # are where spurious timing mismatches cluster, because the annual maximum is
 # not a distinct storm.
@@ -420,6 +476,98 @@ def screen_year(wy, t_usgs, t_wcm, t_obs, obs_windows):
     return True, "same event"
 
 
+def apply_reg_over_unreg_screen(table):
+    """Screen 3, then resolve the combined screen. Adds the audit columns.
+
+    Runs on the assembled table because the adjusted peak has to exist first.
+    Adds:
+        screen_reg_le_unreg  True when the year passes screen 3
+        screen_passed        AND of the same-event screens and screen 3
+        screen_code          ok | different_event | reg_over_unreg | both
+        screen_reason        why, in words
+    """
+    n = len(table)
+    passes = np.ones(n, dtype=bool)
+    reasons = [""] * n
+
+    if SCREEN_REG_OVER_UNREG:
+        for i in range(n):
+            row = table.iloc[i]
+            p_adj = float(row["adjusted_peak"])
+            ref = float(row["unreg_ref"]) if pd.notna(row["unreg_ref"]) else np.nan
+            if not np.isfinite(ref):
+                continue
+            if p_adj - ref <= UNREG_TOL_CFS:
+                continue
+            gauge = p_adj if REG_OVER_UNREG_THRESHOLD_ON == "reg" else ref
+            if gauge < REG_OVER_UNREG_THRESHOLD_CFS:
+                continue
+            passes[i] = False
+            reasons[i] = ("regulated peak %.0f exceeds the unregulated peak %.0f "
+                          "by %.0f cfs (%.1f%%) at or above the %s screening "
+                          "threshold of %s cfs -- a reservoir cannot raise a "
+                          "flood, so the pair is not usable"
+                          % (p_adj, ref, p_adj - ref, 100.0 * (p_adj - ref) / ref,
+                             REG_OVER_UNREG_THRESHOLD_ON,
+                             format(int(REG_OVER_UNREG_THRESHOLD_CFS), ",")))
+
+    table = table.copy()
+    table["screen_reg_le_unreg"] = passes
+    same_event = table["screen_same_event"].values.astype(bool)
+    table["screen_passed"] = same_event & passes
+
+    codes, notes = [], []
+    for i in range(n):
+        if same_event[i] and passes[i]:
+            codes.append("ok")
+            notes.append("same event; adjusted peak below the unregulated peak")
+        elif not same_event[i] and not passes[i]:
+            codes.append("both")
+            notes.append("%s; and %s" % (table["decision"].iloc[i], reasons[i]))
+        elif not same_event[i]:
+            codes.append("different_event")
+            notes.append(str(table["decision"].iloc[i]))
+        else:
+            codes.append("reg_over_unreg")
+            notes.append(reasons[i])
+    table["screen_code"] = codes
+    table["screen_reason"] = notes
+
+    # Fold the new screen into the decision text so one column still reads as
+    # the record of what happened to that year.
+    for i in range(n):
+        if not passes[i]:
+            table.iloc[i, table.columns.get_loc("decision")] = (
+                "SCREENED OUT: %s" % reasons[i])
+    return table
+
+
+def report_screening(table):
+    """Print, and return, what was screened out and why."""
+    screened = table[~table["screen_passed"]]
+    print("\n" + "=" * 78)
+    print("EVENT SCREENING -- years omitted from everything downstream")
+    print("=" * 78)
+    print("   eligible : %d of %d years" % (int(table["screen_passed"].sum()),
+                                            len(table)))
+    if screened.empty:
+        print("   nothing screened out")
+        return screened
+    by_code = screened["screen_code"].value_counts()
+    print("   screened : %d  (%s)"
+          % (len(screened), ", ".join("%s %d" % (k, v) for k, v in by_code.items())))
+    print("   screen 3 threshold: %s cfs on the %s peak"
+          % (format(int(REG_OVER_UNREG_THRESHOLD_CFS), ","),
+             REG_OVER_UNREG_THRESHOLD_ON))
+    for _, row in screened.sort_values("WY").iterrows():
+        print("      WY%d  [%s]  usgs %.0f  adjusted %.0f  unreg %s"
+              % (row["WY"], row["screen_code"], row["usgs"], row["adjusted_peak"],
+                 format(int(row["unreg_ref"]), ",") if pd.notna(row["unreg_ref"])
+                 else "n/a"))
+        print("            %s" % row["screen_reason"])
+    return screened
+
+
 def report_unreg(table):
     """Print the regulated vs unregulated check."""
     if "unreg_ref" not in table.columns:
@@ -534,7 +682,9 @@ def plot_screening(table, stem):
     """Timing spread per year against the screening threshold."""
     fig, ax = plt.subplots(figsize=(14, 5.5))
     x = table["WY"].values
-    colors = ["#16a085" if p else "#c0392b" for p in table["screen_passed"]]
+    palette = {"ok": "#16a085", "different_event": "#c0392b",
+               "reg_over_unreg": "#e67e22", "both": "#7d3c98"}
+    colors = [palette.get(c, "#c0392b") for c in table["screen_code"]]
     ax.bar(x, table["spread_days"].fillna(0.0), color=colors)
     ax.axhline(EVENT_WINDOW_DAYS, color="k", lw=1.1, ls="--")
     ax.text(x.min(), EVENT_WINDOW_DAYS + 1, "screen: %d days" % EVENT_WINDOW_DAYS,
@@ -548,9 +698,16 @@ def plot_screening(table, stem):
     ax.set_ylabel("Max spread between the three peak times (days)")
     ax.set_xlabel("Water year")
     ax.set_title("Event screening -- do the USGS, WCM_RC and Obs_RC peaks "
-                 "describe the same storm?")
-    handles = [Line2D([], [], color="#16a085", lw=6, label="Same event, eligible"),
-               Line2D([], [], color="#c0392b", lw=6, label="Different event, not adjusted")]
+                 "describe the same storm, and does the adjusted peak stay "
+                 "below the unregulated peak?")
+    handles = [Line2D([], [], color=palette["ok"], lw=6, label="Eligible"),
+               Line2D([], [], color=palette["different_event"], lw=6,
+                      label="Different event, screened out"),
+               Line2D([], [], color=palette["reg_over_unreg"], lw=6,
+                      label="Reg above unreg at >= %s cfs, screened out"
+                            % format(int(REG_OVER_UNREG_THRESHOLD_CFS), ",")),
+               Line2D([], [], color=palette["both"], lw=6,
+                      label="Both screens failed")]
     ax.legend(handles=handles, loc="upper left", fontsize=9)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -603,7 +760,7 @@ def main():
                 row = {
                     "WY": wy, "usgs": p_usgs, "wcm": np.nan, "obs": np.nan,
                     "delta_wcm_minus_obs": np.nan, "adjusted_peak": p_usgs,
-                    "adjusted": False, "screen_passed": False,
+                    "adjusted": False, "screen_same_event": False,
                     "spread_days": np.nan, "t_usgs": t_usgs.date(),
                     "t_wcm": pd.NaT, "t_obs": pd.NaT,
                     "low_peak_year": p_usgs < LOW_PEAK_CFS,
@@ -646,7 +803,7 @@ def main():
             "delta_wcm_minus_obs": delta,
             "adjusted_peak": p_adjusted,
             "adjusted": adjust,
-            "screen_passed": passed,
+            "screen_same_event": passed,
             "spread_days": spread,
             "t_usgs": t_usgs.date(), "t_wcm": t_wcm.date(), "t_obs": t_obs.date(),
             "low_peak_year": p_usgs < LOW_PEAK_CFS,
@@ -657,12 +814,21 @@ def main():
         rows.append(row)
 
     table = pd.DataFrame(rows)
+    table = apply_reg_over_unreg_screen(table)
+    screened = report_screening(table)
+    screened[["WY", "usgs", "wcm", "obs", "delta_wcm_minus_obs", "adjusted_peak",
+              "unreg_ref", "unreg_source", "adj_minus_unreg", "spread_days",
+              "t_usgs", "t_wcm", "t_obs", "screen_code", "screen_reason"]].to_csv(
+        OUT_SCREENED_CSV, index=False, float_format="%.1f")
+
     if DROP_FAILED_SCREEN:
         table = table[table["screen_passed"]].reset_index(drop=True)
 
     table.to_csv(OUT_CSV, index=False, float_format="%.1f")
-    table[["WY", "adjusted_peak"]].to_csv(OUT_SSP_CSV, index=False,
-                                          float_format="%.0f")
+    # Everything that feeds a later step carries eligible years only.
+    export = table[table["screen_passed"]] if OMIT_SCREENED_FROM_EXPORTS else table
+    export[["WY", "adjusted_peak"]].to_csv(OUT_SSP_CSV, index=False,
+                                           float_format="%.0f")
 
     if os.path.exists(OUT_DSS):
         os.remove(OUT_DSS)
@@ -671,7 +837,7 @@ def main():
         span = pd.date_range(pd.Timestamp(int(table["WY"].min()) - 1, 10, 1),
                              pd.Timestamp(int(table["WY"].max()), 9, 30), freq="D")
         values = pd.Series(SENTINEL, index=span)
-        for _, row in table.iterrows():
+        for _, row in export.iterrows():
             values.loc[pd.Timestamp(row["t_usgs"])] = row["adjusted_peak"]
         # DSS stamps are end-of-period: a 1DAY value is stamped at the NEXT midnight
         start_time = (span[0] + pd.Timedelta(days=1)).strftime("%d%b%Y %H:%M:%S").upper()
@@ -729,7 +895,11 @@ def main():
 
     print("-" * 78)
     print("Peaks CSV   : %s" % OUT_CSV)
-    print("SSP CSV     : %s" % OUT_SSP_CSV)
+    print("Screened out: %s  (%d years, omitted downstream)"
+          % (OUT_SCREENED_CSV, len(screened)))
+    print("SSP CSV     : %s%s"
+          % (OUT_SSP_CSV,
+             "  (eligible years only)" if OMIT_SCREENED_FROM_EXPORTS else ""))
     print("DSS         : %s  %s" % (OUT_DSS, OUT_DSS_PATH))
     print("Plots       : %s.png and %s_screening.png" % (PLOT_STEM, PLOT_STEM))
 
