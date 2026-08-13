@@ -112,6 +112,45 @@ VOLUME_ITERATIONS = 12                  # refine f_out against the true rolling 
 VOLUME_TOLERANCE = 0.002                # stop when the 5-day is within 0.2%
 SHAPE_STRAIN_WARN = 2.0                 # warn when f_out/f_peak is beyond this or its inverse
 
+# --- how fast the hydrograph returns to the observed one outside the window --
+# The flow-based multiplier is a function of Q alone, so on its own it rescales
+# the ENTIRE member window -- the 10-day lead-in and the 20-day recession
+# included. Nothing outside +/- VOLUME_HALF_WIDTH_DAYS is constrained by either
+# target, so that part of the hydrograph is being changed for no reason, and it
+# changes the antecedent condition the reservoir starts the flood with.
+#
+# The multiplier is therefore wrapped in a time envelope:
+#
+#     m(Q, t) = 1 + (f(Q) - 1) * e(t)
+#
+#     e(t) = 1                     inside  +/- VOLUME_HALF_WIDTH_DAYS
+#     e(t) -> 0 over RETURN_DAYS   outside, measured from the WINDOW EDGE
+#     e(t) = 0                     beyond that -- the observed flow, untouched
+#
+# Inside the window nothing changes, so the peak and 5-day targets are still met
+# exactly. The envelope is inside the iteration loop, so the 5-day solve sees
+# the hydrograph that is actually written.
+#
+# RETURN_DAYS is the knob to turn. Smaller = back on the observed hydrograph
+# sooner, at the cost of a sharper join at the window edge; larger = a gentler
+# join that touches more of the recession. 1.5 days puts the member back on the
+# observed flow four days out from the peak.
+OUTSIDE_RETURN_DAYS = 1.5
+# Recession side only. None = same as OUTSIDE_RETURN_DAYS. Worth lengthening if
+# a step is visible on the falling limb, which is the side that carries volume.
+OUTSIDE_RETURN_DAYS_AFTER = None
+# Shape of the return:
+#   "cosine" : half-cosine, flat at both ends -- no kink where it joins the
+#              window and none where it reaches the observed flow. The default.
+#   "linear" : straight ramp. Fastest to explain, slight kink at each end.
+#   "power"  : (1 - d/L) ** OUTSIDE_RETURN_POWER. Exponent above 1 holds the
+#              scaling longer then drops; below 1 drops immediately then trails.
+OUTSIDE_RETURN_SHAPE = "cosine"
+OUTSIDE_RETURN_POWER = 2.0
+# False restores the old behaviour: the multiplier applies across the whole
+# member window with no return at all.
+APPLY_OUTSIDE_RETURN = True
+
 # --- starting pool elevation -------------------------------------------------
 # "rulecurve"  : the WCM rule curve on the event's start date.
 # "median_por" : the MEDIAN simulated pool for that calendar day, taken from the
@@ -309,6 +348,63 @@ def rolling_max_mean(values, index, hours):
                  .rolling(hours, min_periods=int(hours * 0.9)).mean().max())
 
 
+def return_envelope(index, peak_time, half_width_days):
+    """Weight on the scaling: 1 inside the window, falling to 0 outside it.
+
+    Distance is measured from the EDGE of the window, not from the peak, so
+    half_width_days is untouched no matter what the return settings are.
+    """
+    offset = (index - peak_time) / pd.Timedelta(days=1)
+    if not APPLY_OUTSIDE_RETURN:
+        return np.ones(len(offset))
+    beyond = np.abs(offset) - half_width_days
+    length = np.where(offset < 0, OUTSIDE_RETURN_DAYS,
+                      OUTSIDE_RETURN_DAYS if OUTSIDE_RETURN_DAYS_AFTER is None
+                      else OUTSIDE_RETURN_DAYS_AFTER)
+    length = np.maximum(np.asarray(length, dtype=float), 1e-9)
+    d = np.clip(beyond / length, 0.0, 1.0)          # 0 at the edge, 1 when done
+    if OUTSIDE_RETURN_SHAPE == "linear":
+        return 1.0 - d
+    if OUTSIDE_RETURN_SHAPE == "power":
+        return (1.0 - d) ** OUTSIDE_RETURN_POWER
+    return 0.5 * (1.0 + np.cos(np.pi * d))          # cosine, flat at both ends
+
+
+def apply_multiplier(flow, factor, envelope):
+    """Blend a flow-based multiplier back to 1.0 through the time envelope."""
+    return (1.0 + (factor - 1.0) * envelope) * flow
+
+
+def peak_correction(factor_peak, ratio):
+    """Rescale that fixes the peak without disturbing the returned-to region.
+
+    A flat multiply would lift the whole member, including the part that is
+    supposed to be the observed hydrograph exactly. Correcting the MULTIPLIER
+    instead leaves m = 1 wherever the envelope has already reached zero.
+    """
+    if not np.isfinite(ratio) or abs(factor_peak - 1.0) < 1e-9:
+        return 1.0
+    return (factor_peak * ratio - 1.0) / (factor_peak - 1.0)
+
+
+def outside_change(scaled, flow, index, peak_time, half_width_days):
+    """How much of the member outside the volume window is not the observed flow."""
+    offset = np.abs((index - peak_time) / pd.Timedelta(days=1))
+    outside = offset > half_width_days
+    if not outside.any():
+        return {"outside_max_change_pct": 0.0, "outside_vol_change_pct": 0.0,
+                "outside_hours_changed": 0}
+    o_flow = np.asarray(flow)[outside]
+    o_scaled = np.asarray(scaled)[outside]
+    good = o_flow > 0
+    rel = np.abs(o_scaled[good] / o_flow[good] - 1.0) if good.any() else np.array([0.0])
+    total = o_flow.sum()
+    return {"outside_max_change_pct": 100.0 * float(rel.max()),
+            "outside_vol_change_pct": (100.0 * (o_scaled.sum() - total) / total
+                                       if total > 0 else 0.0),
+            "outside_hours_changed": int((rel > 0.01).sum())}
+
+
 def scale_volume_matched(flow, index, target_peak, target_vol5):
     """Flow-dependent multiplier hitting the peak exactly and the 5-day by iteration.
 
@@ -318,10 +414,17 @@ def scale_volume_matched(flow, index, target_peak, target_vol5):
     hydrograph keeps its ordering. f_out is solved from the 5-day volume over
     +/- VOLUME_HALF_WIDTH_DAYS, then refined: reshaping moves which 5-day window
     is the maximum, so the closed-form answer is only a first guess.
+
+    Outside the volume window the multiplier is blended back to 1.0 over
+    OUTSIDE_RETURN_DAYS, so the member rejoins the observed hydrograph instead
+    of carrying the scaling through the whole lead-in and recession. The
+    envelope is applied INSIDE the loop, so the 5-day is solved against the
+    hydrograph that actually gets written.
     """
     peak_time = index[int(np.argmax(flow))]
     offset_days = (index - peak_time) / pd.Timedelta(days=1)
     inside = np.abs(offset_days) <= VOLUME_HALF_WIDTH_DAYS
+    envelope = return_envelope(index, peak_time, VOLUME_HALF_WIDTH_DAYS)
     span = flow.max() - flow.min()
     weight = (flow - flow.min()) / span if span > 0 else np.ones_like(flow)
     f_peak = target_peak / flow.max()
@@ -333,7 +436,8 @@ def scale_volume_matched(flow, index, target_peak, target_vol5):
 
     best = None
     for _ in range(VOLUME_ITERATIONS):
-        scaled = (f_out + (f_peak - f_out) * weight) * flow
+        factor = f_out + (f_peak - f_out) * weight
+        scaled = apply_multiplier(flow, factor, envelope)
         got5 = rolling_max_mean(scaled, index, 120)
         err = got5 / target_vol5 - 1.0
         if best is None or abs(err) < abs(best[2]):
@@ -344,12 +448,19 @@ def scale_volume_matched(flow, index, target_peak, target_vol5):
         step = (target_vol5 - got5) / max(got5, 1.0)
         f_out = f_out * (1.0 + 0.8 * step) if f_out > 0 else f_out + 0.05 * step
     f_out, scaled, err = best
-    # peak is exact by construction, but rescale to be certain after iteration
-    scaled = scaled * (target_peak / scaled.max())
-    return scaled, {"f_peak": f_peak, "f_out": f_out,
-                    "shape_strain": f_out / f_peak if f_peak else np.nan,
-                    "vol5_err": err,
-                    "vol5_got": rolling_max_mean(scaled, index, 120)}
+    # peak is exact by construction, but correct after iteration -- through the
+    # multiplier, so the returned-to region stays exactly observed
+    factor = f_out + (f_peak - f_out) * weight
+    correction = peak_correction(f_peak, target_peak / scaled.max())
+    if abs(correction - 1.0) > 1e-12:
+        scaled = apply_multiplier(flow, 1.0 + (factor - 1.0) * correction, envelope)
+    info = {"f_peak": f_peak, "f_out": f_out,
+            "shape_strain": f_out / f_peak if f_peak else np.nan,
+            "vol5_err": err,
+            "vol5_got": rolling_max_mean(scaled, index, 120)}
+    info.update(outside_change(scaled, flow, index, peak_time,
+                               VOLUME_HALF_WIDTH_DAYS))
+    return scaled, info
 
 
 def scale_linear_taper(flow, index, target_peak):
@@ -363,10 +474,13 @@ def scale_linear_taper(flow, index, target_peak):
     ramp = np.clip(1.0 - offset_days / TAPER_HALF_WIDTH_DAYS, 0.0, 1.0)
     f_peak = target_peak / flow.max()
     scaled = (1.0 + (f_peak - 1.0) * ramp) * flow
-    return scaled, {"f_peak": f_peak, "f_out": 1.0,
-                    "shape_strain": 1.0 / f_peak if f_peak else np.nan,
-                    "vol5_err": np.nan,
-                    "vol5_got": rolling_max_mean(scaled, index, 120)}
+    info = {"f_peak": f_peak, "f_out": 1.0,
+            "shape_strain": 1.0 / f_peak if f_peak else np.nan,
+            "vol5_err": np.nan,
+            "vol5_got": rolling_max_mean(scaled, index, 120)}
+    info.update(outside_change(scaled, flow, index, peak_time,
+                               VOLUME_HALF_WIDTH_DAYS))
+    return scaled, info
 
 
 def median_pool_by_dayofyear(dss_file, pathname, min_years):
@@ -439,6 +553,19 @@ def plot_events(events, mapping, stem):
         ax.plot(hours, ev["total"].values, color="k", lw=1.8, label="observed x1.00")
         ax.plot(hours, ev["cas"].fillna(0.0).values, color="0.6", lw=0.9, ls=":",
                 label="local (observed)")
+        # mark where the targets bind and where the member rejoins the observed
+        peak_day = float(np.argmax(ev["total"].values)) / 24.0
+        ax.axvspan(peak_day - VOLUME_HALF_WIDTH_DAYS,
+                   peak_day + VOLUME_HALF_WIDTH_DAYS,
+                   color="#2c7fb8", alpha=0.10, zorder=0)
+        if APPLY_OUTSIDE_RETURN:
+            after = (OUTSIDE_RETURN_DAYS if OUTSIDE_RETURN_DAYS_AFTER is None
+                     else OUTSIDE_RETURN_DAYS_AFTER)
+            for a, b in ((peak_day - VOLUME_HALF_WIDTH_DAYS - OUTSIDE_RETURN_DAYS,
+                          peak_day - VOLUME_HALF_WIDTH_DAYS),
+                         (peak_day + VOLUME_HALF_WIDTH_DAYS,
+                          peak_day + VOLUME_HALF_WIDTH_DAYS + after)):
+                ax.axvspan(a, b, color="#e67e22", alpha=0.10, zorder=0)
         ax.set_title("%s   %s" % (ev["label"], ev["note"]), fontsize=10)
         ax.set_xlabel("Days into the member window", fontsize=8)
         ax.set_ylabel("Unregulated flow (cfs)", fontsize=8)
@@ -446,7 +573,10 @@ def plot_events(events, mapping, stem):
         ax.legend(fontsize=7)
         ax.grid(alpha=0.25)
     fig.suptitle("Synthetic source events and their scaled family "
-                 "(Mossyrock inflow + Castle Rock local)", fontsize=12)
+                 "(Mossyrock inflow + Castle Rock local)\n"
+                 "blue band = the +/- %.1f day volume window, orange = the "
+                 "return to the observed hydrograph"
+                 % VOLUME_HALF_WIDTH_DAYS, fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig("%s_events.png" % stem, dpi=150)
     plt.close(fig)
@@ -618,6 +748,11 @@ def main():
                           "scaled_unreg_5day_cfs": round(info["vol5_got"], 1),
                           "vol5_error_pct": (round(100 * info["vol5_err"], 2)
                                              if np.isfinite(info["vol5_err"]) else np.nan),
+                          "outside_max_change_pct": round(
+                              info["outside_max_change_pct"], 2),
+                          "outside_vol_change_pct": round(
+                              info["outside_vol_change_pct"], 2),
+                          "outside_hours_changed": info["outside_hours_changed"],
                           "scale_factor": round(factor, 4),
                           "observed_unreg_peak_cfs": round(ev["obs_peak"], 1),
                           "local_share_at_peak": round(ev["local_share"], 4),
@@ -678,6 +813,32 @@ def main():
     if np.isfinite(worst):
         print("\n   5-day volume: worst miss %.2f%% (tolerance %.1f%%)"
               % (worst, 100 * VOLUME_TOLERANCE))
+
+    print("\nOUTSIDE THE +/- %.1f DAY WINDOW" % VOLUME_HALF_WIDTH_DAYS)
+    if APPLY_OUTSIDE_RETURN:
+        after = (OUTSIDE_RETURN_DAYS if OUTSIDE_RETURN_DAYS_AFTER is None
+                 else OUTSIDE_RETURN_DAYS_AFTER)
+        print("   returning to the observed hydrograph over %.2f day(s) before "
+              "and %.2f after," % (OUTSIDE_RETURN_DAYS, after))
+        print("   %s shaped, so a member is back on the observed flow %.2f days "
+              "past the peak." % (OUTSIDE_RETURN_SHAPE,
+                                  VOLUME_HALF_WIDTH_DAYS + after))
+    else:
+        print("   APPLY_OUTSIDE_RETURN is False -- the multiplier runs across "
+              "the whole member window.")
+    sub = mapping[["event", "target", "outside_max_change_pct",
+                   "outside_vol_change_pct", "outside_hours_changed"]]
+    sub = sub.drop_duplicates(subset=["event", "target"])
+    print("   largest single-hour change outside the window: %.2f%%"
+          % sub["outside_max_change_pct"].max())
+    print("   volume outside the window vs observed: %+.2f%% to %+.2f%%"
+          % (sub["outside_vol_change_pct"].min(),
+             sub["outside_vol_change_pct"].max()))
+    print("   (hours changed by more than 1%: max %d of %d in a member)"
+          % (sub["outside_hours_changed"].max(),
+             (WINDOW_BEFORE_DAYS + WINDOW_AFTER_DAYS) * 24))
+    print("   Turn OUTSIDE_RETURN_DAYS down to rejoin sooner, up for a gentler "
+          "join.")
     print("\nSynthetic water years %d-%d, one per member, so reassembled blocks"
           % (mapping["synth_water_year"].min(), mapping["synth_water_year"].max()))
     print("never overlap. source_start holds the true event date.")
