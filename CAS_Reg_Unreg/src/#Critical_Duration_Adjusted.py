@@ -388,8 +388,24 @@ def main():
     print("   detected DSS version %s" % dss_version(UNREG_DSS))
 
     peaks = pd.read_csv(ADJUSTED_PEAKS_CSV, parse_dates=["t_usgs"])
+    # #Adjusted_Peak_Record.py owns the screening. screen_passed is the AND of
+    # the same-event screens and the reg-above-unreg screen, so filtering here
+    # is what keeps a screened year out of the fits, the scatter and the
+    # frequency plot. screen_code says which screen caught it.
+    if "screen_code" not in peaks.columns:
+        raise SystemExit(
+            "%s has no screen_code column -- it predates the reg-above-unreg\n"
+            "screen. Re-run #Adjusted_Peak_Record.py before this script, or the\n"
+            "screened years will silently reach the scatter and frequency plots."
+            % ADJUSTED_PEAKS_CSV)
     if REQUIRE_SCREEN_PASSED:
-        peaks = peaks[peaks["screen_passed"]]
+        dropped = peaks[~peaks["screen_passed"].astype(bool)]
+        peaks = peaks[peaks["screen_passed"].astype(bool)]
+        if len(dropped):
+            print("Screened out    : %d water years -- %s"
+                  % (len(dropped), ", ".join(
+                      "WY%d (%s)" % (r["WY"], r["screen_code"])
+                      for _, r in dropped.sort_values("WY").iterrows())))
     peaks = peaks[(peaks["WY"] >= FIRST_WY) & (~peaks["WY"].isin(EXCLUDE_WYS))]
     print("Adjusted peaks  : %d water years (%d..%d)"
           % (len(peaks), peaks["WY"].min(), peaks["WY"].max()))
@@ -403,7 +419,8 @@ def main():
         entry = {"WY": int(row["WY"]), "reg_peak": float(row["adjusted_peak"]),
                  "usgs_peak": float(row["usgs"]),
                  "adjustment": float(row["adjusted_peak"] - row["usgs"]),
-                 "reg_peak_time": when}
+                 "reg_peak_time": when,
+                 "screen_code": str(row["screen_code"])}
         for label, hours in DURATIONS:
             key = label.replace(" ", "_").replace("(", "").replace(")", "")
             value, centre, coverage = event_duration(
