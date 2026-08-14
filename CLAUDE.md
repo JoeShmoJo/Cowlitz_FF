@@ -238,11 +238,25 @@ and invents a new maximum — only moved the bump 1-2%, which the user judged
 not worth the complexity. Do not re-propose it without a materially better
 idea.
 
-As of commit `05b04bf` the DSS files in this repo are the PRE-chop versions.
-Verify before claiming a plot reflects the final hydrographs: read the member
-out of `ResSim_Synth.dss` and compare the largest pre-peak value against the
-peak. Nov1986 500-yr (member 47, synthetic WY1847) reads 105,586 cfs against a
-228,861 cfs peak in the pre-chop run.
+**The repo is in a mixed state and it is easy to get this wrong.** As of
+commit `db5e090` the RESULTS are post-chop (`ResSim_Synth.dss`,
+`synthetic_results.csv`) but the INPUT is not — `ensemble_synthetic.dss` is
+still the unchopped script output, because the chopped ensemble was never
+uploaded. Re-running ResSim from the repo copy silently reproduces the pre-chop
+answer. Do not assume the two agree.
+
+Check by hydrograph, never by commit date. Nov1986 500-yr (member 47, synthetic
+WY1847) against its 228,861 cfs peak:
+
+    ensemble_synthetic.dss   103,600 cfs  0.45   <- unchopped build
+    ResSim_Synth.dss          97,746 cfs  0.43   <- post-chop (current)
+                             105,586 cfs  0.46   <- what the pre-chop run read
+
+The chop moved four members: Dec1977 250yr/500yr/beyond and Nov1986 beyond,
+regulated peaks down 1.4% to 5.4%. The other 44 are identical. It works by
+holding the pool lower going into the main peak, so the effect is on the
+REGULATED side even where the unregulated hydrograph barely moved (Dec1977's
+routed unreg bump is 0.38 of its peak either way).
 
 
 ## Open issue as of 7 Aug 2026

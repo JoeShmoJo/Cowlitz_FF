@@ -1,7 +1,7 @@
 part_b,part_c,members_read,members_missing,start,end,valid_hours,gap_hours,min,max,overlaps,out_pathname
 CastleRock_NWS,Flow,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,0.0,266743.84375,0,//CastleRock_NWS/Flow//1HOUR/ResSim_Synth/
 Mossyrock-Pool,Flow-OUT,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,0.0,184290.921875,0,//Mossyrock-Pool/Flow-OUT//1HOUR/ResSim_Synth/
-Mossyrock-Pool,Elev,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,721.478759765625,778.757568359375,0,//Mossyrock-Pool/Elev//1HOUR/ResSim_Synth/
+Mossyrock-Pool,Elev,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,721.8992309570312,778.757568359375,0,//Mossyrock-Pool/Elev//1HOUR/ResSim_Synth/
 Mossyrock-Pool,Flow-IN,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,388.6820373535156,186342.84375,0,//Mossyrock-Pool/Flow-IN//1HOUR/ResSim_Synth/
 CastleRock_NWS,Flow-Local,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,0.0,186665.890625,0,//CastleRock_NWS/Flow-Local//1HOUR/ResSim_Synth/
 CastleRock_NWS,Flow-UNREG,48,0,1801-01-30 01:00:00,1847-12-13 22:00:00,34464,376390,782.9071655273438,279538.4375,0,//CastleRock_NWS/Flow-UNREG//1HOUR/ResSim_Synth/

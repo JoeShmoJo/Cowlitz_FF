@@ -229,16 +229,40 @@ ResSim run silently goes back to the two-peaked hydrographs. There is no check
 that catches this downstream — the members still hit their peak and volume
 targets either way. If step 22 is re-run for any reason, redo 22b.
 
-**Which files are pre-chop and which are post-chop.** The chop lives only in
-the DSS, so the only way to tell is to look at the hydrograph. As of commit
-`05b04bf` the copies in this repository are **pre-chop**: the mini peak is
-still at full height in `ensemble_synthetic.dss`, and `ResSim_Synth.dss` /
-`synthetic_results.csv` are the routed results of that unchopped ensemble
-(Nov1986 500-yr: built 103,600 cfs, routed 105,586 cfs, 0.46 of its peak).
-Anything drawn from those files is the pre-chop answer. Re-upload the chopped
-ensemble and its ResSim results, re-run steps 24-26, and the plots follow
-automatically — `#Unreg_Reg_Curve.py` reads `synthetic_results.csv` and needs
-no edit.
+**What the chop actually changed.** It lowered the regulated peak on four
+members, by holding the pool lower going into the main peak — the bump was
+filling storage before the flood arrived:
+
+| Member | Regulated peak, pre-chop | post-chop | change |
+|---|---|---|---|
+| 18 Dec1977 250-yr | 166,082 | 163,780 | −1.4% |
+| 19 Dec1977 500-yr | 207,044 | 200,334 | −3.2% |
+| 20 Dec1977 beyond | 264,866 | 251,724 | −5.0% |
+| 48 Nov1986 beyond | 207,830 | 196,614 | −5.4% |
+
+The other 44 members are unchanged. Dec1977's attenuation ratio tops out at
+0.95 rather than 0.99, and Nov1986's at 0.72 rather than 0.76, so the chop
+pulls the top of the regulated curve down slightly.
+
+**PROVENANCE GAP — the results in this repository cannot be reproduced from
+the ensemble in this repository.** As of commit `db5e090`, `ResSim_Synth.dss`
+and `synthetic_results.csv` are **post-chop**, but `ensemble_synthetic.dss` is
+still the **unchopped script output** — the chopped ensemble was never uploaded
+and exists only on the user's machine. Re-running steps 23-24 from the repo copy
+would silently reproduce the pre-chop answer.
+
+The chop lives only in the DSS, so the way to tell them apart is to look at the
+hydrograph. Nov1986 500-yr (member 47, synthetic WY1847) is the clearest test:
+
+| File | Pre-peak bump | As a fraction of the peak |
+|---|---|---|
+| `ensemble_synthetic.dss` (unchopped build) | 103,600 cfs | 0.45 |
+| `ResSim_Synth.dss` pre-chop routing | 105,586 cfs | 0.46 |
+| `ResSim_Synth.dss` post-chop routing (current) | 97,746 cfs | 0.43 |
+
+Uploading the chopped `ensemble_synthetic.dss` would close the gap. Until then,
+treat the ensemble file as an input that no longer matches the results beside
+it.
 
 ---
 
