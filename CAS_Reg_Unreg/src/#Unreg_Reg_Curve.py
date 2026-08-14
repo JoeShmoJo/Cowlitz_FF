@@ -73,6 +73,56 @@ PART 3 -- COMPARISON WITH THE 2009 STUDY
     below and drawn on the same axes, with the differences tabulated in the
     output CSV. It is the only external check available on the upper end.
 
+    The 2009 curve is a DIAGNOSTIC comparison, not part of the result. The
+    adopted report figure (FINAL_SHOW_2009 = False) leaves it off.
+
+PART 4 -- UNCERTAINTY ON THE REGULATED CURVE
+    The regulated flow at an AEP is uncertain for two independent reasons, and
+    the band has to carry both:
+
+      1. FLOW FREQUENCY. The unregulated quantile at that AEP is itself an
+         estimate from a 98-year record. HEC-SSP reports this as confidence
+         limits about the computed curve; sqrt(VarianceLog) is the same thing
+         as a log10 standard error.
+      2. THE UNREG-REG TRANSFORM. At one unregulated magnitude the regulated
+         peak still depends on the shape of the flood, which is what the
+         scatter about the transform line measures.
+
+    They combine in log10 space, but the frequency term has to be carried
+    THROUGH the transform first: a d-dex error in the unregulated flow moves
+    the regulated flow by b*d dex, where b = dlog(reg)/dlog(unreg) is the LOCAL
+    slope of the transform. b runs about 0.57 at the median, where the reservoir
+    absorbs most of an increase, and reaches about 1.5 at the top, where the
+    transform bends towards pass-through and the regulated flow is catching the
+    unregulated flow up. Ignoring b would overstate the band through the middle
+    by nearly 2x and UNDERSTATE it at the top.
+
+    b above 1 also means the raw combination can put the regulated upper bound
+    above the unregulated one, which is not physical at a real flood -- see
+    CLIP_BAND_TO_UNREG.
+
+        sigma_reg(p) = sqrt( (b(p) * sigma_freq(p))^2 + sigma_transform^2 )
+
+    ASYMMETRY, AND WHY THIS IS STILL NOT MONTE CARLO
+    The SSP limits are noncentral-t and genuinely asymmetric: at the 500-year
+    the upper side is about 1.5x the lower side in log space. That asymmetry is
+    kept rather than averaged away by combining the two sides SEPARATELY, which
+    is a two-piece lognormal and still closed form. Monte Carlo buys nothing
+    here because both terms are already log-normal-ish and the only departure
+    from symmetry is the one being carried explicitly. UNCERTAINTY_REPORT
+    prints the combined asymmetry ratio at each AEP; if that ever gets far from
+    1 (say past 2), the two-piece approximation is being asked to do too much
+    and a simple Monte Carlo over the two terms would be the honest next step.
+
+    PREDICTION vs MEAN LINE. TRANSFORM_UNCERTAINTY_BASIS decides what the
+    transform term means:
+      "prediction" (default) the full scatter -- "the next flood of this
+          magnitude could have any of the shapes we have seen". This is the
+          design-relevant question and the wider band.
+      "mean"       scatter / sqrt(n) -- "how well is the average relationship
+          located". Much narrower, and it answers a question nobody is asking
+          of a design curve.
+
 CAUTION
     The transform is supported over the observed unregulated range only. Beyond
     that it is extrapolation whichever method is used, and the plot marks where
@@ -231,6 +281,64 @@ C_2009 = "#117a65"
 
 # The clean figure: regulated and unregulated lines only, no scatter.
 MAKE_FINAL_CURVE_PLOT = True
+
+# --- uncertainty on the regulated curve (PART 4 in the docstring) ------------
+# The confidence limits HEC-SSP wrote into the frequency table. Read off the
+# analysis XML (<ConfidenceLevel>0.05</> and <ConfidenceLevel>0.95</>), i.e. a
+# 90% two-sided interval. If the SSP analysis is re-run at a different level
+# this MUST be changed to match, or every band below is silently mis-scaled --
+# the limits are converted to a sigma by dividing by z at this level.
+SSP_CONF_LIMITS = (0.05, 0.95)
+FREQ_LOWER_COL = "LowerConf"
+FREQ_UPPER_COL = "UpperConf"
+# The limits are reported about the COMPUTED curve ("Value"), while the adopted
+# unregulated curve is the expected-probability one ("Expected"). The spread is
+# therefore taken as a log RATIO to Value and applied to Expected, rather than
+# being used as absolute flows.
+FREQ_LIMIT_BASE_COL = "Value"
+# Cross-check the limits against sqrt(VarianceLog), which is the same standard
+# error by a different route. Warn if they disagree by more than this fraction
+# -- that means SSP_CONF_LIMITS does not match the analysis that wrote the file.
+FREQ_VARIANCE_COL = "VarianceLog"
+FREQ_SIGMA_CHECK_TOL = 0.15
+
+# What the band on the plot spans. 0.90 matches the SSP limits, so the
+# unregulated band drawn here is the one SSP reported.
+UNCERTAINTY_CONF_LEVEL = 0.90
+#   "prediction" : full scatter about the transform -- the next flood of this
+#                  size could have any observed shape. The design question.
+#   "mean"       : scatter / sqrt(n), the uncertainty of the fitted line only.
+TRANSFORM_UNCERTAINTY_BASIS = "prediction"
+# Keep the two sides of the frequency interval separate so the noncentral-t
+# asymmetry survives the combination. False averages them into one sigma.
+COMBINE_ASYMMETRIC = True
+# Print the term-by-term table so the band can be audited at each AEP.
+UNCERTAINTY_REPORT = True
+# Flag if the combined band gets more lopsided than this -- past here the
+# two-piece lognormal is being over-asked and Monte Carlo is worth doing.
+ASYMMETRY_MC_TRIGGER = 2.0
+
+# Hold the regulated UPPER bound at or below the unregulated upper bound at the
+# same confidence level. Without this the band goes non-physical at the top: the
+# local slope b reaches about 1.5 where the transform bends towards pass-through,
+# which amplifies the frequency sigma past the unregulated curve's own sigma, and
+# the raw combination ends up claiming a regulated flood larger than the
+# unregulated flood it was routed from. The central line is already clipped at
+# 1:1 by CLIP_TO_UNREG; this applies the same physics to the band.
+#
+# Only above BAND_CLIP_MIN_CFS. Below it reg > unreg is real and documented --
+# minimum release and refill drawdown put more water in the river than nature
+# would -- so clipping there would be wrong. Same threshold and same reasoning
+# as the reg-over-unreg screen in #Adjusted_Peak_Record.py.
+CLIP_BAND_TO_UNREG = True
+BAND_CLIP_MIN_CFS = 60000.0
+
+# The adopted report figure. The 2009 curve is a diagnostic comparison and is
+# deliberately left off it.
+MAKE_FINAL_UNCERTAINTY_PLOT = True
+FINAL_SHOW_2009 = False
+# Draw the unregulated confidence band as well, for context.
+FINAL_SHOW_UNREG_BAND = True
 
 # ----------------------------------------------------------------------------
 
@@ -728,6 +836,224 @@ def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
     return reg_curve
 
 
+def frequency_sigma_dex(freq):
+    """Log10 standard error of the unregulated quantile, per side, per AEP.
+
+    The SSP confidence limits are noncentral-t and asymmetric, so each side is
+    converted to its own sigma by dividing by z at the level SSP used. Taken as
+    a RATIO to FREQ_LIMIT_BASE_COL (the computed curve the limits belong to) so
+    it can be applied to the adopted Expected curve without mixing the two.
+
+    Cross-checked against sqrt(VarianceLog), which is the same standard error
+    by a different route: if the mean of the two sides disagrees with it, the
+    declared SSP_CONF_LIMITS does not match the analysis that wrote the table
+    and every band downstream is mis-scaled.
+    """
+    z = stats.norm.ppf(SSP_CONF_LIMITS[1])
+    base = freq[FREQ_LIMIT_BASE_COL].values.astype(float)
+    upper = freq[FREQ_UPPER_COL].values.astype(float)
+    lower = freq[FREQ_LOWER_COL].values.astype(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sigma_hi = np.log10(upper / base) / z
+        sigma_lo = np.log10(base / lower) / z
+    sigma_hi = np.where(np.isfinite(sigma_hi) & (sigma_hi > 0), sigma_hi, np.nan)
+    sigma_lo = np.where(np.isfinite(sigma_lo) & (sigma_lo > 0), sigma_lo, np.nan)
+
+    note = ""
+    if FREQ_VARIANCE_COL in freq.columns:
+        declared = np.sqrt(freq[FREQ_VARIANCE_COL].values.astype(float))
+        mean_side = 0.5 * (sigma_hi + sigma_lo)
+        good = np.isfinite(declared) & (declared > 0) & np.isfinite(mean_side)
+        if good.any():
+            rel = np.abs(mean_side[good] / declared[good] - 1.0)
+            note = ("limits vs sqrt(%s): %.1f%% to %.1f%% apart"
+                    % (FREQ_VARIANCE_COL, 100 * rel.min(), 100 * rel.max()))
+            if rel.max() > FREQ_SIGMA_CHECK_TOL:
+                print("WARNING the SSP confidence limits do not match "
+                      "sqrt(%s) to within %.0f%%." % (FREQ_VARIANCE_COL,
+                                                      100 * FREQ_SIGMA_CHECK_TOL))
+                print("        %s" % note)
+                print("        SSP_CONF_LIMITS is set to %s -- check it against "
+                      "the" % (SSP_CONF_LIMITS,))
+                print("        ConfidenceLevel entries in the SSP analysis XML.")
+    return sigma_hi, sigma_lo, note
+
+
+def transform_log_slope(fit, x_eval):
+    """Local slope b = dlog10(reg)/dlog10(unreg) of the transform.
+
+    Taken by finite difference off a dense evaluation of the SAME apply_transform
+    the curve is drawn with, so the monotonic enforcement and the 1:1 clip are
+    both inside the slope rather than being ignored by it. Evaluating the LOESS
+    directly at two nearby points would miss them.
+    """
+    x_eval = np.asarray(x_eval, dtype=float)
+    grid = np.geomspace(max(x_eval.min() * 0.75, 1.0), x_eval.max() * 1.3, 400)
+    y = apply_transform(fit, grid)
+    lg, ly = np.log10(grid), np.log10(np.clip(y, 1e-9, None))
+    slope = np.gradient(ly, lg)
+    return np.interp(np.log10(x_eval), lg, slope)
+
+
+def transform_sigma_dex(fit):
+    """The transform's own log10 sigma, prediction scatter or mean-line error."""
+    if TRANSFORM_UNCERTAINTY_BASIS == "mean":
+        return fit["se_dex"] / np.sqrt(max(fit["n"], 1))
+    return fit["se_dex"]
+
+
+def combine_uncertainty(freq, fit, reg_curve):
+    """Regulated curve confidence band: frequency and transform terms combined.
+
+    sigma_reg = sqrt( (b * sigma_freq)^2 + sigma_transform^2 ), each side kept
+    separate so the noncentral-t asymmetry survives. Returns the band and every
+    term that went into it, so the CSV can show the working.
+    """
+    sigma_hi, sigma_lo, note = frequency_sigma_dex(freq)
+    if not COMBINE_ASYMMETRIC:
+        mean_side = np.nanmean(np.vstack([sigma_hi, sigma_lo]), axis=0)
+        sigma_hi = sigma_lo = mean_side
+    sigma_t = transform_sigma_dex(fit)
+    unreg = freq[FREQ_VALUE_COL].values.astype(float)
+    slope = transform_log_slope(fit, unreg)
+
+    total_hi = np.sqrt((slope * sigma_hi) ** 2 + sigma_t ** 2)
+    total_lo = np.sqrt((slope * sigma_lo) ** 2 + sigma_t ** 2)
+    z = stats.norm.ppf(0.5 + UNCERTAINTY_CONF_LEVEL / 2.0)
+
+    reg_upper = reg_curve * 10.0 ** (z * total_hi)
+    reg_lower = reg_curve * 10.0 ** (-z * total_lo)
+    unreg_upper = unreg * 10.0 ** (z * sigma_hi)
+    unreg_lower = unreg * 10.0 ** (-z * sigma_lo)
+
+    # A regulated flood cannot be bigger than the unregulated flood it came
+    # from -- see CLIP_BAND_TO_UNREG. Applied above BAND_CLIP_MIN_CFS only.
+    clipped = np.zeros(len(reg_upper), dtype=bool)
+    if CLIP_BAND_TO_UNREG:
+        bites = (reg_upper > unreg_upper) & (unreg >= BAND_CLIP_MIN_CFS)
+        reg_upper = np.where(bites, unreg_upper, reg_upper)
+        clipped = bites
+    return {
+        "reg_upper_clipped": clipped,
+        "sigma_freq_hi": sigma_hi, "sigma_freq_lo": sigma_lo,
+        "sigma_transform": sigma_t, "slope": slope,
+        "sigma_reg_hi": total_hi, "sigma_reg_lo": total_lo,
+        "z": z, "note": note,
+        "reg_upper": reg_upper, "reg_lower": reg_lower,
+        # the unregulated band at the same level, for context on the plot
+        "unreg_upper": unreg_upper, "unreg_lower": unreg_lower,
+        "asymmetry": total_hi / total_lo,
+    }
+
+
+def report_uncertainty(freq, unc, fit):
+    """Print the band term by term so it can be audited rather than trusted."""
+    if not UNCERTAINTY_REPORT:
+        return
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+    print("\nREGULATED CURVE UNCERTAINTY  (%d%% band, log10 sigmas)" % pct)
+    print("   transform term : %.4f dex (%s%s)"
+          % (unc["sigma_transform"], TRANSFORM_UNCERTAINTY_BASIS,
+             ", scatter/sqrt(%d)" % fit["n"]
+             if TRANSFORM_UNCERTAINTY_BASIS == "mean" else ", full scatter"))
+    print("   frequency term : from the SSP %g/%g limits%s"
+          % (SSP_CONF_LIMITS[0], SSP_CONF_LIMITS[1],
+             " -- %s" % unc["note"] if unc["note"] else ""))
+    print("   carried through the transform by its local slope b")
+    show = pd.DataFrame({
+        "AEP": freq["AEP"].values,
+        "b": unc["slope"],
+        "sig_freq_lo": unc["sigma_freq_lo"], "sig_freq_hi": unc["sigma_freq_hi"],
+        "sig_reg_lo": unc["sigma_reg_lo"], "sig_reg_hi": unc["sigma_reg_hi"],
+        "asym": unc["asymmetry"],
+    })
+    show = show[show["AEP"].isin([0.5, 0.1, 0.02, 0.01, 0.005, 0.002, 0.001])]
+    print(show.round({"AEP": 4, "b": 3, "sig_freq_lo": 4, "sig_freq_hi": 4,
+                      "sig_reg_lo": 4, "sig_reg_hi": 4, "asym": 3})
+          .to_string(index=False))
+    n_clip = int(unc["reg_upper_clipped"].sum())
+    if n_clip:
+        aeps = freq["AEP"].values[unc["reg_upper_clipped"]]
+        print("   upper bound held at the unregulated upper bound for %d AEP(s): %s"
+              % (n_clip, ", ".join("%g" % a for a in aeps)))
+        print("   (b reaches %.2f there, which would otherwise push the regulated"
+              % np.nanmax(unc["slope"]))
+        print("   band above the unregulated flood it was routed from.)")
+    worst = np.nanmax(np.abs(np.log(unc["asymmetry"])))
+    worst_ratio = float(np.exp(worst))
+    print("   most lopsided AEP: %.2fx between the two sides" % worst_ratio)
+    if worst_ratio > ASYMMETRY_MC_TRIGGER:
+        print("   *** past ASYMMETRY_MC_TRIGGER (%.1fx). The two-piece lognormal"
+              % ASYMMETRY_MC_TRIGGER)
+        print("   is being over-asked -- run a simple Monte Carlo over the two")
+        print("   terms instead of trusting this band.")
+    else:
+        print("   within ASYMMETRY_MC_TRIGGER (%.1fx), so the closed-form"
+              % ASYMMETRY_MC_TRIGGER)
+        print("   two-piece combination is adequate -- no Monte Carlo needed.")
+
+
+def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
+    """THE adopted figure: both curves with the combined uncertainty band.
+
+    No scatter, and no 2009 curve unless FINAL_SHOW_2009 -- everything that
+    placed these lines is on unreg_reg_frequency.png. This one shows the result
+    and how well it is known.
+    """
+    fig, ax = plt.subplots(figsize=(11, 8.4))
+    z = stats.norm.ppf(1.0 - freq["AEP"].values)
+    unreg_curve = freq[FREQ_VALUE_COL].values
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+
+    if FINAL_SHOW_UNREG_BAND:
+        ax.fill_between(z, unc["unreg_lower"], unc["unreg_upper"], color=C_UNREG,
+                        alpha=0.13, zorder=1, lw=0,
+                        label="Unregulated, %d%% (HEC-SSP)" % pct)
+    ax.fill_between(z, unc["reg_lower"], unc["reg_upper"], color=C_REG,
+                    alpha=0.17, zorder=2, lw=0,
+                    label="Regulated, %d%% (frequency + transform)" % pct)
+    ax.plot(z, unreg_curve, color=C_UNREG, lw=2.6, zorder=5, label="Unregulated")
+    ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=5, label="Regulated")
+    if FINAL_SHOW_2009 and table_2009 is not None and len(table_2009):
+        ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
+                table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
+                zorder=4, label=CURVE_2009_LABEL)
+
+    supported = unreg_curve <= fit["x_max"]
+    if supported.any() and not supported.all():
+        z_edge = z[supported].max()
+        ax.axvline(z_edge, color="0.35", lw=1.0, ls=":", zorder=3)
+        ax.text(z_edge, FLOW_LIMITS[1] * 0.94,
+                "  transform supported to here\n  (unreg %s cfs)"
+                % format(int(fit["x_max"]), ","),
+                fontsize=8, color="0.3", va="top")
+
+    ax.set_yscale("log")
+    ax.set_ylim(FLOW_LIMITS)
+    probability_axis(ax, AEP_TICKS, AEP_LIMITS)
+    ax.yaxis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: format(int(v), ",")))
+    ax.grid(which="major", alpha=0.45, lw=0.8)
+    ax.grid(which="minor", alpha=0.2, lw=0.5)
+    ax.set_ylabel("Peak flow (cfs)")
+    ax.set_title("Castle Rock peak flow frequency, regulated and unregulated\n"
+                 "%d%% uncertainty: flow-frequency carried through the "
+                 "unreg-reg transform, combined with the transform scatter"
+                 % pct, fontsize=12)
+    ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
+    ax.text(0.995, 0.015,
+            "Regulated band = sqrt( (b x freq sigma)$^2$ + transform sigma$^2$ ), "
+            "b = dlog(reg)/dlog(unreg)\ntransform sigma = %.3f dex (%s)"
+            % (unc["sigma_transform"], TRANSFORM_UNCERTAINTY_BASIS),
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+            color="0.25",
+            bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="0.6",
+                      alpha=0.9, lw=0.8))
+    fig.tight_layout()
+    fig.savefig("%s_final_uncertainty.png" % stem, dpi=150)
+    plt.close(fig)
+
+
 def plot_final_curves(freq, fit, table_2009, stem):
     """The adopted figure: regulated and unregulated lines, nothing else.
 
@@ -874,6 +1200,11 @@ def main():
     if MAKE_FINAL_CURVE_PLOT:
         plot_final_curves(freq, fit, table_2009, PLOT_STEM)
 
+    unc = combine_uncertainty(freq, fit, reg_curve)
+    report_uncertainty(freq, unc, fit)
+    if MAKE_FINAL_UNCERTAINTY_PLOT:
+        plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, PLOT_STEM)
+
     out = freq[["AEP", "Value", FREQ_VALUE_COL]].copy()
     out = out.rename(columns={"Value": "unreg_computed_cfs",
                               FREQ_VALUE_COL: "unreg_expected_cfs"})
@@ -881,6 +1212,20 @@ def main():
     out["reg_inferred_cfs"] = reg_curve
     out["reg_lower_1se_cfs"] = reg_curve / band
     out["reg_upper_1se_cfs"] = reg_curve * band
+    # --- combined uncertainty (PART 4) --------------------------------------
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+    out["unreg_lower_%dpct_cfs" % pct] = unc["unreg_lower"]
+    out["unreg_upper_%dpct_cfs" % pct] = unc["unreg_upper"]
+    out["reg_lower_%dpct_cfs" % pct] = unc["reg_lower"]
+    out["reg_upper_%dpct_cfs" % pct] = unc["reg_upper"]
+    out["transform_slope_b"] = unc["slope"]
+    out["sigma_freq_lo_dex"] = unc["sigma_freq_lo"]
+    out["sigma_freq_hi_dex"] = unc["sigma_freq_hi"]
+    out["sigma_transform_dex"] = unc["sigma_transform"]
+    out["sigma_reg_lo_dex"] = unc["sigma_reg_lo"]
+    out["sigma_reg_hi_dex"] = unc["sigma_reg_hi"]
+    out["band_asymmetry"] = unc["asymmetry"]
+    out["reg_upper_clipped_at_unreg"] = unc["reg_upper_clipped"]
     out["reg_powerlaw_cfs"] = apply_power_law(fit["power"],
                                               out["unreg_expected_cfs"].values)
     out["reduction_pct"] = 100.0 * (1.0 - reg_curve / out["unreg_expected_cfs"])
@@ -940,6 +1285,10 @@ def main():
     print("        %s_frequency.png, %s_2009_comparison.png" % (PLOT_STEM, PLOT_STEM))
     if MAKE_FINAL_CURVE_PLOT:
         print("Final : %s_final_curves.png  (lines only, no points)" % PLOT_STEM)
+    if MAKE_FINAL_UNCERTAINTY_PLOT:
+        print("ADOPTED: %s_final_uncertainty.png  (both curves + %d%% band%s)"
+              % (PLOT_STEM, int(round(100 * UNCERTAINTY_CONF_LEVEL)),
+                 "" if FINAL_SHOW_2009 else ", 2009 curve off"))
     print("Table : %s/regulated_frequency_inferred.csv" % OUT_DIR)
 
 

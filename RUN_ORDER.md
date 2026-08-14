@@ -78,7 +78,8 @@ flowchart TD
 
     subgraph SG["Stage G — synthetics (upper end of the curve)"]
         H1["#Create_Synthetic_Ensembles.py<br/>4 shapes x 4 magnitudes x 3 pools"] --> H2[("ensemble_synthetic.dss<br/>+ mapping CSV")]
-        H2 --> H3{{"RESSIM: load ensemble,<br/>run synthetic alternative"}}
+        H2 --> H2b["hand-chop the mini peaks in DSSVue<br/>Dec1977, Nov1986 -- MANUAL, irreproducible"]
+        H2b --> H3{{"RESSIM: load ensemble,<br/>run synthetic alternative"}}
         H3 --> H4["#Extract_Ensemble_To_Timeseries.py<br/>SET_NAME = ResSim_Synth"]
         H4 --> H5["#Synthetic_Diagnostics.py"]
         H5 --> H6["#Unreg_Reg_Curve.py again<br/>with synthetics on the plot"]
@@ -102,7 +103,9 @@ flowchart TD
     classDef ressim fill:#fdebd0,stroke:#b9770e,stroke-width:2px;
     classDef check fill:#d5f5e3,stroke:#1e8449,stroke-width:2px;
     classDef store fill:#eaf2f8,stroke:#2874a6;
+    classDef manual fill:#fadbd8,stroke:#943126,stroke-width:2px;
     class B7,D3,E3,F1,H3 ressim;
+    class A0,H2b manual;
     class D5,G2 check;
     class A2,B6,B9,C3,D2,D7,E2,E6,F2,G3,G6,H2 store;
 ```
@@ -137,6 +140,7 @@ flowchart TD
 | 20 | `#Critical_Duration_Adjusted.py` | CAS_Reg_Unreg | `adjusted_peaks.csv`, unreg POR | `critical_duration_adjusted_fits.csv` | Peak and 1-day tied; peak-to-peak adopted. |
 | 21 | `#Unreg_Reg_Curve.py` | CAS_Reg_Unreg | step 20 + `CAS_Unreg_frequency_table.csv` + `ResSim_WCM_RC_reg_vs_unreg_wy.csv` | `regulated_frequency_inferred.csv` | Regulated AEP is inherited, not fitted. LOESS centre-of-mass line, not a straight power law. Compares against the 2009 curve. |
 | 22 | `#Create_Synthetic_Ensembles.py` | CAS_Reg_Unreg | `ResSimInflows.dss`, unreg POR elev | `ensemble_synthetic.dss` + mapping | Populates above the 100-year. |
+| 22b | **Hand-chop the mini peaks in DSSVue** (Dec1977, Nov1986) | CAS_Reg_Unreg | `ensemble_synthetic.dss` | `ensemble_synthetic.dss` | Manual and irreproducible. **Step 22 deletes and rewrites this file, so re-running it destroys the chop.** See "The hand-chopped synthetics" below. |
 | 23 | **ResSim** synthetic alternative | — | ensemble | `simulation.dss` | Manual. Copy result to `output/simulation.dss`. |
 | 24 | `#Extract_Ensemble_To_Timeseries.py` `SET_NAME="ResSim_Synth"` | CAS_Reg_Unreg | `simulation.dss` + mapping | `ResSim_Synth.dss` | Synthetic years are 1801+; round-trip check is off. |
 | 25 | `#Synthetic_Diagnostics.py` | CAS_Reg_Unreg | `ResSim_Synth.dss`, step 20 | `synthetic_results.csv` | Verify scaled peaks hit their targets. |
@@ -194,6 +198,50 @@ years only.
 
 ---
 
+## The hand-chopped synthetics (step 22b)
+
+`#Create_Synthetic_Ensembles.py` scales an observed event up to a target peak
+AND a target 5-day volume. For a sharp source event that combination forces the
+shoulders to stretch harder than the peak itself (`f_out` above `f_peak` in the
+mapping CSV — 1.9x vs 1.1x for Dec1977). A small rise the observed hydrograph
+already had is then lifted in proportion, and comes out looking like a separate
+flood a day or two ahead of the main peak. Two members were bad enough to be
+misleading:
+
+| Source event | Where | Height as built, at the 500-yr target |
+|---|---|---|
+| Dec1977 | ~1 day before the peak | 98,100 cfs, 0.43 of the peak |
+| Nov1986 | ~2 days before the peak | 103,600 cfs, 0.45 of the peak |
+
+Both were **chopped by hand in DSSVue** in `ensemble_synthetic.dss`, on the
+`MOSSYROCK/FLOW-IN` and `CASTLE ROCK/FLOW-LOCAL` records of the affected
+members, before the ensemble was loaded into ResSim.
+
+A scripted fix was tried first and rejected: damping the flow-based multiplier
+enough to matter also lets a point near the peak scale past the peak, which
+invents a new maximum and breaks the peak target. The safe amount of damping
+moved the bump by 1-2%, which was not worth the complexity. The hand chop is
+the adopted fix.
+
+**The trap.** Step 22 deletes `ensemble_synthetic.dss` before writing it (it
+does not append), so re-running it wipes the chop with no warning and the next
+ResSim run silently goes back to the two-peaked hydrographs. There is no check
+that catches this downstream — the members still hit their peak and volume
+targets either way. If step 22 is re-run for any reason, redo 22b.
+
+**Which files are pre-chop and which are post-chop.** The chop lives only in
+the DSS, so the only way to tell is to look at the hydrograph. As of commit
+`05b04bf` the copies in this repository are **pre-chop**: the mini peak is
+still at full height in `ensemble_synthetic.dss`, and `ResSim_Synth.dss` /
+`synthetic_results.csv` are the routed results of that unchopped ensemble
+(Nov1986 500-yr: built 103,600 cfs, routed 105,586 cfs, 0.46 of its peak).
+Anything drawn from those files is the pre-chop answer. Re-upload the chopped
+ensemble and its ResSim results, re-run steps 24-26, and the plots follow
+automatically — `#Unreg_Reg_Curve.py` reads `synthetic_results.csv` and needs
+no edit.
+
+---
+
 ## Partial re-runs
 
 | Changed | Re-run from |
@@ -202,5 +250,5 @@ years only.
 | USGS record extended / WY close-out | step 1, then step 19 |
 | ResSim operation set or rules | step 11 (both runs, then stage F) |
 | Rule curve anchors | steps 10 and 13 (anchors are duplicated in three scripts) |
-| Synthetic targets or shapes | step 22 |
+| Synthetic targets or shapes | step 22 — **then redo the hand-chop at 22b**, which step 22 has just overwritten |
 | SSP analysis settings | step 6, then step 21 |

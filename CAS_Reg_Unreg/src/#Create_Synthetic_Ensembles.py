@@ -51,6 +51,26 @@ local, the same quantity the transform uses on its x-axis) hits the target.
 
 Outputs: the ensemble DSS, a mapping CSV carrying scale factor / target AEP /
 source event / pool basis for every member, and a diagnostic plot per event.
+
+!! THE OUTPUT DSS IS HAND-EDITED AFTER THIS SCRIPT RUNS !!
+---------------------------------------------------------
+Matching a peak AND a 5-day volume on a sharp source event forces f_out above
+f_peak (1.9x vs 1.1x for Dec1977), so a small rise the observed hydrograph
+already had gets stretched into what looks like a second flood a day or two
+ahead of the main peak. On the Dec1977 and Nov1986 members it reached 0.43-0.45
+of the peak, and both are CHOPPED BY HAND IN DSSVUE -- on the MOSSYROCK/FLOW-IN
+and CASTLE ROCK/FLOW-LOCAL records -- before the ensemble is loaded into ResSim.
+See "The hand-chopped synthetics" in RUN_ORDER.md.
+
+build_set DELETES OUT_DSS before writing, so RUNNING THIS SCRIPT DESTROYS THAT
+EDIT. Nothing downstream catches it: the members still hit their peak and volume
+targets with the bump present, so the next ResSim run just quietly routes the
+two-peaked hydrographs again. If this script is re-run, the chop has to be
+redone before step 23.
+
+Damping the bump in code was tried in Aug 2026 and reverted -- the safe amount
+of damping (past ~1.4 a shoulder scales above the peak and invents a new
+maximum) only moved it 1-2%.
 """
 
 import os
@@ -991,7 +1011,16 @@ def main():
       # written alongside stop agreeing about what a given member number is.
       # Delete first so every run starts from an empty file, same as
       # #Adjusted_Peak_Record.py does for its own output DSS.
+      #
+      # THIS IS ALSO WHAT DESTROYS THE HAND-CHOPPED Dec1977/Nov1986 MEMBERS.
+      # See the warning at the top of this file: the mini peaks are removed by
+      # hand in DSSVue after this script runs, and deleting the file throws
+      # that away silently. The chop has to be redone before the ResSim run.
       if os.path.exists(out_dss):
+          print("   NOTE: %s existed and is being replaced. Any hand edits in it"
+                % os.path.basename(out_dss))
+          print("         (the Dec1977 / Nov1986 mini-peak chops) are now gone")
+          print("         and must be redone before the ResSim run.")
           os.remove(out_dss)
       with HecDss.Open(out_dss, version=OUT_DSS_VERSION) as dst:
           for ev in events:

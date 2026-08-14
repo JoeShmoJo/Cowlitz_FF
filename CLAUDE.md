@@ -213,6 +213,38 @@ record for the offset where it matches, and see where it really came from. If
 that date is outside the member's own window, the wrong simulation was read.
 
 
+## The synthetic ensemble is hand-edited after it is built
+
+`ensemble_synthetic.dss` is NOT purely a script product. After
+`#Create_Synthetic_Ensembles.py` writes it, the user chops a mini peak out of
+the **Dec1977 and Nov1986** members by hand in DSSVue (both the
+`MOSSYROCK/FLOW-IN` and `CASTLE ROCK/FLOW-LOCAL` records), then loads the
+edited file into ResSim.
+
+Why the bump is there: matching a peak AND a 5-day volume on a sharp event
+forces `f_out` above `f_peak` (1.9x vs 1.1x for Dec1977), so a small rise the
+observed hydrograph already had gets stretched into what looks like a second
+flood. At the 500-year target it reached 0.43-0.45 of the peak.
+
+**`#Create_Synthetic_Ensembles.py` deletes OUT_DSS before writing, so running
+it destroys the chop.** Nothing downstream notices — the members still hit
+their peak and volume targets with the bump present. Never re-run that script
+without telling the user the hand edit has to be redone.
+
+A scripted alternative was tried in Aug 2026 (raising the flow weight to a
+power to concentrate the multiplier near the peak) and reverted: the amount of
+damping that is safe — anything past ~1.4 lets a shoulder scale above the peak
+and invents a new maximum — only moved the bump 1-2%, which the user judged
+not worth the complexity. Do not re-propose it without a materially better
+idea.
+
+As of commit `05b04bf` the DSS files in this repo are the PRE-chop versions.
+Verify before claiming a plot reflects the final hydrographs: read the member
+out of `ResSim_Synth.dss` and compare the largest pre-peak value against the
+peak. Nov1986 500-yr (member 47, synthetic WY1847) reads 105,586 cfs against a
+228,861 cfs peak in the pre-chop run.
+
+
 ## Open issue as of 7 Aug 2026
 
 `ObsData_RegUnreg.dss` was deleted from `CAS_Reg_Unreg/data` as "duplicative",
