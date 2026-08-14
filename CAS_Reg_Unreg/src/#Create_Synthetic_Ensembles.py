@@ -306,6 +306,61 @@ SENTINEL = -901.0
 # ----------------------------------------------------------------------------
 
 
+def check_synthetic_calendar(mapping):
+    """Verify the promise the synthetic calendar makes, instead of asserting it.
+
+    One member per synthetic water year, each member's whole window inside that
+    one water year, and no two windows sharing an hour. A failure here is what
+    produces water years with two members' worth of hours, water years with
+    none, and 'overlapping timestamps' warnings in the extract step.
+    """
+    rows = mapping.sort_values("real_start").reset_index(drop=True)
+    problems = []
+
+    straddle = rows[rows["real_start"].map(water_year)
+                    != rows["real_end"].map(water_year)]
+    for _, r in straddle.iterrows():
+        problems.append("member %d crosses 01 Oct: %s -> %s"
+                        % (r["member"], r["real_start"].date(),
+                           r["real_end"].date()))
+
+    actual_wy = rows["real_start"].map(water_year)
+    mismatch = rows[actual_wy != rows["synth_water_year"]]
+    for _, r in mismatch.iterrows():
+        problems.append("member %d labelled WY%d but starts in WY%d (%s)"
+                        % (r["member"], r["synth_water_year"],
+                           water_year(r["real_start"]), r["real_start"].date()))
+
+    for wy, grp in rows.groupby(actual_wy):
+        if len(grp) > 1:
+            problems.append("WY%d holds %d members: %s"
+                            % (wy, len(grp), list(grp["member"])))
+
+    for i in range(1, len(rows)):
+        if rows.loc[i, "real_start"] <= rows.loc[i - 1, "real_end"]:
+            overlap = (rows.loc[i - 1, "real_end"] - rows.loc[i, "real_start"])
+            problems.append("members %d and %d overlap by %d hours"
+                            % (rows.loc[i - 1, "member"], rows.loc[i, "member"],
+                               overlap.total_seconds() / 3600 + 1))
+
+    if problems:
+        print("   *** SYNTHETIC CALENDAR PROBLEMS (%d) ***" % len(problems))
+        for line in problems[:20]:
+            print("      %s" % line)
+        if len(problems) > 20:
+            print("      ...and %d more" % (len(problems) - 20))
+    else:
+        print("   calendar check: %d members, %d water years, no straddles, "
+              "no overlaps" % (len(rows), rows["synth_water_year"].nunique()))
+    return problems
+
+
+def water_year(stamp):
+    """Water year containing a timestamp: 01 Oct YYYY-1 through 30 Sep YYYY."""
+    stamp = pd.Timestamp(stamp)
+    return stamp.year + (1 if stamp.month >= 10 else 0)
+
+
 def dss_version(path):
     """DSS file version from the header: byte 12 is 6 for v6, 0 for v7."""
     with open(path, "rb") as handle:
@@ -969,9 +1024,15 @@ def main():
                               parts[0], parts[1], parts[2], dpart, f_part)
                           dst.put_ts(build_container(pathname, vals, wstart, units,
                                                      "INST-VAL", 60))
+                      # Shift by WATER year, not calendar year. Shifting the
+                      # calendar year puts an Oct-Dec event in synthetic WY
+                      # synth_year+1 while a Jan-Sep event lands in synth_year,
+                      # so autumn and winter members collide in one water year
+                      # and leave others empty (and 30-day windows that cross
+                      # 01 Jan can overlap the next member outright).
                       synth_year = SYNTH_YEAR_BASE + member
                       synth_start = ev["start"] + pd.DateOffset(
-                          years=synth_year - ev["start"].year)
+                          years=synth_year - water_year(ev["start"]))
                       mapping_rows.append({
                           "member": member, "ensemble_f_part": f_part,
                           "event": ev["label"], "event_note": ev["note"],
@@ -1077,9 +1138,10 @@ def main():
              (WINDOW_BEFORE_DAYS + WINDOW_AFTER_DAYS) * 24))
     print("   Turn OUTSIDE_RETURN_DAYS down to rejoin sooner, up for a gentler "
           "join.")
-    print("\nSynthetic water years %d-%d, one per member, so reassembled blocks"
+    print("\nSynthetic water years %d-%d, one per member. source_start holds the"
           % (mapping["synth_water_year"].min(), mapping["synth_water_year"].max()))
-    print("never overlap. source_start holds the true event date.")
+    print("true event date.")
+    check_synthetic_calendar(mapping)
     print("\nMembers written : %d   records: %d (4 per member)"
           % (len(mapping), len(mapping) * 4))
     print("Mapping CSV     : %s" % MAPPING_CSV)

@@ -319,6 +319,63 @@ def load_mapping(csv_path):
     return table.sort_values("member").reset_index(drop=True)
 
 
+def water_year(stamp):
+    """Water year containing a timestamp: 01 Oct YYYY-1 through 30 Sep YYYY."""
+    stamp = pd.Timestamp(stamp)
+    return stamp.year + (1 if stamp.month >= 10 else 0)
+
+
+def check_mapping_calendar(mapping):
+    """Catch a bad mapping BEFORE spending a read on it.
+
+    Every member must own a whole water year: window inside one water year, one
+    member per water year, no two windows sharing an hour. Members that share a
+    water year silently double that year's hours downstream; members that share
+    an HOUR are the source of the 'overlapping timestamps, first value kept'
+    warning below, and mixing two events' values into one hour is what makes
+    regulated flow appear above unregulated flow.
+    """
+    rows = mapping.sort_values("real_start").reset_index(drop=True)
+    if "real_end" not in rows.columns:
+        rows["real_end"] = (rows["real_start"]
+                            + pd.to_timedelta(rows["hours"] - 1, unit="h"))
+    problems = []
+    for _, r in rows.iterrows():
+        if water_year(r["real_start"]) != water_year(r["real_end"]):
+            problems.append("member %d crosses 01 Oct: %s -> %s"
+                            % (r["member"], r["real_start"].date(),
+                               r["real_end"].date()))
+    if "synth_water_year" in rows.columns:
+        for _, r in rows.iterrows():
+            if water_year(r["real_start"]) != r["synth_water_year"]:
+                problems.append("member %d labelled WY%d but starts in WY%d"
+                                % (r["member"], r["synth_water_year"],
+                                   water_year(r["real_start"])))
+    for wy, grp in rows.groupby(rows["real_start"].map(water_year)):
+        if len(grp) > 1:
+            problems.append("WY%d holds %d members: %s"
+                            % (wy, len(grp), list(grp["member"])))
+    for i in range(1, len(rows)):
+        if rows.loc[i, "real_start"] <= rows.loc[i - 1, "real_end"]:
+            hrs = ((rows.loc[i - 1, "real_end"] - rows.loc[i, "real_start"])
+                   .total_seconds() / 3600 + 1)
+            problems.append("members %d and %d overlap by %d hours"
+                            % (rows.loc[i - 1, "member"], rows.loc[i, "member"],
+                               hrs))
+    if problems:
+        print("*** MAPPING CALENDAR PROBLEMS (%d) -- fix the mapping and re-run"
+              " the matching #Create_*_Ensembles.py ***" % len(problems))
+        for line in problems[:20]:
+            print("    %s" % line)
+        if len(problems) > 20:
+            print("    ...and %d more" % (len(problems) - 20))
+    else:
+        print("Calendar check : %d members, %d water years, no straddles, "
+              "no overlaps" % (len(rows), rows["real_start"].map(water_year)
+                               .nunique()))
+    return problems
+
+
 def build_container(pathname, values, start_time, units, data_type, interval_min):
     """TimeSeriesContainer built the way the installed pydsstools accepts."""
     try:
@@ -569,6 +626,7 @@ def main():
     print("F-part suffix  : %s" % ENS_SUFFIX)
     print("Output DSS     : %s" % OUT_DSS)
     print("=" * 78)
+    check_mapping_calendar(mapping)
 
     summary = []
     built = {}          # (part_b, part_c) -> reassembled hourly series
