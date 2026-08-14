@@ -640,7 +640,11 @@ def report_source_events(targets):
             % (format(int(MIN_SOURCE_PEAK_CFS), ","),
                ", ".join(r[1] for r in small)))
 
-    biggest = max(targets.values()) if targets else np.nan
+    # targets maps label -> {"peak", "vol5", "aep"}, so the largest PEAK has to
+    # be pulled out of the nested dicts rather than taken off .values() directly.
+    peaks = [row["peak"] for row in targets.values()
+             if np.isfinite(row.get("peak", np.nan))]
+    biggest = max(peaks) if peaks else np.nan
     print("\nSOURCE EVENTS  (%d of %d in the catalog switched on)"
           % (len(enabled), len(SOURCE_EVENT_CATALOG)))
     print("   %-9s %12s %7s %8s  %s"
