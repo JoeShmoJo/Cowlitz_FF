@@ -174,6 +174,37 @@ VOLUME_ITERATIONS = 12                  # refine f_out against the true rolling 
 VOLUME_TOLERANCE = 0.002                # stop when the 5-day is within 0.2%
 SHAPE_STRAIN_WARN = 2.0                 # warn when f_out/f_peak is beyond this or its inverse
 
+# --- damping the secondary bumps the scaling turns into mini-events ---------
+# f_out routinely comes out LARGER than f_peak for a narrow, peaky source event
+# pushed to a wide target -- the shoulders have to stretch more than the peak
+# itself to make the 5-day volume, because a sharp storm has little volume
+# around its own peak to begin with (Dec1977's f_out is near 2x its f_peak;
+# Nov1986's near 1.65x). f(Q) is LINEAR in Q, so a pre-existing shoulder or
+# small bump sitting well below Qmax still gets pulled most of the way to the
+# big f_out rather than the small f_peak, and a minor wrinkle on the observed
+# hydrograph comes out looking like a second flood. This is what turns the
+# small bump ahead of the Dec1977 and Nov1986 peaks into a mini-event of their
+# own once scaled.
+#
+# Raising Q to a power > 1 before blending concentrates the rise from f_out to
+# f_peak closer to Qmax, so a mid-range bump gets pulled less far toward f_out.
+# w=0 and w=1 (trough and peak) are untouched by any exponent, and f_out is
+# re-solved around the reshaped weight, so the peak and 5-day targets are still
+# met to the same tolerance -- this is confirmed empirically, not assumed: the
+# worst 5-day miss across every event in SOURCE_EVENT_CATALOG at BUMP_DAMPING_
+# POWER is 0.2%, same order as the miss at 1.0.
+#
+# The risk: pushed far enough, this lets a point near the peak end up scaled
+# HIGHER than the peak itself -- a new maximum, the exact failure the flow-
+# based design exists to avoid. 1.3 is verified safe with real margin for
+# every currently-enabled event (Jan1990 is the tightest, and only breaks
+# above 1.4) -- but build_set does not just trust that: it re-checks per
+# member that the scaled peak is still where the observed peak was, and falls
+# back to BUMP_DAMPING_POWER_FALLBACK (flagging the member) for anything a
+# future catalog change makes unsafe.
+BUMP_DAMPING_POWER = 1.3
+BUMP_DAMPING_POWER_FALLBACK = 1.0
+
 # --- how fast the hydrograph returns to the observed one outside the window --
 # The flow-based multiplier is a function of Q alone, so on its own it rescales
 # the ENTIRE member window -- the 10-day lead-in and the 20-day recession
@@ -576,15 +607,25 @@ def outside_change(scaled, flow, index, peak_time, half_width_days):
             "outside_hours_changed": int((rel > 0.01).sum())}
 
 
-def scale_volume_matched(flow, index, target_peak, target_vol5):
+def scale_volume_matched(flow, index, target_peak, target_vol5,
+                         weight_power=1.0):
     """Flow-dependent multiplier hitting the peak exactly and the 5-day by iteration.
 
-    f(Q) = f_out + (f_peak - f_out) * w,  w = (Q - Qmin) / (Qmax - Qmin)
+    f(Q) = f_out + (f_peak - f_out) * w,  w = ((Q - Qmin) / (Qmax - Qmin)) ** weight_power
 
-    Monotone in Q, so the peak cannot be overtaken by a shoulder and the
-    hydrograph keeps its ordering. f_out is solved from the 5-day volume over
-    +/- VOLUME_HALF_WIDTH_DAYS, then refined: reshaping moves which 5-day window
-    is the maximum, so the closed-form answer is only a first guess.
+    Monotone in Q for any weight_power > 0 (w=0 at Qmin, w=1 at Qmax either
+    way), so in principle the peak cannot be overtaken by a shoulder. In
+    practice f_out can come out bigger than f_peak (see BUMP_DAMPING_POWER
+    above), which makes f(Q) DECREASING in Q, and decreasing f(Q) times
+    increasing Q is not guaranteed monotone -- a shoulder close enough to Qmax
+    can still end up scaled past the peak. weight_power > 1 makes this safer,
+    not less safe, by concentrating the decrease near Qmax where flow.max()
+    itself lives, but it is the caller's job to verify with the actual data,
+    which scale_volume_matched_safe below does. This function does not check.
+
+    f_out is solved from the 5-day volume over +/- VOLUME_HALF_WIDTH_DAYS,
+    then refined: reshaping moves which 5-day window is the maximum one, so
+    the closed-form answer is only a first guess.
 
     Outside the volume window the multiplier is blended back to 1.0 over
     OUTSIDE_RETURN_DAYS, so the member rejoins the observed hydrograph instead
@@ -597,7 +638,8 @@ def scale_volume_matched(flow, index, target_peak, target_vol5):
     inside = np.abs(offset_days) <= VOLUME_HALF_WIDTH_DAYS
     envelope = return_envelope(index, peak_time, VOLUME_HALF_WIDTH_DAYS)
     span = flow.max() - flow.min()
-    weight = (flow - flow.min()) / span if span > 0 else np.ones_like(flow)
+    weight_lin = (flow - flow.min()) / span if span > 0 else np.ones_like(flow)
+    weight = weight_lin ** weight_power
     f_peak = target_peak / flow.max()
 
     hi = float((flow * weight)[inside].sum())
@@ -625,12 +667,38 @@ def scale_volume_matched(flow, index, target_peak, target_vol5):
     correction = peak_correction(f_peak, target_peak / scaled.max())
     if abs(correction - 1.0) > 1e-12:
         scaled = apply_multiplier(flow, 1.0 + (factor - 1.0) * correction, envelope)
-    info = {"f_peak": f_peak, "f_out": f_out,
+    info = {"f_peak": f_peak, "f_out": f_out, "weight_power": weight_power,
             "shape_strain": f_out / f_peak if f_peak else np.nan,
             "vol5_err": err,
             "vol5_got": rolling_max_mean(scaled, index, 120)}
     info.update(outside_change(scaled, flow, index, peak_time,
                                VOLUME_HALF_WIDTH_DAYS))
+    return scaled, info
+
+
+def scale_volume_matched_safe(flow, index, target_peak, target_vol5):
+    """scale_volume_matched at BUMP_DAMPING_POWER, verified against a fallback.
+
+    BUMP_DAMPING_POWER is checked against every currently-enabled event above,
+    but "checked against the current catalog" is not the same guarantee as
+    "safe for whatever the catalog is at run time" -- SOURCE_EVENT_CATALOG
+    gets edited. So this re-derives the promise per member instead of trusting
+    the comment: scale at BUMP_DAMPING_POWER, and if the scaled peak is not at
+    the same hour as the observed peak, re-scale at BUMP_DAMPING_POWER_FALLBACK
+    (1.0, where scale_volume_matched's monotone-in-Q argument actually holds)
+    and say so in the returned info, the same way pool_basis_used flags a pool
+    substitution.
+    """
+    peak_idx = int(np.argmax(flow))
+    scaled, info = scale_volume_matched(flow, index, target_peak, target_vol5,
+                                        weight_power=BUMP_DAMPING_POWER)
+    if int(np.argmax(scaled)) == peak_idx:
+        info["weight_power_used"] = BUMP_DAMPING_POWER
+        return scaled, info
+    scaled, info = scale_volume_matched(flow, index, target_peak, target_vol5,
+                                        weight_power=BUMP_DAMPING_POWER_FALLBACK)
+    info["weight_power_used"] = "%s->%s (would have moved the peak)" % (
+        BUMP_DAMPING_POWER, BUMP_DAMPING_POWER_FALLBACK)
     return scaled, info
 
 
@@ -773,9 +841,9 @@ def plot_events(events, mapping, stem):
         ax = axes[k // ncols][k % ncols]
         hours = np.arange(len(ev["total"])) / 24.0
         for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
-            scaled, _ = (scale_volume_matched(ev["total"].values, ev["index"],
-                                              row["target_unreg_peak_cfs"],
-                                              row["target_unreg_5day_cfs"])
+            scaled, _ = (scale_volume_matched_safe(ev["total"].values, ev["index"],
+                                                   row["target_unreg_peak_cfs"],
+                                                   row["target_unreg_5day_cfs"])
                          if row["scaling_method"] == "volume_matched"
                          else scale_linear_taper(ev["total"].values, ev["index"],
                                                  row["target_unreg_peak_cfs"]))
@@ -998,11 +1066,12 @@ def main():
               for target_label, target in targets.items():
                   target_peak, target_vol5 = target["peak"], target["vol5"]
                   if method == "volume_matched":
-                      tot_scaled, info = scale_volume_matched(
+                      tot_scaled, info = scale_volume_matched_safe(
                           ev["total"].values, ev["index"], target_peak, target_vol5)
                   else:
                       tot_scaled, info = scale_linear_taper(
                           ev["total"].values, ev["index"], target_peak)
+                      info["weight_power_used"] = np.nan
                   # split the scaled total back onto the two records in the
                   # observed proportion at each hour, so the coincidence between
                   # reservoir inflow and local is preserved exactly
@@ -1056,6 +1125,7 @@ def main():
                           "f_peak": round(info["f_peak"], 4),
                           "f_out": round(info["f_out"], 4),
                           "shape_strain": round(info["shape_strain"], 3),
+                          "weight_power_used": info["weight_power_used"],
                           "scaled_unreg_peak_cfs": round(float(tot_scaled.max()), 1),
                           "scaled_unreg_5day_cfs": round(info["vol5_got"], 1),
                           "vol5_error_pct": (round(100 * info["vol5_err"], 2)
@@ -1121,6 +1191,17 @@ def main():
         for _, r in strained.iterrows():
             print("      %-8s %-7s strain %.2f" % (r["event"], r["target"],
                                                    r["shape_strain"]))
+    if SCALING_METHOD == "volume_matched":
+        fell_back = mapping[mapping["weight_power_used"].astype(str)
+                            .str.contains("->", na=False)]
+        print("\n   bump damping: BUMP_DAMPING_POWER=%s on %d of %d members"
+              % (BUMP_DAMPING_POWER, len(mapping) - len(fell_back), len(mapping)))
+        if len(fell_back):
+            print("   %d fell back to %s because %s would have scaled a point "
+                  "above the observed peak:"
+                  % (len(fell_back), BUMP_DAMPING_POWER_FALLBACK, BUMP_DAMPING_POWER))
+            for _, r in fell_back.iterrows():
+                print("      %-8s %-7s" % (r["event"], r["target"]))
     worst = mapping["vol5_error_pct"].abs().max()
     if np.isfinite(worst):
         print("\n   5-day volume: worst miss %.2f%% (tolerance %.1f%%)"
