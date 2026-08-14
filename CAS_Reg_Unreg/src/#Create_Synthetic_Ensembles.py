@@ -980,6 +980,19 @@ def main():
     def build_set(out_dss, method):
       mapping_rows = []
       member = 0
+      # HecDss.Open() does not truncate an existing file -- it opens the file
+      # in place and only overwrites the pathnames this run actually writes.
+      # Every design change here (event catalog, pool bases, member count) has
+      # moved which member number gets which event, so a stale out_dss left
+      # over from an earlier run keeps old members' data under F-parts this
+      # run no longer writes, and CAN leave stale storage blocks behind a
+      # pathname this run DOES write if the new record is shorter than the
+      # old one at that pathname. Either way the DSS and the mapping CSV it is
+      # written alongside stop agreeing about what a given member number is.
+      # Delete first so every run starts from an empty file, same as
+      # #Adjusted_Peak_Record.py does for its own output DSS.
+      if os.path.exists(out_dss):
+          os.remove(out_dss)
       with HecDss.Open(out_dss, version=OUT_DSS_VERSION) as dst:
           for ev in events:
               for target_label, target in targets.items():
