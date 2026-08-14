@@ -706,9 +706,16 @@ def d_part(start, n_hours):
 
 def plot_events(events, mapping, stem):
     """Source hydrographs and the scaled family built from each."""
-    fig, axes = plt.subplots(2, 2, figsize=(13.5, 9), squeeze=False)
+    # The grid follows the number of ENABLED source events. It was hard coded to
+    # 2x2 back when the catalog was four events and switching more on crashed
+    # here, after the DSS and the mapping CSV had already been written.
+    n = len(events)
+    ncols = 1 if n == 1 else (2 if n <= 8 else 3)
+    nrows = int(np.ceil(n / float(ncols)))
+    fig, axes = plt.subplots(nrows, ncols, squeeze=False,
+                             figsize=(6.75 * ncols, 4.5 * nrows))
     for k, ev in enumerate(events):
-        ax = axes[k // 2][k % 2]
+        ax = axes[k // ncols][k % ncols]
         hours = np.arange(len(ev["total"])) / 24.0
         for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
             scaled, _ = (scale_volume_matched(ev["total"].values, ev["index"],
@@ -746,7 +753,9 @@ def plot_events(events, mapping, stem):
                  "blue band = the +/- %.1f day volume window, orange = the "
                  "return to the observed hydrograph"
                  % VOLUME_HALF_WIDTH_DAYS, fontsize=11)
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    for k in range(n, nrows * ncols):          # blank any unused panel
+        axes[k // ncols][k % ncols].axis("off")
+    fig.tight_layout(rect=[0, 0, 1, 1.0 - 0.16 / nrows])
     fig.savefig("%s_events.png" % stem, dpi=150)
     plt.close(fig)
 

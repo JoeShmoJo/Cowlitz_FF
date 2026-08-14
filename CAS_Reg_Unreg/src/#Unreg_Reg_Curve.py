@@ -139,7 +139,9 @@ SYNTH_EVENT_COL = "event"
 # One marker shape per source event, all in C_SYNTH. Shape rather than colour
 # because the colours here are already carrying source (adjusted / WCM_RC /
 # synthetic / 2009) and reusing them for event identity would be ambiguous.
-SYNTH_EVENT_MARKERS = ["^", "v", "s", "D", "P", "X"]
+# One per source event; the catalog can run to eight or more, and a wrapped
+# marker would make two different events look like the same one.
+SYNTH_EVENT_MARKERS = ["^", "v", "s", "D", "P", "X", "<", ">", "*", "h"]
 # Restrict to one scaling method when both were run.
 SYNTH_SCALING_METHOD = "volume_matched"
 
