@@ -129,6 +129,17 @@ SYNTH_UNREG_COL = "unreg_peak_routed_cfs"
 # Used if the routed record is missing from an older results CSV.
 SYNTH_UNREG_COL_FALLBACK = "target_unreg_peak_cfs"
 SYNTH_REG_COL = "reg_peak"
+# Which source event each member was scaled from. Distinguishing these on the
+# plots matters: the spread among synthetics at one magnitude is almost entirely
+# a SHAPE effect, not scatter. A sustained event exhausts storage and passes
+# through near the 1:1 line, a sharp one is held back hard, and the two land
+# 100,000 cfs apart at the same unregulated peak. A single marker colour hides
+# that and makes the difference look like noise.
+SYNTH_EVENT_COL = "event"
+# One marker shape per source event, all in C_SYNTH. Shape rather than colour
+# because the colours here are already carrying source (adjusted / WCM_RC /
+# synthetic / 2009) and reusing them for event identity would be ambiguous.
+SYNTH_EVENT_MARKERS = ["^", "v", "s", "D", "P", "X"]
 # Restrict to one scaling method when both were run.
 SYNTH_SCALING_METHOD = "volume_matched"
 
@@ -451,6 +462,48 @@ def assemble_fit_points(data, wcm, synth):
     return np.concatenate(xs), np.concatenate(ys), used
 
 
+def synth_by_event(synth):
+    """Yield (event, marker, rows) so each source event is its own plot series.
+
+    Events keep the order they appear in the results CSV, so the marker assigned
+    to an event is stable across the scatter, the frequency plot and the log.
+    """
+    if SYNTH_EVENT_COL not in synth.columns:
+        yield "synthetic", SYNTH_EVENT_MARKERS[0], synth
+        return
+    for i, event in enumerate(dict.fromkeys(synth[SYNTH_EVENT_COL])):
+        marker = SYNTH_EVENT_MARKERS[i % len(SYNTH_EVENT_MARKERS)]
+        yield str(event), marker, synth[synth[SYNTH_EVENT_COL] == event]
+
+
+def report_synth_by_event(synth):
+    """What each source event does to a flood, in numbers rather than by eye.
+
+    The attenuation ratio is the whole story: near 1.0 means the project passed
+    the flood through, low means it held it back. Printing it per event says
+    which markers are which without anyone having to read the plot.
+    """
+    if synth is None or not len(synth) or SYNTH_EVENT_COL not in synth.columns:
+        return
+    print("\nSYNTHETICS BY SOURCE EVENT  (reg / unreg, 1.00 = full pass-through)")
+    for event, marker, group in synth_by_event(synth):
+        ratio = group[SYNTH_REG_COL] / group[SYNTH_UNREG_COL]
+        print("   '%s'  %-9s n=%d   attenuation %.2f to %.2f   reg %s to %s cfs"
+              % (marker, event, len(group), ratio.min(), ratio.max(),
+                 format(int(group[SYNTH_REG_COL].min()), ","),
+                 format(int(group[SYNTH_REG_COL].max()), ",")))
+    # Median, not max: the question is which EVENT passes floods through, not
+    # which single member happened to be largest. One member of a well-attenuated
+    # event can reach 1:1 at the top magnitude without that event being the
+    # pass-through case.
+    top = max(synth_by_event(synth),
+              key=lambda g: (g[2][SYNTH_REG_COL] / g[2][SYNTH_UNREG_COL]).median())
+    print("   Sitting on the 1:1 line: %s -- storage is exhausted at every"
+          % top[0])
+    print("   magnitude and the flood passes through, so it sets the upper end")
+    print("   of the regulated curve.")
+
+
 def annotate_points(ax, x, y, labels):
     """Callouts placed alternately above and below to reduce collisions."""
     for i, (xi, yi, text) in enumerate(zip(x, y, labels)):
@@ -480,12 +533,11 @@ def plot_scatter(data, fit, wcm, synth, stem):
             lo += [wcm["unreg_peak"].min(), wcm["reg_peak"].min()]
             hi += [wcm["unreg_peak"].max(), wcm["reg_peak"].max()]
         if synth is not None and len(synth):
-            ax.scatter(synth[SYNTH_UNREG_COL], synth[SYNTH_REG_COL], s=64,
-                       marker="^", facecolor=C_SYNTH, edgecolor="0.2", lw=0.6,
-                       zorder=4,
-                       label="Synthetic member, routed (n=%d)%s"
-                             % (len(synth),
-                                "" if FIT_SOURCES.get("synthetic") else ", not fitted"))
+            for event, marker, group in synth_by_event(synth):
+                ax.scatter(group[SYNTH_UNREG_COL], group[SYNTH_REG_COL], s=70,
+                           marker=marker, facecolor=C_SYNTH, edgecolor="0.2",
+                           lw=0.6, zorder=4,
+                           label="Synthetic from %s (n=%d)" % (event, len(group)))
             lo += [synth[SYNTH_UNREG_COL].min(), synth[SYNTH_REG_COL].min()]
             hi += [synth[SYNTH_UNREG_COL].max(), synth[SYNTH_REG_COL].max()]
 
@@ -611,13 +663,15 @@ def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
             aep_s = aep_from_unreg_curve(synth[SYNTH_UNREG_COL].values,
                                          unreg_curve, aep_values)
             zs = stats.norm.ppf(1.0 - np.clip(aep_s, 1e-6, 1 - 1e-6))
-            ax.plot(zs, synth[SYNTH_REG_COL].values, ls="none", marker="^",
-                    ms=7, mfc=C_SYNTH, mec="0.2", mew=0.6, zorder=7,
-                    label="Synthetic members, routed%s"
-                          % ("" if FIT_SOURCES.get("synthetic") else " (not fitted)"))
-            ax.plot(zs, synth[SYNTH_UNREG_COL].values, ls="none", marker="^",
-                    ms=5, mfc="none", mec=C_SYNTH, mew=0.9, zorder=6,
-                    label="Synthetic unregulated targets (on the curve)")
+            synth = synth.copy()
+            synth["_z"] = zs
+            for event, marker, group in synth_by_event(synth):
+                ax.plot(group["_z"], group[SYNTH_REG_COL].values, ls="none",
+                        marker=marker, ms=8, mfc=C_SYNTH, mec="0.2", mew=0.6,
+                        zorder=7, label="Synthetic regulated, from %s" % event)
+            ax.plot(zs, synth[SYNTH_UNREG_COL].values, ls="none", marker="_",
+                    ms=9, mfc="none", mec=C_SYNTH, mew=1.2, zorder=6,
+                    label="Synthetic unregulated (routed)")
     else:
         uv, ua = weibull_plotting_positions(data[UNREG_COL].values)
         rv, ra = weibull_plotting_positions(data["reg_peak"].values)
@@ -778,6 +832,7 @@ def main():
               % (len(synth), format(int(synth[SYNTH_UNREG_COL].min()), ","),
                  format(int(synth[SYNTH_UNREG_COL].max()), ",")))
 
+    report_synth_by_event(synth)
     fit_x, fit_y, used = assemble_fit_points(data, wcm, synth)
     fit = build_transform(fit_x, fit_y, TRANSFORM_METHOD)
 
