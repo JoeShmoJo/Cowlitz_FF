@@ -20,6 +20,7 @@ import os
 # Run-from-anywhere: relative paths below resolve from this script's folder
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+import re
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -442,7 +443,41 @@ def water_year(stamp):
     return stamp.year + (1 if stamp.month >= WATER_YEAR_START_MONTH else 0)
 
 
-def exceedance_episodes(diff, reg, unreg, min_hours):
+def wy_event_map(mapping):
+    """WY -> (event, base_year) for synthetic runs.
+
+    Keyed the same way the reg/unreg check keys its own WY column: off
+    real_start's own calendar via water_year(), not the mapping's
+    synth_water_year label. The two run one apart for any event whose real_start
+    falls on/after 01 Oct (synth_water_year is assigned sequentially per member,
+    not by the Oct-Sep convention water_year() uses), so re-deriving it here is
+    what keeps this join lined up with the WY the rest of the check reports.
+
+    base_year is the real calendar year the event was observed in -- pulled from
+    the trailing 4 digits of the 'event' label (e.g. "Dec1977" -> 1977), which is
+    how #Create_Synthetic_Ensembles.py / #Synthetic_Diagnostics.py name events
+    elsewhere in this pipeline. Falls back to source_start's year if the label
+    does not parse. Returns {} for WCM_RC / Obs_RC mappings, which have no
+    'event' column -- those runs are not built from a single source event.
+    """
+    if "event" not in mapping.columns:
+        return {}
+    out = {}
+    for _, row in mapping.iterrows():
+        wy = water_year(pd.Timestamp(row["real_start"]))
+        event = str(row["event"])
+        m = re.search(r"(\d{4})$", event)
+        if m:
+            base_year = int(m.group(1))
+        elif "source_start" in mapping.columns and pd.notna(row["source_start"]):
+            base_year = pd.Timestamp(row["source_start"]).year
+        else:
+            base_year = None
+        out[wy] = (event, base_year)
+    return out
+
+
+def exceedance_episodes(diff, reg, unreg, min_hours, wy_event=None):
     """Contiguous hourly runs where regulated exceeds unregulated.
 
     Works on the gap-filled hourly index, so a NaN hour breaks an episode rather
@@ -466,8 +501,12 @@ def exceedance_episodes(diff, reg, unreg, min_hours):
         hours = j - i + 1
         if hours >= min_hours:
             k = i + int(np.nanargmax(d_values[i:j + 1]))
+            wy = water_year(stamps[i])
+            event, base_year = (wy_event or {}).get(wy, (None, None))
             episodes.append({
-                "WY": water_year(stamps[i]),
+                "WY": wy,
+                "event": event,
+                "base_year": base_year,
                 "start": stamps[i],
                 "end": stamps[j],
                 "hours": hours,
@@ -481,7 +520,7 @@ def exceedance_episodes(diff, reg, unreg, min_hours):
     return episodes
 
 
-def check_reg_vs_unreg(built):
+def check_reg_vs_unreg(built, wy_event=None):
     """Flag every hour and every water year where regulated exceeds unregulated.
 
     Two separate questions, reported separately because they fail for different
@@ -494,6 +533,11 @@ def check_reg_vs_unreg(built):
              Some of these are legitimate (storage evacuation, minimum release),
              so they are split by whether the unregulated flow at that hour is
              above REG_UNREG_LOW_FLOW_CFS.
+
+    wy_event is the WY -> (event, base_year) lookup from wy_event_map(), so the
+    output tables say which source event (and which real calendar year) each
+    synthetic WY was built from. {} for WCM_RC / Obs_RC, whose WYs are already
+    real years and have no source event to look up.
     """
     print("\n" + "=" * 78)
     print("REGULATED vs UNREGULATED CHECK")
@@ -535,9 +579,12 @@ def check_reg_vs_unreg(built):
             peak_diff = reg_peak - unreg_peak
             over = d_wy[d_wy > REG_UNREG_TOL_CFS]
             over_high = over[unreg.reindex(over.index) >= REG_UNREG_LOW_FLOW_CFS]
+            event, base_year = (wy_event or {}).get(int(wy), (None, None))
             rows.append({
                 "part_b": part_b,
                 "WY": int(wy),
+                "event": event,
+                "base_year": base_year,
                 "reg_peak": reg_peak,
                 "unreg_peak": unreg_peak,
                 "reg_peak_time": t_reg,
@@ -559,7 +606,7 @@ def check_reg_vs_unreg(built):
             print("   no overlapping water years")
             continue
         episodes = exceedance_episodes(diff, reg, unreg,
-                                       REG_UNREG_MIN_EPISODE_HOURS)
+                                       REG_UNREG_MIN_EPISODE_HOURS, wy_event)
         for ep in episodes:
             ep["part_b"] = part_b
         all_rows.append(table)
@@ -735,7 +782,7 @@ def main():
     pd.DataFrame(summary).to_csv(SUMMARY_CSV, index=False)
 
     if REG_UNREG_CHECKS:
-        check_reg_vs_unreg(built)
+        check_reg_vs_unreg(built, wy_event_map(mapping))
 
     if CHECK_AGAINST:
         run_checks()
