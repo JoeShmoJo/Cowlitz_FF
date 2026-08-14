@@ -89,12 +89,64 @@ ENS_SUFFIX = "SYNTH"
 
 # --- source events: (label, peak date, shape 5day/peak, note) ---------------
 # Window is centred on the peak; WINDOW_BEFORE/AFTER days on each side.
-SOURCE_EVENTS = [
-    ("Dec1977", "1977-12-02", "sharp     (shape 0.47, rank 2)"),
-    ("Feb1996", "1996-02-09", "sharp-mid (shape 0.50, rank 1)"),
-    ("Dec1933", "1933-12-22", "sustained (shape 0.70, pass-through outlier)"),
-    ("Dec2025", "2025-12-11", "sustained (shape 0.72, recent)"),
+# --- SOURCE EVENTS -- TOGGLE HERE --------------------------------------------
+# The catalog below is every water year in the record ranked by UNREGULATED peak
+# at Castle Rock, from the WCM_RC period-of-record run. To change which storms
+# the synthetics are built from, flip the first column. Nothing else needs
+# editing, and events can be added freely -- the simulation is cheap, and more
+# source events is the only way to learn whether the spread at the top of the
+# regulated curve is real or an artefact of a thin sample.
+#
+# WHY BIG EVENTS ONLY
+# Hydrograph shape is not independent of size. A large storm is large because it
+# was widespread and sustained, and that is exactly what determines whether the
+# reservoir can hold it. Scaling a small event up to a 500-year magnitude keeps
+# the small event's shape and asks the reservoir to route a flood volume that
+# storm never produced -- the routing is arithmetically fine and physically
+# meaningless. The scale factor column below is the honest measure of how far
+# each event is being stretched; anything much past 2x is a stretch in both
+# senses. SCALE_FACTOR_WARN flags them at run time.
+#
+# The ratio column is the WCM_RC regulated/unregulated peak ratio -- how much
+# the project actually took off that storm. It is the best available proxy for
+# shape, and a good source set spans it rather than clustering: 1.00 means the
+# flood passed straight through, 0.5 means half of it was held back.
+#
+#     use    label      peak date     unreg peak  ratio   note
+SOURCE_EVENT_CATALOG = [
+    (True,  "Feb1996", "1996-02-09",     212246, 0.62, "largest on record"),
+    (True,  "Nov2006", "2006-11-07",     155018, 0.61, "rank 2"),
+    (True,  "Dec2015", "2015-12-09",     152270, 0.53, "rank 3, well attenuated"),
+    (True,  "Dec1933", "1933-12-23",     149770, 1.00, "PASS-THROUGH -- storage exhausted"),
+    (True,  "Dec1977", "1977-12-02",     148667, 0.54, "rank 5"),
+    (True,  "Jan2009", "2009-01-08",     143468, 0.57, "rank 6"),
+    (True,  "Dec1975", "1975-12-04",     136059, 0.56, "rank 7"),
+    (True,  "Jan1990", "1990-01-09",     130043, 0.65, "rank 8, mid attenuation"),
+    (False, "Feb2003", "2003-02-01",     119348, 0.52, "rank 9"),
+    (False, "Dec2025", "2025-12-11",     116111, 0.52, "rank 10, most recent large event"),
+    (False, "Nov1990", "1990-11-25",     108150, 0.58, "rank 11"),
+    (False, "Nov1986", "1986-11-24",     104890, 0.70, "rank 12, sustained"),
+    (False, "Feb1986", "1986-02-24",      94558, 0.66, "rank 13"),
+    (False, "Dec1996", "1996-12-30",      90906, 0.60, "rank 14"),
+    (False, "Jan1972", "1972-01-20",      90280, 0.71, "rank 15, sustained"),
+    (False, "Dec2007", "2007-12-04",      89749, 0.68, "rank 16"),
+    (False, "Dec1946", "1946-12-13",      88542, 0.61, "rank 17"),
+    (False, "Dec1964", "1964-12-23",      87903, 0.59, "rank 18"),
+    (False, "Jan1982", "1982-01-24",      87607, 0.74, "rank 19, sustained"),
+    (False, "Dec2023", "2023-12-06",      87399, 0.60, "rank 20"),
 ]
+# Warn when an enabled event has to be stretched further than this to reach the
+# largest target. Not an error -- a flag that the shape being routed may not
+# belong to a flood of that size.
+SCALE_FACTOR_WARN = 2.0
+# Refuse to enable an event whose unregulated peak is below this. Set to 0 to
+# allow anything.
+MIN_SOURCE_PEAK_CFS = 100000.0
+
+SOURCE_EVENTS = [(label, date, "%s cfs unreg, WCM_RC ratio %.2f -- %s"
+                  % (format(peak, ","), ratio, note))
+                 for use, label, date, peak, ratio, note in SOURCE_EVENT_CATALOG
+                 if use]
 WINDOW_BEFORE_DAYS = 10       # lead-in, so the pool responds before the peak
 WINDOW_AFTER_DAYS = 20        # recession, long enough to pass the flood
 
@@ -567,6 +619,55 @@ def pool_on_date(table, when):
     return np.nan
 
 
+def report_source_events(targets):
+    """Print the enabled events with the stretch each one has to survive.
+
+    The scale factor is the number that decides whether a source event is a
+    reasonable basis for a given magnitude. An event already near the target
+    barely has to be touched; one at half the target is being asked to supply a
+    flood volume that storm never produced.
+    """
+    enabled = [row for row in SOURCE_EVENT_CATALOG if row[0]]
+    if not enabled:
+        raise SystemExit("SOURCE_EVENT_CATALOG has no events switched on.")
+    small = [r for r in enabled if r[3] < MIN_SOURCE_PEAK_CFS]
+    if small:
+        raise SystemExit(
+            "These events are below MIN_SOURCE_PEAK_CFS (%s cfs): %s.\n"
+            "Hydrograph shape goes with size, so scaling a small storm up to a "
+            "rare magnitude routes a shape that never belonged to a flood that "
+            "big. Lower the setting deliberately if you want them anyway."
+            % (format(int(MIN_SOURCE_PEAK_CFS), ","),
+               ", ".join(r[1] for r in small)))
+
+    biggest = max(targets.values()) if targets else np.nan
+    print("\nSOURCE EVENTS  (%d of %d in the catalog switched on)"
+          % (len(enabled), len(SOURCE_EVENT_CATALOG)))
+    print("   %-9s %12s %7s %8s  %s"
+          % ("event", "unreg peak", "ratio", "max x", "note"))
+    stretched = []
+    for _, label, date, peak, ratio, note in enabled:
+        factor = biggest / peak if peak else np.nan
+        flag = "  <-- stretched" if factor > SCALE_FACTOR_WARN else ""
+        if factor > SCALE_FACTOR_WARN:
+            stretched.append(label)
+        print("   %-9s %12s %7.2f %8.2f  %s%s"
+              % (label, format(peak, ","), ratio, factor, note, flag))
+    ratios = [r[4] for r in enabled]
+    print("   attenuation ratio spanned: %.2f to %.2f across %d events"
+          % (min(ratios), max(ratios), len(enabled)))
+    if max(ratios) < 0.9:
+        print("   NOTE: no pass-through event enabled. The top of the regulated")
+        print("   curve is set by storms that exhaust storage, so leaving those")
+        print("   out will bias it low.")
+    if stretched:
+        print("   NOTE: %s must be scaled past %.1fx to reach the largest target."
+              % (", ".join(stretched), SCALE_FACTOR_WARN))
+        print("   The routing is fine arithmetically; the shape may not belong")
+        print("   to a flood that size.")
+    return enabled
+
+
 def build_container(pathname, values, start_time, units, data_type, interval_min):
     """TimeSeriesContainer built the way the installed pydsstools accepts."""
     try:
@@ -746,6 +847,7 @@ def main():
                  "" if on else "(off -- no members written)"))
     print("Output     : %s" % OUT_DSS)
     print("=" * 78)
+    report_source_events(targets)
 
     events = []
     for label, peak_date, note in SOURCE_EVENTS:
