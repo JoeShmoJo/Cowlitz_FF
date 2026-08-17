@@ -239,7 +239,7 @@ ENFORCE_MONOTONIC = True
 # Never let the drawn regulated flow exceed the unregulated flow it came from.
 CLIP_TO_UNREG = True
 # Draw the single power law as a thin reference line for comparison.
-SHOW_POWER_LAW_REFERENCE = True
+SHOW_POWER_LAW_REFERENCE = False
 
 # --- 2009 study adopted regulated frequency curve ----------------------------
 # AEP in percent, discharge in cfs. The external check on the upper end.
@@ -656,8 +656,8 @@ def plot_scatter(data, fit, wcm, synth, stem):
         if wcm is not None and len(wcm):
             ax.scatter(wcm["unreg_peak"], wcm["reg_peak"], s=30, marker="D",
                        facecolor="none", edgecolor=C_WCM, lw=0.9, zorder=2,
-                       label="WCM_RC simulated pair (no Obs_RC correction%s)"
-                             % ("" if FIT_SOURCES.get("wcm_rc") else ", not fitted"))
+                       label="Unadjusted%s)"
+                             % ("" if FIT_SOURCES.get("wcm_rc") else ", (not fitted"))
             lo += [wcm["unreg_peak"].min(), wcm["reg_peak"].min()]
             hi += [wcm["unreg_peak"].max(), wcm["reg_peak"].max()]
         if synth is not None and len(synth):
@@ -670,20 +670,20 @@ def plot_scatter(data, fit, wcm, synth, stem):
             hi += [synth[SYNTH_UNREG_COL].max(), synth[SYNTH_REG_COL].max()]
 
         ax.scatter(x, y, s=46, facecolor=C_UNREG, edgecolor="0.25", lw=0.6,
-                   zorder=3, label="Water year (adjusted regulated peak)")
+                   zorder=3, label="Adjusted")
         lim = [min(lo) * 0.85, max(hi) * 1.15]
         ax.plot(lim, lim, color="k", lw=1.2, ls="--", zorder=2,
-                label="1:1 (no reservoir effect)")
+                label="1:1")
 
         xs = np.geomspace(max(lim[0], 1.0), lim[1], 300)
         centre = apply_transform(fit, xs)
         ax.plot(xs, centre, color=C_REG, lw=1.8, zorder=4,
                 label=transform_label(fit))
-        band = 10 ** transform_sigma_dex(fit, xs)
-        ax.fill_between(xs, centre / band, centre * band, color=C_REG,
-                        alpha=0.12, zorder=1,
-                        label="+/- 1 sigma of the scatter (%s)"
-                              % TRANSFORM_SIGMA_MODE)
+        # band = 10 ** transform_sigma_dex(fit, xs)
+        # ax.fill_between(xs, centre / band, centre * band, color=C_REG,
+        #                 alpha=0.12, zorder=1,
+        #                 label="+/- 1 sigma of the scatter (%s)"
+        #                       % TRANSFORM_SIGMA_MODE)
         if SHOW_POWER_LAW_REFERENCE and fit["method"] != "power":
             ax.plot(xs, apply_power_law(fit["power"], xs), color=C_REG, lw=1.0,
                     ls=":", zorder=3,
@@ -707,7 +707,6 @@ def plot_scatter(data, fit, wcm, synth, stem):
         ax.set_xlabel("Unregulated peak at Castle Rock (cfs)")
         ax.set_ylabel("Regulated peak at Castle Rock (cfs)")
         ax.set_title("Castle Rock unregulated vs regulated peak%s\n"
-                     "points below the 1:1 line are the reduction the project achieved"
                      % ("  (log-log)" if log_axes else ""), fontsize=11)
         ax.legend(loc="upper left", fontsize=8.5)
         fig.tight_layout()
@@ -746,7 +745,7 @@ def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
             label="Unregulated peak (%s curve)" % FREQ_VALUE_COL.lower())
     ax.plot(z, reg_curve, color=C_REG, lw=2.2, zorder=4,
             label="Regulated peak, inferred (%s)"
-                  % ("LOESS centre of mass" if fit["method"] == "loess"
+                  % ("LOESS" if fit["method"] == "loess"
                      else "power law"))
     ax.fill_between(z, reg_curve / band, reg_curve * band, color=C_REG,
                     alpha=0.14, zorder=1, label="Regulated, +/- 1 std error")
@@ -819,14 +818,14 @@ def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
                           % len(wv))
 
     # where the transform stops being supported by data
-    supported = unreg_curve <= fit["x_max"]
-    if supported.any() and not supported.all():
-        z_edge = z[supported].max()
-        ax.axvline(z_edge, color="0.35", lw=1.0, ls=":", zorder=2)
-        ax.text(z_edge, FLOW_LIMITS[1] * 0.92,
-                "  transform supported to here\n  (unreg %s cfs)"
-                % format(int(fit["x_max"]), ","),
-                fontsize=8, color="0.3", va="top")
+    # supported = unreg_curve <= fit["x_max"]
+    # if supported.any() and not supported.all():
+    #     z_edge = z[supported].max()
+    #     ax.axvline(z_edge, color="0.35", lw=1.0, ls=":", zorder=2)
+    #     # ax.text(z_edge, FLOW_LIMITS[1] * 0.92,
+    #     #         "  transform supported to here\n  (unreg %s cfs)"
+    #     #         % format(int(fit["x_max"]), ","),
+    #     #         fontsize=8, color="0.3", va="top")
 
     ax.set_yscale("log")
     ax.set_ylim(FLOW_LIMITS)
@@ -839,7 +838,7 @@ def plot_frequency(freq, data, fit, wcm, synth, table_2009, stem):
     ax.set_title("Castle Rock peak flow frequency\n"
                  "regulated AEP inherited from the unregulated curve through a "
                  "%s relationship"
-                 % ("centre-of-mass (LOESS)" if fit["method"] == "loess"
+                 % ("(LOESS)" if fit["method"] == "loess"
                     else "power-law"), fontsize=12)
     ax.legend(loc="upper left", fontsize=8.5, framealpha=0.92)
     if wcm is not None and len(wcm):

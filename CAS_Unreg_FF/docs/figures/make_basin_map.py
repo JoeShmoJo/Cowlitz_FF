@@ -191,8 +191,8 @@ ROTATE_RIVER_LABELS = True
 # used to place a marker and a label; no number in the study depends on them.
 # Cross-check against the basemap once and nudge if a marker sits off the dam.
 DAMS = [
-    ("Mossyrock Dam", 46.5347, -122.4331, "1968", (18, 24)),
-    ("Mayfield Dam", 46.5033, -122.5883, "1963", (-18, -44)),
+    ("Mossyrock Dam", 46.5347, -122.4331, "1968", (0, -40)),
+    ("Mayfield Dam", 46.5033, -122.5883, "1963", (-10, -30)),
 ]
 # Labels only; the basemap draws the water. (lat, lon, label, rotation)
 LAKES = [
@@ -200,7 +200,7 @@ LAKES = [
     (46.5140, -122.5250, "Mayfield Lake", -5),
 ]
 SHOW_DAMS = True
-SHOW_LAKE_LABELS = True
+SHOW_LAKE_LABELS = False
 
 # Used ONLY if the NWIS fetch fails, so the figure still has its gages. These
 # are approximate; anything drawn from them is stamped on the figure.
