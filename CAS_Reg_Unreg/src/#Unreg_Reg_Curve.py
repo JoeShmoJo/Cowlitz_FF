@@ -1319,7 +1319,12 @@ def main():
     out["reg_vs_2009_pct"] = 100.0 * (out["reg_inferred_cfs"] / out["reg_2009_cfs"]
                                       - 1.0)
     out.to_csv(os.path.join(OUT_DIR, "regulated_frequency_inferred.csv"),
-               index=False, float_format="%.1f")
+               index=False, float_format="%.8g")
+    # NOT "%.1f". One format has to serve flows in the hundreds of thousands
+    # and log-space sigmas of a few hundredths, and a single decimal place
+    # destroys the small ones: it wrote every AEP below 0.05 as 0.0, turned
+    # 0.99 into 1.0 and 0.95 into 0.9, and flattened every sigma and the
+    # transform slope to 0.0 or 0.1. Significant figures, not decimal places.
 
     plot_2009_comparison(out, PLOT_STEM)
 
