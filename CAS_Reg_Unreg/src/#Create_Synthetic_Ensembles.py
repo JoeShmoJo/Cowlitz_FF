@@ -107,6 +107,53 @@ PATH_MOS_ELEV_DAILY = "//MOS/ELEV/*/1DAY/USGS/"
 
 ENS_SUFFIX = "SYNTH"
 
+# --- second plot set: the inflows ResSim ACTUALLY ran ------------------------
+# The _events.png plot recomputes each member from the scaling functions, so it
+# shows the ensemble AS BUILT. That is not what was routed: the Dec1977 and
+# Nov1986 mini peaks are chopped by hand in DSSVue after this script writes the
+# DSS (see the warning at the top of this file), and the plot has no way to
+# know. The figure therefore shows two-peaked hydrographs that no longer exist
+# in the run the results came from.
+#
+# When SIM_DSS is present, a second set is drawn straight from the simulation's
+# own inflow records, which are the hand-edited ones ResSim read. That set is
+# the one to put in a memo.
+#
+# The observed source hydrograph is not in the simulation -- ResSim never saw
+# the unscaled event -- so it still comes from IN_DSS, the same place the build
+# takes it from.
+SIM_DSS = r"../output/ResSim_Synth.dss"
+PLOT_AS_RUN = True
+# Pathname parts in the simulation output. ResSim writes its own B parts, which
+# are not the ones the ensemble was written under.
+SIM_PART_B_MOS = "MOSSYROCK-POOL"
+SIM_PART_C_MOS = "FLOW-IN"
+SIM_PART_B_CAS = "CASTLEROCK_NWS"
+SIM_PART_C_CAS = "FLOW-LOCAL"
+SIM_PART_F = "RESSIM_SYNTH"
+# Overlay the as-built curve as a thin dashed line, so the hand edit shows up
+# as the difference between the two. Useful for checking the chop; noise on a
+# figure meant for a memo, which is why it is off.
+ASRUN_SHOW_BUILT = False
+# A member whose largest hourly difference from the as-built curve exceeds this
+# percentage of its own peak is reported as edited. Small non-zero differences
+# are normal -- the simulation writes what it read at its own precision.
+EDIT_DETECT_PCT = 2.0
+# Hours to shift the simulation record onto the build index. None = detect it
+# from the data (see detect_sim_hour_offset); an integer forces it.
+SIM_HOUR_OFFSET = None
+SIM_OFFSET_SEARCH = 4
+
+# Rebuild the plots from the existing mapping CSV and the simulation WITHOUT
+# touching the ensemble DSS.
+#
+# Turn this on to regenerate a figure. build_set DELETES OUT_DSS before writing,
+# so a normal run to refresh a plot would destroy the hand-chopped members --
+# the exact trap described at the top of this file. With PLOTS_ONLY the DSS is
+# never opened, and the mapping is read back from MAPPING_CSV instead of being
+# rebuilt.
+PLOTS_ONLY = False
+
 # --- source events: (label, peak date, shape 5day/peak, note) ---------------
 # Window is centred on the peak; WINDOW_BEFORE/AFTER days on each side.
 # --- SOURCE EVENTS -- TOGGLE HERE --------------------------------------------
@@ -835,6 +882,257 @@ def plot_events(events, mapping, stem):
     plt.close(fig)
 
 
+def read_sim_inflows(sim_dss):
+    """Mossyrock inflow and Castle Rock local as ResSim read them.
+
+    One continuous record each, spanning every synthetic water year, not one
+    record per member -- the members are separated by their dates. Returns
+    (mos, cas) or (None, None) if the file or the records are not there.
+    """
+    if not os.path.isfile(sim_dss):
+        print("As-run plots: %s not found -- skipped." % sim_dss)
+        print("   The _events.png set shows the ensemble AS BUILT, which is "
+              "not what")
+        print("   was routed if the Dec1977 / Nov1986 members were chopped by "
+              "hand.")
+        return None, None
+    try:
+        mos = read_dss_series(sim_dss, "//%s/%s//1HOUR/%s/"
+                              % (SIM_PART_B_MOS, SIM_PART_C_MOS, SIM_PART_F))
+        cas = read_dss_series(sim_dss, "//%s/%s//1HOUR/%s/"
+                              % (SIM_PART_B_CAS, SIM_PART_C_CAS, SIM_PART_F))
+    except Exception as exc:
+        print("As-run plots: could not read %s (%s) -- skipped."
+              % (os.path.basename(sim_dss), exc))
+        print("   Check SIM_PART_B_* / SIM_PART_F against the pathnames in the "
+              "file.")
+        return None, None
+    return mos, cas
+
+
+def sim_member_total(mos, cas, row, offset_hours=0):
+    """One member's routed inflow total, on hours-into-the-window.
+
+    The member is cut out of the continuous record by its own dates, the same
+    way #Adjusted_Peak_Record.py cuts events out of a period-of-record run.
+    Returns (hours, total) or (None, None) when the window is not in the file.
+
+    offset_hours corrects the stamping convention between the ensemble as
+    written and the simulation as written back -- see detect_sim_hour_offset.
+    """
+    start = pd.Timestamp(row["real_start"]) - pd.Timedelta(hours=offset_hours)
+    end = pd.Timestamp(row["real_end"]) - pd.Timedelta(hours=offset_hours)
+    index = pd.date_range(start, end, freq="h")
+    # Sum with NaN PROPAGATING, then drop. Filling missing with zero instead
+    # puts a spurious plunge to 0 on the plot: the simulation records carry
+    # NaN at the member boundaries, so every panel ended with a vertical drop
+    # that looked like the hydrograph collapsing rather than the record simply
+    # stopping.
+    total = (mos.reindex(index) + cas.reindex(index)).dropna()
+    if not len(total):
+        return None, None
+    hours = (total.index - start) / pd.Timedelta(hours=1) / 24.0
+    return np.asarray(hours, dtype=float), total.values
+
+
+def residual_against_built(hours, total, built):
+    """Compare a simulated member to its built curve, aligned by TIME.
+
+    Not by array position. sim_member_total drops the missing hours at the
+    member boundaries, so position i in the simulated array is not hour i --
+    comparing positionally slides the whole record and reports differences
+    everywhere, which is how the first version of this made all 48 members look
+    hand-edited.
+
+    Returns (max_abs, index_into_built_of_max, run_value, built_value) or None.
+    """
+    if hours is None or total is None or not len(total):
+        return None
+    hour_index = np.rint(np.asarray(hours) * 24.0).astype(int)
+    inside = (hour_index >= 0) & (hour_index < len(built))
+    if inside.sum() < 100:
+        return None
+    hi = hour_index[inside]
+    run = np.asarray(total)[inside]
+    ref = np.asarray(built)[hi]
+    diff = run - ref
+    j = int(np.nanargmax(np.abs(diff)))
+    return float(abs(diff[j])), int(hi[j]), float(run[j]), float(ref[j])
+
+
+def detect_sim_hour_offset(events, mapping, mos, cas):
+    """Hours to shift the simulation record to line up with the build.
+
+    DSS stamps are END of period, and the ensemble is written one step after
+    the label start while read_dss_series shifts back to period-beginning. The
+    two conventions do not cancel, and the simulation comes back one hour out.
+    Uncorrected, every member is compared against its own curve shifted by an
+    hour, which produces large apparent differences on the steep limbs while
+    the peaks still match -- easily mistaken for a hand edit on all 48 members.
+
+    Detected rather than assumed: each member is tested over a range of shifts
+    and the one that minimises the largest residual is kept, then the MODE
+    across members is adopted. The mode is what makes this safe -- the members
+    that were edited by hand disagree with their built curve at every shift, so
+    letting them vote individually would be wrong, but they are outnumbered.
+    """
+    if SIM_HOUR_OFFSET is not None:
+        print("As-run plots: hour offset forced to %+d" % SIM_HOUR_OFFSET)
+        return SIM_HOUR_OFFSET
+    votes = []
+    for ev in events:
+        for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
+            built, _ = scale_volume_matched(
+                ev["total"].values, ev["index"],
+                row["target_unreg_peak_cfs"], row["target_unreg_5day_cfs"])
+            best, best_resid = 0, None
+            for shift in range(-SIM_OFFSET_SEARCH, SIM_OFFSET_SEARCH + 1):
+                hours, total = sim_member_total(mos, cas, row, shift)
+                if total is None:
+                    continue
+                resid = residual_against_built(hours, total, built)
+                if resid is None:
+                    continue
+                if best_resid is None or resid[0] < best_resid:
+                    best, best_resid = shift, resid[0]
+            if best_resid is not None:
+                votes.append(best)
+    if not votes:
+        return 0
+    offset = int(pd.Series(votes).mode().iloc[0])
+    agree = votes.count(offset)
+    print("As-run plots: simulation is %+d hour(s) off the build index "
+          "(%d of %d members agree)" % (offset, agree, len(votes)))
+    if agree < 0.6 * len(votes):
+        print("   *** less than 60%% agreement -- the offset is not clean. "
+              "Check the")
+        print("   mapping CSV against the simulation before trusting these "
+              "plots.")
+    return offset
+
+
+def plot_events_asrun(events, mapping, stem, mos, cas, offset_hours=0):
+    """The same panels as plot_events, drawn from the simulation's own inflows.
+
+    This is the honest picture of what was routed: it carries the hand-edited
+    Dec1977 and Nov1986 members rather than the two-peaked versions the scaling
+    functions produce.
+    """
+    n = len(events)
+    ncols = 1 if n == 1 else (2 if n <= 8 else 3)
+    nrows = int(np.ceil(n / float(ncols)))
+    fig, axes = plt.subplots(nrows, ncols, squeeze=False,
+                             figsize=(6.75 * ncols, 4.5 * nrows))
+    drawn, missing = 0, []
+    for k, ev in enumerate(events):
+        ax = axes[k // ncols][k % ncols]
+        obs_hours = np.arange(len(ev["total"])) / 24.0
+        for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
+            hours, total = sim_member_total(mos, cas, row, offset_hours)
+            if hours is None:
+                missing.append("%s %s" % (row["event"], row["target"]))
+                continue
+            line = ax.plot(hours, total, lw=1.2,
+                           label="%s  peak %s" % (row["target"],
+                                                  format(int(total.max()), ",")))[0]
+            drawn += 1
+            if ASRUN_SHOW_BUILT:
+                built, _ = scale_volume_matched(
+                    ev["total"].values, ev["index"],
+                    row["target_unreg_peak_cfs"], row["target_unreg_5day_cfs"])
+                ax.plot(obs_hours, built, lw=0.8, ls="--",
+                        color=line.get_color(), alpha=0.8)
+        ax.plot(obs_hours, ev["total"].values, color="k", lw=1.8,
+                label="observed x1.00")
+        ax.plot(obs_hours, ev["cas"].fillna(0.0).values, color="0.6", lw=0.9,
+                ls=":", label="local (observed)")
+        peak_day = float(np.argmax(ev["total"].values)) / 24.0
+        ax.axvspan(peak_day - VOLUME_HALF_WIDTH_DAYS,
+                   peak_day + VOLUME_HALF_WIDTH_DAYS,
+                   color="#2c7fb8", alpha=0.10, zorder=0)
+        ax.set_title("%s   %s" % (ev["label"], ev["note"]), fontsize=10)
+        ax.set_xlabel("Days into the member window", fontsize=8)
+        ax.set_ylabel("Unregulated inflow (cfs)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7)
+        ax.grid(alpha=0.25)
+    fig.suptitle("Synthetic inflows AS RUN -- read back from %s\n"
+                 "Mossyrock inflow + Castle Rock local, including any members "
+                 "edited by hand after the ensemble was written%s"
+                 % (os.path.basename(SIM_DSS),
+                    "; dashed = as built" if ASRUN_SHOW_BUILT else ""),
+                 fontsize=11)
+    for k in range(n, nrows * ncols):
+        axes[k // ncols][k % ncols].axis("off")
+    fig.tight_layout(rect=[0, 0, 1, 1.0 - 0.16 / nrows])
+    fig.savefig("%s_events_asrun.png" % stem, dpi=150)
+    plt.close(fig)
+    print("As-run plots: %d member(s) drawn from %s"
+          % (drawn, os.path.basename(SIM_DSS)))
+    if missing:
+        print("   %d member(s) had no window in the simulation: %s"
+              % (len(missing), ", ".join(missing[:8])))
+        print("   Those members were not run, or the mapping CSV does not "
+              "match the simulation.")
+    return drawn
+
+
+def compare_built_to_asrun(events, mapping, mos, cas, offset_hours=0):
+    """Report which members differ between the built ensemble and the run.
+
+    This is what makes a hand edit visible instead of inferred. A member that
+    was chopped shows up as a lower pre-peak maximum against an unchanged peak;
+    a member nobody touched matches to within rounding.
+    """
+    rows = []
+    for ev in events:
+        for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
+            hours, total = sim_member_total(mos, cas, row, offset_hours)
+            if hours is None:
+                continue
+            built, _ = scale_volume_matched(
+                ev["total"].values, ev["index"],
+                row["target_unreg_peak_cfs"], row["target_unreg_5day_cfs"])
+            # Largest hourly difference anywhere in the window, aligned by
+            # time. Looking only at the pre-peak MAXIMUM missed Dec1977
+            # entirely: its chop lowered a shoulder without moving that
+            # shoulder's maximum enough to trip a threshold.
+            found = residual_against_built(hours, total, built)
+            if found is None:
+                continue
+            max_abs, hour_at, run_there, built_there = found
+            rows.append({"event": row["event"], "target": row["target"],
+                         "peak_built": float(np.max(built)),
+                         "peak_run": float(np.max(total)),
+                         "at_day": hour_at / 24.0,
+                         "built_there": built_there,
+                         "run_there": run_there,
+                         "max_abs_diff": max_abs})
+    if not rows:
+        return
+    table = pd.DataFrame(rows)
+    table["diff_pct_of_peak"] = 100.0 * table["max_abs_diff"] / table["peak_built"]
+    edited = table[table["diff_pct_of_peak"] > EDIT_DETECT_PCT]
+    print("\nBUILT vs AS RUN  (largest hourly difference, as %% of the member "
+          "peak)")
+    print("   peaks match to within %.1f%% on every member"
+          % (100 * (table["peak_run"] / table["peak_built"] - 1.0).abs().max()))
+    if not len(edited):
+        print("   nothing differs by more than %.0f%% -- no hand edit detected"
+              % EDIT_DETECT_PCT)
+        return
+    print("   %d member(s) differ by more than %.0f%%:"
+          % (len(edited), EDIT_DETECT_PCT))
+    for _, r in edited.sort_values("diff_pct_of_peak", ascending=False).iterrows():
+        print("      %-8s %-7s day %5.2f  %8s -> %8s  (%+.0f cfs, %.1f%% of peak)"
+              % (r["event"], r["target"], r["at_day"],
+                 format(int(r["built_there"]), ","),
+                 format(int(r["run_there"]), ","),
+                 r["run_there"] - r["built_there"], r["diff_pct_of_peak"]))
+    print("   That is the hand edit, and it is why the as-run set is the one "
+          "to publish.")
+
+
 def plot_pools(events, bases, highest_pick, stem):
     """Starting pool for every ENABLED basis, per event date."""
     fig, ax = plt.subplots(figsize=(11, 5.5))
@@ -1112,17 +1410,40 @@ def main():
 
       return pd.DataFrame(mapping_rows)
 
-    mapping = build_set(OUT_DSS, SCALING_METHOD)
-    mapping.to_csv(MAPPING_CSV, index=False)
-    if ALSO_WRITE_LINEAR_TAPER and SCALING_METHOD != "linear_taper":
-        alt = build_set(OUT_DSS_ALT, "linear_taper")
-        alt.to_csv(MAPPING_CSV.replace(".csv", "_lineartaper.csv"), index=False)
-        print("\nFallback set written: %s" % OUT_DSS_ALT)
-        print("   peak targets met; 5-day lands at %.0f-%.0f%% of target"
-              % (100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).min(),
-                 100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).max()))
+    if PLOTS_ONLY:
+        # No DSS is written or deleted in this mode -- see PLOTS_ONLY above.
+        if not os.path.isfile(MAPPING_CSV):
+            raise SystemExit(
+                "PLOTS_ONLY needs an existing mapping CSV and there is none "
+                "at\n   %s\nRun once with PLOTS_ONLY = False to build the "
+                "ensemble first." % MAPPING_CSV)
+        mapping = pd.read_csv(MAPPING_CSV)
+        print("\nPLOTS_ONLY: %d members read from %s"
+              % (len(mapping), MAPPING_CSV))
+        print("   The ensemble DSS was NOT touched, so any hand-edited members "
+              "in it are intact.")
+    else:
+        mapping = build_set(OUT_DSS, SCALING_METHOD)
+        mapping.to_csv(MAPPING_CSV, index=False)
+        if ALSO_WRITE_LINEAR_TAPER and SCALING_METHOD != "linear_taper":
+            alt = build_set(OUT_DSS_ALT, "linear_taper")
+            alt.to_csv(MAPPING_CSV.replace(".csv", "_lineartaper.csv"), index=False)
+            print("\nFallback set written: %s" % OUT_DSS_ALT)
+            print("   peak targets met; 5-day lands at %.0f-%.0f%% of target"
+                  % (100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).min(),
+                     100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).max()))
     plot_events(events, mapping, PLOT_STEM)
     plot_pools(events, bases, highest_pick, PLOT_STEM)
+
+    # --- the same panels, drawn from what ResSim actually read ---------------
+    if PLOT_AS_RUN:
+        sim_mos, sim_cas = read_sim_inflows(SIM_DSS)
+        if sim_mos is not None:
+            offset = detect_sim_hour_offset(events, mapping, sim_mos, sim_cas)
+            if plot_events_asrun(events, mapping, PLOT_STEM, sim_mos, sim_cas,
+                                 offset):
+                compare_built_to_asrun(events, mapping, sim_mos, sim_cas,
+                                       offset)
 
     print("\nSOURCE EVENTS")
     for ev in events:
@@ -1187,7 +1508,11 @@ def main():
     print("\nMembers written : %d   records: %d (4 per member)"
           % (len(mapping), len(mapping) * 4))
     print("Mapping CSV     : %s" % MAPPING_CSV)
-    print("Plots           : %s_events.png, %s_pools.png" % (PLOT_STEM, PLOT_STEM))
+    print("Plots           : %s_events.png (as built), %s_pools.png"
+          % (PLOT_STEM, PLOT_STEM))
+    if PLOT_AS_RUN and os.path.isfile(SIM_DSS):
+        print("                  %s_events_asrun.png (as run -- use this one)"
+              % PLOT_STEM)
 
 
 main()
