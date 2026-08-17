@@ -353,6 +353,21 @@ MAKE_FINAL_UNCERTAINTY_PLOT = True
 FINAL_SHOW_2009 = False
 # Draw the unregulated confidence band as well, for context.
 FINAL_SHOW_UNREG_BAND = True
+# Title. One line, no explanation underneath -- this figure goes in a memo
+# where the method is in the text beside it.
+FINAL_TITLE = "Castle Rock peak flow frequency, regulated and unregulated"
+# The dotted line and label marking where the transform stops being supported
+# by data. Off for the report figure; the caveat belongs in the memo text,
+# where it can be stated properly rather than in eight-point grey. The other
+# plots still carry it -- see plot_frequency.
+FINAL_SHOW_SUPPORT_MARKER = False
+# The box in the lower right restating the band formula. Off for the same
+# reason. Switch it on when the figure has to travel on its own.
+FINAL_SHOW_FORMULA_NOTE = False
+# Frequency axis for THIS figure only. The global AEP_LIMITS starts at 0.999,
+# which leaves a wide empty strip on the left because no curve is plotted
+# beyond 0.99. Kept separate so the diagnostic plots are not moved with it.
+FINAL_AEP_LIMITS = (0.99, 0.0005)
 
 # ----------------------------------------------------------------------------
 
@@ -1090,39 +1105,42 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
                 table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
                 zorder=4, label=CURVE_2009_LABEL)
 
-    supported = unreg_curve <= fit["x_max"]
-    if supported.any() and not supported.all():
-        z_edge = z[supported].max()
-        ax.axvline(z_edge, color="0.35", lw=1.0, ls=":", zorder=3)
-        ax.text(z_edge, FLOW_LIMITS[1] * 0.94,
-                "  transform supported to here\n  (unreg %s cfs)"
-                % format(int(fit["x_max"]), ","),
-                fontsize=8, color="0.3", va="top")
+    if FINAL_SHOW_SUPPORT_MARKER:
+        supported = unreg_curve <= fit["x_max"]
+        if supported.any() and not supported.all():
+            z_edge = z[supported].max()
+            ax.axvline(z_edge, color="0.35", lw=1.0, ls=":", zorder=3)
+            ax.text(z_edge, FLOW_LIMITS[1] * 0.94,
+                    "  transform supported to here\n  (unreg %s cfs)"
+                    % format(int(fit["x_max"]), ","),
+                    fontsize=8, color="0.3", va="top")
 
     ax.set_yscale("log")
     ax.set_ylim(FLOW_LIMITS)
-    probability_axis(ax, AEP_TICKS, AEP_LIMITS)
+    # Ticks trimmed to the axis, so a label is never assigned to a tick that
+    # is off the plot -- probability_axis pairs labels to ticks positionally.
+    ticks = [t for t in AEP_TICKS
+             if FINAL_AEP_LIMITS[1] <= t <= FINAL_AEP_LIMITS[0]]
+    probability_axis(ax, ticks, FINAL_AEP_LIMITS)
     ax.yaxis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: format(int(v), ",")))
     ax.grid(which="major", alpha=0.45, lw=0.8)
     ax.grid(which="minor", alpha=0.2, lw=0.5)
     ax.set_ylabel("Peak flow (cfs)")
-    ax.set_title("Castle Rock peak flow frequency, regulated and unregulated\n"
-                 "%d%% uncertainty: flow-frequency carried through the "
-                 "unreg-reg transform, combined with the transform scatter"
-                 % pct, fontsize=12)
+    ax.set_title(FINAL_TITLE, fontsize=12)
     ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
-    ax.text(0.995, 0.015,
-            "Regulated band = sqrt( (b x freq sigma)$^2$ + transform sigma$^2$ ), "
-            "b = dlog(reg)/dlog(unreg)\ntransform sigma %.3f to %.3f dex "
-            "(%s, %s)"
-            % (np.nanmin(unc["sigma_transform"]),
-               np.nanmax(unc["sigma_transform"]),
-               TRANSFORM_SIGMA_MODE, TRANSFORM_UNCERTAINTY_BASIS),
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
-            color="0.25",
-            bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="0.6",
-                      alpha=0.9, lw=0.8))
+    if FINAL_SHOW_FORMULA_NOTE:
+        ax.text(0.995, 0.015,
+                "Regulated band = sqrt( (b x freq sigma)$^2$ + transform "
+                "sigma$^2$ ), b = dlog(reg)/dlog(unreg)\ntransform sigma "
+                "%.3f to %.3f dex (%s, %s)"
+                % (np.nanmin(unc["sigma_transform"]),
+                   np.nanmax(unc["sigma_transform"]),
+                   TRANSFORM_SIGMA_MODE, TRANSFORM_UNCERTAINTY_BASIS),
+                transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+                color="0.25",
+                bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="0.6",
+                          alpha=0.9, lw=0.8))
     fig.tight_layout()
     fig.savefig("%s_final_uncertainty.png" % stem, dpi=150)
     plt.close(fig)
