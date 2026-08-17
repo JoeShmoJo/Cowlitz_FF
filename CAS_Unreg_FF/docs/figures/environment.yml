@@ -1,0 +1,63 @@
+# Standalone environment for make_basin_map.py
+#
+# Kept separate from the analysis environment on purpose. geopandas pulls
+# shapely 2, pyogrio, pyproj and rasterio, and those move numpy underneath
+# whatever else is installed. The DSS and frequency scripts in this repo are
+# sensitive to that -- pydsstools is a compiled extension built against a
+# specific numpy ABI, and #Unreg_Reg_Curve.py has a documented pandas 2 vs 3
+# trap in it (DatetimeIndex.asi8 units). Nothing in the analysis chain imports
+# make_basin_map.py, so the two environments never have to agree.
+#
+#   conda env create -f environment.yml
+#   conda activate cowlitz-map
+#   python make_basin_map.py
+#
+# mamba works too and is much faster:
+#   mamba env create -f environment.yml
+#
+# NETWORK ACCESS
+# The script reaches three hosts. On a restricted network all three need to be
+# allowed or the map degrades (it will tell you which one failed):
+#   api.water.usgs.gov          NLDI flowlines and basin delineation
+#   waterservices.usgs.gov      NWIS gage coordinates
+#   server.arcgisonline.com     ESRI basemap tiles
+#
+# VERSIONS
+# The floors below are what the script was written against and exercised on
+# (python 3.11.15, geopandas 1.1.4, contextily 1.7.1, shapely 2.1.2,
+# pyproj 3.7.2, matplotlib 3.11.1, rasterio 1.4.4, pyogrio 0.13.0,
+# xyzservices 2026.3.0, numpy 1.26.4, pandas 3.0.5). They are floors rather
+# than pins so conda can solve on any platform; pin them if you need this
+# figure to be byte-reproducible.
+#
+# One version note that is not cosmetic: xyzservices carries only Esri's nine
+# full basemaps, not the Reference/label overlays. make_basin_map.py therefore
+# names the label overlay by URL. If a future xyzservices adds
+# Esri.WorldBoundariesAndPlaces, the URL still works and nothing needs changing.
+
+name: cowlitz-map
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+
+  # geospatial core
+  - geopandas>=1.0
+  - shapely>=2.0
+  - pyproj>=3.6
+  - pyogrio>=0.8          # geopandas' GeoJSON reader/writer
+  - rasterio>=1.3         # contextily needs it to place the tile mosaic
+
+  # basemap tiles
+  - contextily>=1.6
+  - xyzservices>=2024.4
+
+  # plotting and data
+  - matplotlib-base>=3.8  # -base: no Qt/Tk, the script renders with Agg
+  - numpy>=1.24
+  - pandas>=2.0
+
+  # fetching
+  - requests>=2.31

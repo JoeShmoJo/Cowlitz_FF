@@ -1,0 +1,4 @@
+# Fetched map data (NLDI flowlines/basin, NWIS gage coordinates).
+# Derived, re-fetchable, and can run to several MB for a whole basin network,
+# so it is not tracked. Delete the folder to force make_basin_map.py to refresh.
+mapdata/
