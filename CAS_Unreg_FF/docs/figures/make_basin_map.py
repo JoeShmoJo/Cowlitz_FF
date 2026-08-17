@@ -11,13 +11,26 @@ those station numbers, and the backdrop is an ESRI tile service.
 
 WHAT IS DRAWN
     - the Cowlitz mainstem, from Castle Rock up to the headwaters
-    - the Toutle, drawn as its own line because it is the tributary that
-      matters here: it enters BELOW both dams, so its flow is unregulated and
-      lands on the Castle Rock gage unattenuated
+    - the named tributaries in TRIBUTARIES -- the Toutle, which enters BELOW
+      both dams and so reaches Castle Rock unregulated, and the Tilton, which
+      enters Mayfield Lake and is caught by the projects. Both in one style,
+      because on this map they are the same kind of feature.
     - the rest of the upstream network, thin, for context
     - the drainage basin above Castle Rock
     - Mossyrock and Mayfield dams, and Riffe / Mayfield lakes behind them
     - the gages: Castle Rock (14243000) and the Mayfield outflow (14238000)
+
+NO LEGEND
+    Every river is named along its own line and every gage and dam is labelled
+    at its marker, so a legend would only restate them -- and it took up a
+    corner of the basin doing it. Rivers are labelled by label_along_line,
+    which merges the NLDI reaches, picks the longest strand and angles the text
+    to follow it.
+
+    Each tributary is navigated BOTH ways from its seed gage, UM upstream and
+    DM downstream, so the line runs headwaters to confluence. Upstream alone
+    leaves it stopping dead at the gage. DM overshoots down the Cowlitz, and
+    those reaches are trimmed by dropping comids shared with the mainstem.
 
 WHY IT NEEDS ITS OWN ENVIRONMENT
     geopandas / contextily / rasterio pull a modern numpy, and pyogrio and
@@ -58,8 +71,6 @@ import contextily as cx
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 from shapely.geometry import Point
 
 # ----------------------------------------------------------------------------
@@ -132,9 +143,48 @@ GAGES = [
     ("14243000", "Castle Rock", "USGS 14243000", (20, -6)),
     ("14238000", "Mayfield outflow gage", "USGS 14238000", (-30, 34)),
 ]
-# Seeds the Toutle line. Toutle R. at Tower Rd near Silver Lake, the long-record
-# station near the mouth. Set to None to leave the Toutle in the context network.
-TOUTLE_SITE = "14242580"
+# --- named tributaries -------------------------------------------------------
+# Drawn in one style, heavier than the context network, and labelled along the
+# line. These are the tributaries worth picking out: the Toutle joins BELOW
+# both dams, so it reaches Castle Rock unregulated, and the Tilton joins
+# Mayfield Lake, so it is caught by the projects.
+#
+# Each is seeded from an NWIS gage and drawn by navigating BOTH ways from it:
+#   UM  upstream to the headwaters
+#   DM  downstream to the confluence
+# Upstream alone is what left the Toutle hanging in mid-air, stopping at its
+# gage instead of reaching the Cowlitz.
+#
+# DM does not stop at the confluence -- it carries on down the Cowlitz mainstem
+# to Castle Rock. Those reaches are removed by dropping any comid that is also
+# in the Cowlitz mainstem, which is exact (comid identity, not geometry
+# matching) and leaves the tributary ending precisely where it meets the river.
+#
+# site: an NWIS number, or None to look one up in the basin by name_match. A
+# lookup prints every candidate it found, so a river with gages on several
+# forks can be pinned to the right one by filling in site.
+#
+# label_frac: position along the merged line, 0 to 1. Which END that starts
+# from is NOT predictable -- shapely's linemerge does not preserve a direction
+# -- so treat it as a dial to turn until the label sits somewhere sensible,
+# not as "0 is the mouth". The Toutle is set away from the middle on purpose:
+# its confluence is close to Castle Rock, so a label near the mouth lands on
+# top of the Castle Rock gage label.
+TRIBUTARIES = [
+    {"label": "Toutle River", "site": "14242580", "name_match": "TOUTLE",
+     "label_frac": 0.62},
+    {"label": "Tilton River", "site": None, "name_match": "TILTON",
+     "label_frac": 0.45},
+]
+# How far downstream to navigate from a tributary gage. Only has to reach the
+# confluence; the mainstem reaches beyond it are dropped anyway.
+TRIB_DOWNSTREAM_KM = 60
+# Label the Cowlitz mainstem along the line as well. With the tributaries named
+# on the map there is no legend left to say which line is which.
+MAINSTEM_LABEL = "Cowlitz River"
+MAINSTEM_LABEL_FRAC = 0.62
+# Rotate river labels to follow the line. False leaves them horizontal.
+ROTATE_RIVER_LABELS = True
 
 # --- dams and reservoirs -----------------------------------------------------
 # NOT NWIS sites, so these are not fetched -- they are typed in. They are only
@@ -244,18 +294,19 @@ def read_cached_geojson(name):
         return None
 
 
-def fetch_flowlines(name, site, mode):
+def fetch_flowlines(name, site, mode, distance=None):
     """Navigated flowlines as a GeoDataFrame, from the cache or from NLDI.
 
     mode is the NLDI navigation code: UM = upstream mainstem, UT = upstream
-    with tributaries.
+    with tributaries, DM = downstream mainstem.
     """
     cached = read_cached_geojson(name)
     if cached is not None:
         print("   %-22s cached (%d features)" % (name, len(cached)))
         return cached
     data = nldi_get("nwissite/USGS-%s/navigation/%s/flowlines" % (site, mode),
-                    {"f": "json", "distance": NAV_DISTANCE_KM})
+                    {"f": "json",
+                     "distance": NAV_DISTANCE_KM if distance is None else distance})
     if not data:
         print("   %-22s UNAVAILABLE" % name)
         return None
@@ -263,6 +314,110 @@ def fetch_flowlines(name, site, mode):
     ensure_cache_dir()
     frame.to_file(cache_path(name), driver="GeoJSON")
     print("   %-22s fetched (%d features)" % (name, len(frame)))
+    return frame
+
+
+def comid_set(frame):
+    """The NHDPlus comids in a flowline frame, as strings.
+
+    NLDI has used more than one spelling for this property across versions, so
+    take whichever is present rather than assuming.
+    """
+    if frame is None or not len(frame):
+        return set()
+    for column in ("nhdplus_comid", "comid", "COMID", "nhdplusComid"):
+        if column in frame.columns:
+            return {str(v) for v in frame[column].dropna()}
+    return set()
+
+
+def drop_comids(frame, unwanted):
+    """Remove flowlines whose comid is in `unwanted`."""
+    if frame is None or not len(frame) or not unwanted:
+        return frame
+    for column in ("nhdplus_comid", "comid", "COMID", "nhdplusComid"):
+        if column in frame.columns:
+            keep = ~frame[column].astype(str).isin(unwanted)
+            return frame[keep].copy()
+    return frame
+
+
+def find_site_by_name(pattern, cache_name="upstream_sites.geojson"):
+    """An NWIS site in the basin whose name contains `pattern`.
+
+    Used when a tributary has no site number filled in. Every candidate is
+    printed, because a river with gages on several forks will match more than
+    one and only the operator can say which fork should draw the line.
+    """
+    frame = read_cached_geojson(cache_name)
+    if frame is None:
+        data = nldi_get("nwissite/USGS-%s/navigation/UT/nwissite" % OUTLET_SITE,
+                        {"f": "json", "distance": NAV_DISTANCE_KM})
+        if not data:
+            print("   site lookup for '%s' UNAVAILABLE" % pattern)
+            return None
+        frame = gpd.GeoDataFrame.from_features(data["features"], crs=WGS84)
+        ensure_cache_dir()
+        frame.to_file(cache_path(cache_name), driver="GeoJSON")
+
+    name_col = next((c for c in ("name", "NAME", "station_nm")
+                     if c in frame.columns), None)
+    id_col = next((c for c in ("identifier", "identifie", "ID")
+                   if c in frame.columns), None)
+    if not name_col or not id_col:
+        print("   site lookup: unexpected columns %s" % list(frame.columns))
+        return None
+
+    hits = frame[frame[name_col].astype(str).str.upper().str.contains(
+        pattern.upper(), na=False)]
+    if not len(hits):
+        print("   site lookup: nothing in the basin matches '%s'" % pattern)
+        return None
+    numbers = []
+    for _, row in hits.iterrows():
+        number = str(row[id_col]).replace("USGS-", "").strip()
+        numbers.append(number)
+        print("      candidate %-12s %s" % (number, row[name_col]))
+    if len(numbers) > 1:
+        print("      using %s -- set 'site' in TRIBUTARIES to pin another"
+              % numbers[0])
+    return numbers[0]
+
+
+def fetch_tributary(trib, mainstem_comids):
+    """One named tributary, headwaters to confluence.
+
+    UM gives the upstream half. DM gives the downstream half but runs on past
+    the confluence and down the Cowlitz, so the mainstem comids are subtracted
+    -- exact, and it leaves the line ending where the rivers actually meet.
+    """
+    label = trib["label"]
+    stem = label.split()[0].lower()
+    up_name, down_name = "%s_um.geojson" % stem, "%s_dm.geojson" % stem
+
+    # Cache first, seed second. The seed is only needed to FETCH; once the
+    # reaches are on disk the river can be drawn with no network and no gage
+    # lookup, which is the whole point of the cache.
+    up, down = read_cached_geojson(up_name), read_cached_geojson(down_name)
+    site = trib.get("site")
+    if up is None or down is None:
+        if not site:
+            print("   %s: no site number, looking one up" % label)
+            site = find_site_by_name(trib["name_match"])
+        if not site:
+            print("   %s NOT DRAWN (no seed gage and nothing cached)" % label)
+            return None
+        up = fetch_flowlines(up_name, site, "UM")
+        down = fetch_flowlines(down_name, site, "DM",
+                               distance=TRIB_DOWNSTREAM_KM)
+    down = drop_comids(down, mainstem_comids)
+    parts = [p for p in (up, down) if p is not None and len(p)]
+    if not parts:
+        print("   %s NOT DRAWN (no flowlines)" % label)
+        return None
+    frame = gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), crs=WGS84)
+    print("   %-22s %d features (seed %s)"
+          % (label, len(frame), site or "cached"))
     return frame
 
 
@@ -371,6 +526,43 @@ def points_frame(table):
         crs=WGS84).to_crs(WEBM)
 
 
+def label_along_line(ax, frame, text, frac, color, size=10):
+    """Write a river name along its own line, angled to follow it.
+
+    The pieces come back from NLDI as many short reaches in no useful order, so
+    they are merged and the longest resulting strand is used -- that is the
+    river itself rather than whichever reach happened to be first. The angle is
+    taken from a chord either side of the label point, long enough not to pick
+    up the wiggle of a single reach.
+    """
+    from shapely.ops import linemerge
+    if frame is None or not len(frame):
+        return
+    merged = linemerge(list(frame.geometry))
+    if merged.geom_type == "MultiLineString":
+        line = max(merged.geoms, key=lambda g: g.length)
+    else:
+        line = merged
+    if line.length <= 0:
+        return
+
+    point = line.interpolate(frac, normalized=True)
+    rotation = 0.0
+    if ROTATE_RIVER_LABELS:
+        step = 0.04
+        before = line.interpolate(max(frac - step, 0.0), normalized=True)
+        after = line.interpolate(min(frac + step, 1.0), normalized=True)
+        rotation = np.degrees(np.arctan2(after.y - before.y, after.x - before.x))
+        # keep text upright: never let a label read upside down
+        if rotation > 90:
+            rotation -= 180
+        elif rotation < -90:
+            rotation += 180
+    ax.text(point.x, point.y, text, rotation=rotation, rotation_mode="anchor",
+            ha="center", va="bottom", zorder=11, style="italic",
+            **halo(size, "bold", color))
+
+
 def annotate_leader(ax, xy, text, offset, color, size=9):
     """Label a marker, with a leader line back to it when it sits far off.
 
@@ -437,18 +629,24 @@ def main():
     print("Cache     : %s" % os.path.abspath(CACHE_DIR))
     print("=" * 78)
 
-    wanted = [n for n, _, _, _ in GAGES]
-    if TOUTLE_SITE and TOUTLE_SITE not in wanted:
-        wanted.append(TOUTLE_SITE)
-    sites, used_fallback = fetch_sites(wanted)
+    sites, used_fallback = fetch_sites([n for n, _, _, _ in GAGES])
 
     basin = fetch_basin("basin.geojson", OUTLET_SITE)
     network = fetch_flowlines("network_ut.geojson", OUTLET_SITE, "UT")
     mainstem = fetch_flowlines("cowlitz_um.geojson", OUTLET_SITE, "UM")
-    toutle = (fetch_flowlines("toutle_um.geojson", TOUTLE_SITE, "UM")
-              if TOUTLE_SITE else None)
 
-    if all(x is None for x in (basin, network, mainstem, toutle)):
+    # The mainstem comids are what trims each tributary at its confluence, so
+    # they have to be in hand before the tributaries are built.
+    mainstem_comids = comid_set(mainstem)
+    if mainstem is not None and not mainstem_comids:
+        print("   NOTE: no comid column on the mainstem, so the tributaries "
+              "cannot be")
+        print("         trimmed at their confluences and will run on down the "
+              "Cowlitz.")
+    tribs = [(t, fetch_tributary(t, mainstem_comids)) for t in TRIBUTARIES]
+
+    if all(x is None for x in [basin, network, mainstem]
+           + [f for _, f in tribs]):
         raise SystemExit(
             "No geometry was fetched and the cache is empty, so there is "
             "nothing to draw.\nCheck the network, then re-run. The gage "
@@ -457,7 +655,7 @@ def main():
     basin_w = to_web(basin)
     network_w = clip_to(to_web(network), basin_w)
     mainstem_w = clip_to(to_web(mainstem), basin_w)
-    toutle_w = clip_to(to_web(toutle), basin_w)
+    tribs_w = [(t, clip_to(to_web(f), basin_w)) for t, f in tribs]
 
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
@@ -476,8 +674,20 @@ def main():
         network_w.plot(ax=ax, color=C_NET, lw=LW_NET, zorder=4)
     if mainstem_w is not None:
         mainstem_w.plot(ax=ax, color=C_MAIN, lw=LW_MAIN, zorder=6)
-    if toutle_w is not None:
-        toutle_w.plot(ax=ax, color=C_TRIB, lw=LW_TRIB, zorder=5)
+    # every named tributary in ONE style -- they are the same kind of thing on
+    # this map, and colouring them differently would imply a distinction that
+    # is not there
+    for _, frame in tribs_w:
+        if frame is not None and len(frame):
+            frame.plot(ax=ax, color=C_TRIB, lw=LW_TRIB, zorder=5)
+
+    # --- river names, written along the lines instead of into a legend
+    for trib, frame in tribs_w:
+        label_along_line(ax, frame, trib["label"], trib.get("label_frac", 0.45),
+                         C_TRIB)
+    if MAINSTEM_LABEL and mainstem_w is not None:
+        label_along_line(ax, mainstem_w, MAINSTEM_LABEL, MAINSTEM_LABEL_FRAC,
+                         C_MAIN, size=11)
 
     # --- gages
     gage_pts = points_frame(sites[sites["site_no"].isin(
@@ -550,19 +760,9 @@ def main():
     if SHOW_NORTH_ARROW:
         add_north_arrow(ax)
 
-    handles = [
-        Line2D([], [], color=C_MAIN, lw=LW_MAIN, label="Cowlitz River (mainstem)"),
-        Line2D([], [], color=C_TRIB, lw=LW_TRIB,
-               label="Toutle River (unregulated tributary)"),
-        Line2D([], [], color=C_NET, lw=1.4, label="Other tributaries"),
-        Line2D([], [], color=C_GAGE, marker="o", ms=9, mfc=C_GAGE, mec="white",
-               ls="none", label="USGS streamgage"),
-        Line2D([], [], color=C_DAM, marker="s", ms=9, mfc=C_DAM, mec="white",
-               ls="none", label="Dam"),
-        Patch(facecolor=C_BASIN, alpha=0.18, edgecolor=C_BASIN, ls="--",
-              label="Basin above Castle Rock"),
-    ]
-    ax.legend(handles=handles, loc="lower right", fontsize=9, framealpha=0.93)
+    # No legend. Every river carries its name along its own line and every gage
+    # and dam is labelled at its marker, so a legend would only repeat them --
+    # and it covered a corner of the basin to do it.
 
     ax.set_title(TITLE, fontsize=13.5, fontweight="bold", pad=10)
     note = SUBTITLE
