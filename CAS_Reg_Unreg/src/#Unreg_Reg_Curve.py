@@ -1396,25 +1396,48 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
     plt.close(fig)
 
 
-def plot_final_curves(freq, fit, table_2009, stem):
-    """The adopted figure: regulated and unregulated lines, nothing else.
+def plot_final_curves(freq, fit, reg_curve, unc, table_2009, stem):
+    """Regulated and unregulated lines against the 2009 study, with the
+    ADOPTED uncertainty band -- the same one on unreg_reg_final_uncertainty.png.
 
     No scatter. Everything that went into placing these two lines is on
     unreg_reg_frequency.png; this is the one that goes in the report, where the
     points are a distraction from the result.
+
+    reg_curve and unc are passed in rather than recomputed here, for two
+    reasons found together when a user reported this figure and
+    unreg_reg_final_uncertainty.png showing what looked like two different
+    regulated curves:
+
+    1. reg_curve used to be recomputed locally as apply_transform(fit,
+       unreg_curve). That happened to be numerically identical to the
+       reg_curve plot_frequency() returns and main() threads into
+       plot_final_uncertainty() -- same fit, same unreg_curve -- but two
+       independent call sites computing "the same" curve is exactly the
+       kind of duplication that goes stale silently the next time only one
+       of them gets edited. It is now threaded through instead.
+    2. The band was the real mismatch. This figure used to draw its own
+       crude +/- 1 log-sigma ribbon (transform scatter only, no frequency
+       term, no z, no asymmetry) while unreg_reg_final_uncertainty.png draws
+       the actual adopted combine_uncertainty() band. Two figures in one
+       memo, both a red band around the same red curve, at two very
+       different widths, reads as the regulated curve disagreeing with
+       itself. They were never meant to be the same number -- but nothing
+       distinguished them as different things, so it read as a bug. This
+       figure now draws the SAME unc["reg_lower"]/unc["reg_upper"] band.
     """
     fig, ax = plt.subplots(figsize=(10.5, 8.2))
     aep_values = freq["AEP"].values
     z = stats.norm.ppf(1.0 - aep_values)
     unreg_curve = freq[FREQ_VALUE_COL].values
-    reg_curve = apply_transform(fit, unreg_curve)
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
 
     ax.plot(z, unreg_curve, color=C_UNREG, lw=2.6, zorder=4,
             label="Unregulated")
     ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=4, label="Regulated")
-    band = 10 ** transform_sigma_dex(fit, unreg_curve)
-    ax.fill_between(z, reg_curve / band, reg_curve * band, color=C_REG,
-                    alpha=0.13, zorder=1, label="Regulated, +/- 1 std error")
+    ax.fill_between(z, unc["reg_lower"], unc["reg_upper"], color=C_REG,
+                    alpha=0.17, zorder=1,
+                    label="Regulated, %d%% (frequency + transform)" % pct)
     if table_2009 is not None and len(table_2009):
         ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
                 table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
@@ -1548,11 +1571,21 @@ def main():
     plot_scatter(data, fit, wcm, synth, PLOT_STEM)
     reg_curve = plot_frequency(freq, data, fit, wcm, synth, table_2009,
                                PLOT_STEM)
-    if MAKE_FINAL_CURVE_PLOT:
-        plot_final_curves(freq, fit, table_2009, PLOT_STEM)
 
+    # unc is computed before plot_final_curves (moved up from after it) so
+    # that figure can draw the SAME adopted band as plot_final_uncertainty,
+    # instead of the crude, unrelated "+/- 1 std error" ribbon it used to
+    # draw locally. Two figures in the same memo both showing a red band
+    # around the regulated curve, at two different widths, read as the
+    # regulated curve itself disagreeing between figures -- which is what
+    # got reported. They were never the same quantity: one was the full
+    # combined uncertainty band, the other a rough single-sigma diagnostic
+    # nobody meant to put next to the adopted band. Now there is one band.
     unc = combine_uncertainty(freq, fit, reg_curve)
     report_uncertainty(freq, unc, fit)
+
+    if MAKE_FINAL_CURVE_PLOT:
+        plot_final_curves(freq, fit, reg_curve, unc, table_2009, PLOT_STEM)
     if MAKE_FINAL_UNCERTAINTY_PLOT:
         plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, PLOT_STEM)
 
