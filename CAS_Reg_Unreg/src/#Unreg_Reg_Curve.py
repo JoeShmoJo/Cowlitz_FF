@@ -77,42 +77,81 @@ PART 3 -- COMPARISON WITH THE 2009 STUDY
     adopted report figure (FINAL_SHOW_2009 = False) leaves it off.
 
 PART 4 -- UNCERTAINTY ON THE REGULATED CURVE
-    The regulated flow at an AEP is uncertain for two independent reasons, and
-    the band has to carry both:
+    Follows EM 1110-2-1619 (29 Sep 2025) Sec 4-4.b(3) eq 4-6, applied to flow
+    instead of stage: independent uncertainty sources combine by adding their
+    VARIANCES, i.e. S_total = sqrt(S_1^2 + ... + S_n^2). Two sources here:
 
-      1. FLOW FREQUENCY. The unregulated quantile at that AEP is itself an
+      1. FLOW FREQUENCY. The unregulated quantile at an AEP is itself an
          estimate from a 98-year record. HEC-SSP reports this as confidence
-         limits about the computed curve; sqrt(VarianceLog) is the same thing
-         as a log10 standard error.
+         limits about the computed curve.
       2. THE UNREG-REG TRANSFORM. At one unregulated magnitude the regulated
          peak still depends on the shape of the flood, which is what the
-         scatter about the transform line measures.
+         scatter of the (unreg, reg) pairs about the transform line measures.
 
-    They combine in log10 space, but the frequency term has to be carried
-    THROUGH the transform first: a d-dex error in the unregulated flow moves
-    the regulated flow by b*d dex, where b = dlog(reg)/dlog(unreg) is the LOCAL
-    slope of the transform. b runs about 0.57 at the median, where the reservoir
-    absorbs most of an increase, and reaches about 1.5 at the top, where the
-    transform bends towards pass-through and the regulated flow is catching the
-    unregulated flow up. Ignoring b would overstate the band through the middle
-    by nearly 2x and UNDERSTATE it at the top.
+    Each is reduced to its OWN standard deviation first (frequency_sigma_dex,
+    transform_sigma_dex_split), in whatever units are natural for that source
+    -- log10(cfs) for both, since that is the space HEC-SSP's own limits and
+    the LOESS residuals are already in. The two sigmas are combined by eq 4-6,
+    and only THEN is a single z (from UNCERTAINTY_CONF_LEVEL) applied to the
+    combined sigma -- not one z per source. Combining "distance to a chosen
+    percentile" directly, without ever naming sigma, is the same arithmetic
+    (z factors out of a root-sum-of-squares), but only if every source's
+    distance was measured at the SAME percentile; that is why this script does
+    not do it, since the frequency term is natively reported at SSP's own 90%
+    while the transform term is estimated from the data at whatever precision
+    the local scatter supports.
 
-    b above 1 also means the raw combination can put the regulated upper bound
-    above the unregulated one, which is not physical at a real flood -- see
-    CLIP_BAND_TO_UNREG.
+    THE FREQUENCY TERM HAS TO BE IN REGULATED CFS, NOT UNREGULATED CFS, before
+    it can be combined with the transform term -- summing an unregulated-flow
+    delta with a regulated-flow delta is a dimensional error. This is done by
+    literally pushing the unregulated flow AT ITS OWN UPPER/LOWER BOUND through
+    the SAME best-fit transform used for the central curve, and taking the gap
+    from the regulated best estimate:
 
-        sigma_reg(p) = sqrt( (b(p) * sigma_freq(p))^2 + sigma_transform^2 )
+        freq_term_hi = Transform(Unreg_upper) - Transform(Unreg_best)
+        freq_term_lo = Transform(Unreg_best) - Transform(Unreg_lower)
 
-    ASYMMETRY, AND WHY THIS IS STILL NOT MONTE CARLO
-    The SSP limits are noncentral-t and genuinely asymmetric: at the 500-year
-    the upper side is about 1.5x the lower side in log space. That asymmetry is
-    kept rather than averaged away by combining the two sides SEPARATELY, which
-    is a two-piece lognormal and still closed form. Monte Carlo buys nothing
-    here because both terms are already log-normal-ish and the only departure
-    from symmetry is the one being carried explicitly. UNCERTAINTY_REPORT
-    prints the combined asymmetry ratio at each AEP; if that ever gets far from
-    1 (say past 2), the two-piece approximation is being asked to do too much
-    and a simple Monte Carlo over the two terms would be the honest next step.
+    where Unreg_upper/lower are the unregulated flow at the chosen z, from its
+    own asymmetric sigma (frequency_sigma_dex). This evaluates the curve's
+    actual bend rather than a linear (constant-slope) approximation to it --
+    simpler to explain, and more correct when the band is wide, since the
+    transform bends noticeably between the best estimate and its confidence
+    limit at the high end (see transform_log_slope, kept only for reporting
+    context: the local slope runs about 0.57 through the middle, where the
+    reservoir absorbs most of an increase, and about 1.5 at the top, where the
+    transform bends toward pass-through -- which is why the frequency term
+    below grows disproportionately large there).
+
+    THE TRANSFORM TERM is independent of the one above: held at the
+    unregulated BEST ESTIMATE (not its bound), how far do actual regulated
+    points scatter above/below the fitted line there, expressed in regulated
+    cfs the same way -- reg_best * (10**(z*sigma) - 1).
+
+    COMBINED ADDITIVELY, IN CFS, PER SIDE -- this is eq 4-6 with S already
+    converted to cfs at the chosen z, and it is the literal form the guidance
+    was given back to this project in:
+
+        Upper = RegulatedBest + sqrt(freq_term_hi^2 + transform_term_hi^2)
+        Lower = RegulatedBest - sqrt(freq_term_lo^2 + transform_term_lo^2)
+
+    computed independently for each side, which is how the asymmetry survives
+    without ever needing to be a special case.
+
+    THE ASYMMETRY, ON BOTH SOURCES. The SSP limits are noncentral-t and
+    genuinely asymmetric: at the 500-year the upper side is about 1.5x the
+    lower side. TRANSFORM_SIGMA_ASYMMETRIC extends the same treatment to the
+    transform's own scatter -- computed separately from the residuals lying
+    above the fitted line versus below it -- rather than assuming by default
+    that the cloud of points scatters the same amount on both sides. Each is
+    modelled as its own Normal, per EM Sec 4-4.c(1)/4-6.a's convention (whole
+    distribution not Normal; each HALF, split at the best estimate, treated as
+    one) -- a two-piece normal, still closed form. UNCERTAINTY_REPORT prints
+    the combined asymmetry ratio at each AEP; if it gets far from 1 (past
+    ASYMMETRY_MC_TRIGGER) the two-piece approximation is being asked to do too
+    much and a simple Monte Carlo over the two terms would be the honest next
+    step -- EM Sec 4-6 sanctions this too ("if it is not possible to develop
+    [an analytical] rating... sensitivity analysis... is an appropriate
+    approach").
 
     PREDICTION vs MEAN LINE. TRANSFORM_UNCERTAINTY_BASIS decides what the
     transform term means:
@@ -302,9 +341,21 @@ FREQ_LIMIT_BASE_COL = "Value"
 FREQ_VARIANCE_COL = "VarianceLog"
 FREQ_SIGMA_CHECK_TOL = 0.15
 
-# What the band on the plot spans. 0.90 matches the SSP limits, so the
-# unregulated band drawn here is the one SSP reported.
-UNCERTAINTY_CONF_LEVEL = 0.90
+# What the FINAL combined band spans. 0.95 (97.5%/2.5%) per the reviewer's
+# formula and EM 1110-2-1619 Sec 4-4.c(1): "the range created by the mean plus
+# and minus two standard deviations spans 95% of the probability" -- the EM's
+# own rounded z=2 convention for a 95% two-sided band; this script uses the
+# exact z=1.960 (norm.ppf(0.975)) rather than the rounded 2.
+#
+# This is the ONLY confidence level that matters for the combination itself.
+# Each SOURCE below (frequency, transform) is first reduced to its own proper
+# standard deviation, in whatever units/level is natural for that source; the
+# two sigmas are combined by root-sum-of-squares (EM eq 4-6); THEN this one z
+# is applied once, to the combined sigma. Sources are never combined "at their
+# own levels" against each other -- that would only be valid if every source
+# happened to share the same z, and 90% (SSP's native reporting) and whatever
+# level the transform scatter is estimated at are not guaranteed to match.
+UNCERTAINTY_CONF_LEVEL = 0.95
 #   "prediction" : full scatter about the transform -- the next flood of this
 #                  size could have any observed shape. The design question.
 #   "mean"       : scatter / sqrt(n), the uncertainty of the fitted line only.
@@ -323,9 +374,39 @@ TRANSFORM_SIGMA_MODE = "local"
 # Neighbourhood for the local scatter. Wider than LOESS_SPAN would over-smooth
 # the variance back towards constant; much narrower gets noisy at n=88.
 TRANSFORM_SIGMA_SPAN = 0.50
+# How the "frequency" (unregulated-curve) term of the combination is
+# expressed, before it is RSS'd against the transform term. The reviewer's
+# formula is written as (Unreg_bound - Unreg_best) -- a delta in UNREGULATED
+# cfs -- added directly to a REGULATED-cfs transform term. That mixes units
+# (a regulated flow cannot literally gain "unregulated cfs of uncertainty"),
+# but the discrepancy is small in practice and matching the reviewer's own
+# worked formula, term for term, matters more here than the purism.
+#   "literal"         reviewer's formula exactly: freq term = Unreg_bound -
+#                      Unreg_best, in raw unregulated cfs. DEFAULT -- this is
+#                      what gets reported and plotted.
+#   "transform_curve"  push the unregulated bound through the fitted transform
+#                      curve first (apply_transform), so the freq term is
+#                      already in regulated cfs before combining. Dimensionally
+#                      consistent, computed alongside "literal" every run and
+#                      written to the CSV/report for comparison, but not used
+#                      for the adopted band unless this is switched.
+FREQ_TERM_MODE = "literal"
 # Keep the two sides of the frequency interval separate so the noncentral-t
 # asymmetry survives the combination. False averages them into one sigma.
 COMBINE_ASYMMETRIC = True
+# Split the TRANSFORM (LOESS) scatter into an upper-half and lower-half sigma
+# too, from the residuals that lie above the fitted line versus below it,
+# instead of one pooled number applied to both sides. Tests for a real skew in
+# the scatter rather than assuming symmetry the way the old version did.
+# False restores one pooled sigma for both sides (still locally-varying by
+# magnitude if TRANSFORM_SIGMA_MODE = "local", just not split by sign).
+TRANSFORM_SIGMA_ASYMMETRIC = True
+# A side needs at least this many EFFECTIVE points (tricube-weighted, not a
+# raw count) in the local window before its own sigma is trusted. Below it,
+# that side falls back to the pooled sigma at that point, and the fallback is
+# counted and reported rather than left silent -- a fallback point looks
+# identical to a genuinely symmetric one otherwise.
+TRANSFORM_SIDE_MIN_N_EFF = 4.0
 # Print the term-by-term table so the band can be audited at each AEP.
 UNCERTAINTY_REPORT = True
 # Flag if the combined band gets more lopsided than this -- past here the
@@ -981,47 +1062,204 @@ def transform_sigma_dex(fit, x_eval):
     return sigma
 
 
-def combine_uncertainty(freq, fit, reg_curve):
-    """Regulated curve confidence band: frequency and transform terms combined.
+def local_sigma_at_side(lx, resid, x0, span, side, min_n_eff):
+    """local_sigma_at, restricted to residuals on one side of the fitted line.
 
-    sigma_reg = sqrt( (b * sigma_freq)^2 + sigma_transform^2 ), each side kept
-    separate so the noncentral-t asymmetry survives. Returns the band and every
-    term that went into it, so the CSV can show the working.
+    side="hi" uses only resid > 0 (points that lie above the line), "lo" only
+    resid < 0. Same neighbourhood and same tricube weights as local_sigma_at --
+    only the residuals actually summed differ -- so a side sigma is comparable
+    to the pooled one, not a different statistic in disguise.
+
+    Returns None if that side does not have enough EFFECTIVE weight nearby
+    (min_n_eff) to trust its own number; the caller falls back to the pooled
+    sigma at that point and counts the fallback.
     """
-    sigma_hi, sigma_lo, note = frequency_sigma_dex(freq)
-    if not COMBINE_ASYMMETRIC:
-        mean_side = np.nanmean(np.vstack([sigma_hi, sigma_lo]), axis=0)
-        sigma_hi = sigma_lo = mean_side
-    unreg = freq[FREQ_VALUE_COL].values.astype(float)
-    sigma_t = transform_sigma_dex(fit, unreg)
-    slope = transform_log_slope(fit, unreg)
+    n = len(lx)
+    k = int(np.ceil(span * n))
+    k = max(8, min(k, n))
+    dist = np.abs(lx - x0)
+    near = np.argsort(dist)[:k]
+    d = dist[near]
+    d_max = d.max()
+    weights = np.ones(k) if d_max <= 0 else (1.0 - (d / d_max) ** 3) ** 3
+    weights = np.clip(weights, 1e-8, None)
+    r = resid[near]
+    mask = (r > 0) if side == "hi" else (r < 0)
+    if not mask.any():
+        return None
+    w_sub, r_sub = weights[mask], r[mask]
+    w_sum = w_sub.sum()
+    n_eff = w_sum ** 2 / np.sum(w_sub ** 2)
+    if n_eff < min_n_eff:
+        return None
+    var = np.sum(w_sub * r_sub * r_sub) / w_sum
+    return float(np.sqrt(var * n_eff / max(n_eff - 2.0, 1.0)))
 
-    total_hi = np.sqrt((slope * sigma_hi) ** 2 + sigma_t ** 2)
-    total_lo = np.sqrt((slope * sigma_lo) ** 2 + sigma_t ** 2)
+
+def transform_sigma_dex_split(fit, x_eval):
+    """Upper- and lower-half log10 sigma of the transform's scatter.
+
+    Same idea as transform_sigma_dex, but the residuals lying ABOVE the fitted
+    line and those lying BELOW it are summarised separately, so a genuine skew
+    in the scatter (more room on one side of the line than the other) survives
+    into the band instead of being pooled into one symmetric number.
+
+    TRANSFORM_SIGMA_ASYMMETRIC = False returns the pooled sigma on both sides,
+    i.e. the old symmetric behaviour. Returns (sigma_hi, sigma_lo, n_fallback,
+    n_sides) -- the last two so the caller can report how often a side had to
+    fall back to the pooled value for lack of nearby data on that side alone.
+    """
+    x_eval = np.atleast_1d(np.asarray(x_eval, dtype=float))
+    pooled = transform_sigma_dex(fit, x_eval)
+    if (not TRANSFORM_SIGMA_ASYMMETRIC or TRANSFORM_SIGMA_MODE == "constant"
+            or "resid" not in fit):
+        return pooled.copy(), pooled.copy(), 0, 0
+
+    lx, resid = fit["lx"], fit["resid"]
+    log_x = np.log10(np.clip(x_eval, 1e-6, None))
+    sigma_hi = np.empty(len(x_eval))
+    sigma_lo = np.empty(len(x_eval))
+    n_fallback = 0
+    for i, v in enumerate(log_x):
+        hi = local_sigma_at_side(lx, resid, v, TRANSFORM_SIGMA_SPAN, "hi",
+                                 TRANSFORM_SIDE_MIN_N_EFF)
+        lo = local_sigma_at_side(lx, resid, v, TRANSFORM_SIGMA_SPAN, "lo",
+                                 TRANSFORM_SIDE_MIN_N_EFF)
+        if hi is None:
+            hi, n_fallback = pooled[i], n_fallback + 1
+        if lo is None:
+            lo, n_fallback = pooled[i], n_fallback + 1
+        sigma_hi[i], sigma_lo[i] = hi, lo
+    if TRANSFORM_UNCERTAINTY_BASIS == "mean":
+        sigma_hi = sigma_hi / np.sqrt(max(fit["n"], 1))
+        sigma_lo = sigma_lo / np.sqrt(max(fit["n"], 1))
+    return sigma_hi, sigma_lo, n_fallback, 2 * len(x_eval)
+
+
+def combine_uncertainty(freq, fit, reg_curve):
+    """Regulated curve confidence band, matching the reviewer's formula:
+
+        Upper = RegBest + sqrt((Unreg_hi - Unreg_best)^2 + (Transform_hi - Transform_best)^2)
+        Lower = RegBest - sqrt((Unreg_best - Unreg_lo)^2 + (Transform_best - Transform_lo)^2)
+
+    at UNCERTAINTY_CONF_LEVEL (0.95 two-sided -> 97.5%/2.5%, per the reviewer's
+    own example), with each side's sigma kept separate (EM 1110-2-1619 sec
+    4-4.c(1)/4-6a: upper half and lower half both treated as Normal, each with
+    its own standard deviation, rather than assuming one symmetric sigma).
+
+    The frequency term is computed BOTH ways every run (FREQ_TERM_MODE picks
+    which one is used for the adopted band; both are returned for
+    comparison/reporting):
+      "literal"          Unreg_hi - Unreg_best, in raw unregulated cfs -- the
+                          reviewer's formula exactly.
+      "transform_curve"  the unregulated bound pushed through the same fitted
+                          transform curve as the central estimate, so the term
+                          is in regulated cfs before combining -- dimensionally
+                          consistent, kept for comparison only unless selected.
+    The transform term is Transform_hi - Transform_best, i.e. the LOESS fit's
+    own confidence band at the unregulated BEST ESTIMATE, already in regulated
+    cfs either way.
+
+    Returns the band and every term that went into it, so the CSV can show the
+    working and the report can print it AEP by AEP.
+    """
+    sigma_freq_hi, sigma_freq_lo, note = frequency_sigma_dex(freq)
+    if not COMBINE_ASYMMETRIC:
+        mean_side = np.nanmean(np.vstack([sigma_freq_hi, sigma_freq_lo]), axis=0)
+        sigma_freq_hi = sigma_freq_lo = mean_side
+
+    unreg_best = freq[FREQ_VALUE_COL].values.astype(float)
     z = stats.norm.ppf(0.5 + UNCERTAINTY_CONF_LEVEL / 2.0)
 
-    reg_upper = reg_curve * 10.0 ** (z * total_hi)
-    reg_lower = reg_curve * 10.0 ** (-z * total_lo)
-    unreg_upper = unreg * 10.0 ** (z * sigma_hi)
-    unreg_lower = unreg * 10.0 ** (-z * sigma_lo)
+    # --- frequency term, both ways --------------------------------------
+    unreg_upper = unreg_best * 10.0 ** (z * sigma_freq_hi)
+    unreg_lower = unreg_best * 10.0 ** (-z * sigma_freq_lo)
+
+    # "literal": the reviewer's formula exactly -- delta in unregulated cfs.
+    freq_term_hi_literal = np.maximum(unreg_upper - unreg_best, 0.0)
+    freq_term_lo_literal = np.maximum(unreg_best - unreg_lower, 0.0)
+
+    # "transform_curve": same delta, but pushed through the fitted curve
+    # first so it is in regulated cfs before combining. apply_transform is
+    # monotonic non-decreasing (ENFORCE_MONOTONIC), so these are >= 0
+    # already; the floor is only a guard against float noise on a flat
+    # stretch of the curve, not a correction to anything real.
+    reg_from_unreg_upper = apply_transform(fit, unreg_upper)
+    reg_from_unreg_lower = apply_transform(fit, unreg_lower)
+    freq_term_hi_curve = np.maximum(reg_from_unreg_upper - reg_curve, 0.0)
+    freq_term_lo_curve = np.maximum(reg_curve - reg_from_unreg_lower, 0.0)
+
+    if FREQ_TERM_MODE == "transform_curve":
+        freq_term_hi, freq_term_lo = freq_term_hi_curve, freq_term_lo_curve
+    else:
+        freq_term_hi, freq_term_lo = freq_term_hi_literal, freq_term_lo_literal
+
+    # --- transform term, held at the unregulated BEST ESTIMATE --------------
+    sigma_t_hi, sigma_t_lo, n_fallback, n_sides = transform_sigma_dex_split(
+        fit, unreg_best)
+    transform_term_hi = reg_curve * (10.0 ** (z * sigma_t_hi) - 1.0)
+    transform_term_lo = reg_curve * (1.0 - 10.0 ** (-z * sigma_t_lo))
+
+    # --- combine per side, additively, in cfs -- eq 4-6 ----------------------
+    delta_hi = np.sqrt(freq_term_hi ** 2 + transform_term_hi ** 2)
+    delta_lo = np.sqrt(freq_term_lo ** 2 + transform_term_lo ** 2)
+    reg_upper = reg_curve + delta_hi
+    reg_lower = np.maximum(reg_curve - delta_lo, 0.0)
+
+    # the other mode's band too, purely for comparison/reporting
+    delta_hi_alt = np.sqrt(freq_term_hi_curve ** 2 + transform_term_hi ** 2) \
+        if FREQ_TERM_MODE != "transform_curve" \
+        else np.sqrt(freq_term_hi_literal ** 2 + transform_term_hi ** 2)
+    delta_lo_alt = np.sqrt(freq_term_lo_curve ** 2 + transform_term_lo ** 2) \
+        if FREQ_TERM_MODE != "transform_curve" \
+        else np.sqrt(freq_term_lo_literal ** 2 + transform_term_lo ** 2)
 
     # A regulated flood cannot be bigger than the unregulated flood it came
     # from -- see CLIP_BAND_TO_UNREG. Applied above BAND_CLIP_MIN_CFS only.
     clipped = np.zeros(len(reg_upper), dtype=bool)
     if CLIP_BAND_TO_UNREG:
-        bites = (reg_upper > unreg_upper) & (unreg >= BAND_CLIP_MIN_CFS)
+        bites = (reg_upper > unreg_upper) & (unreg_best >= BAND_CLIP_MIN_CFS)
         reg_upper = np.where(bites, unreg_upper, reg_upper)
         clipped = bites
+
+    # slope is no longer used in the calculation -- kept only to explain, in
+    # the report, why the frequency term grows disproportionately at the top.
+    slope = transform_log_slope(fit, unreg_best)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        asymmetry = np.where(delta_lo > 0, delta_hi / delta_lo, np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        asymmetry_alt = np.where(delta_lo_alt > 0, delta_hi_alt / delta_lo_alt, np.nan)
+    alt_mode = "transform_curve" if FREQ_TERM_MODE != "transform_curve" else "literal"
+    reg_upper_alt = reg_curve + delta_hi_alt
+    reg_lower_alt = np.maximum(reg_curve - delta_lo_alt, 0.0)
+    if CLIP_BAND_TO_UNREG:
+        bites_alt = (reg_upper_alt > unreg_upper) & (unreg_best >= BAND_CLIP_MIN_CFS)
+        reg_upper_alt = np.where(bites_alt, unreg_upper, reg_upper_alt)
+
     return {
         "reg_upper_clipped": clipped,
-        "sigma_freq_hi": sigma_hi, "sigma_freq_lo": sigma_lo,
-        "sigma_transform": sigma_t, "slope": slope,
-        "sigma_reg_hi": total_hi, "sigma_reg_lo": total_lo,
-        "z": z, "note": note,
+        "freq_term_mode": FREQ_TERM_MODE,
+        "sigma_freq_hi": sigma_freq_hi, "sigma_freq_lo": sigma_freq_lo,
+        "sigma_transform_hi": sigma_t_hi, "sigma_transform_lo": sigma_t_lo,
+        "transform_sigma_fallback": n_fallback, "transform_sigma_sides": n_sides,
+        "freq_term_hi_cfs": freq_term_hi, "freq_term_lo_cfs": freq_term_lo,
+        "transform_term_hi_cfs": transform_term_hi,
+        "transform_term_lo_cfs": transform_term_lo,
+        "delta_hi_cfs": delta_hi, "delta_lo_cfs": delta_lo,
+        "slope": slope, "z": z, "note": note,
         "reg_upper": reg_upper, "reg_lower": reg_lower,
         # the unregulated band at the same level, for context on the plot
         "unreg_upper": unreg_upper, "unreg_lower": unreg_lower,
-        "asymmetry": total_hi / total_lo,
+        "asymmetry": asymmetry,
+        # --- the OTHER FREQ_TERM_MODE, computed alongside for comparison ---
+        "alt_freq_term_mode": alt_mode,
+        "freq_term_hi_literal_cfs": freq_term_hi_literal,
+        "freq_term_lo_literal_cfs": freq_term_lo_literal,
+        "freq_term_hi_curve_cfs": freq_term_hi_curve,
+        "freq_term_lo_curve_cfs": freq_term_lo_curve,
+        "reg_upper_alt": reg_upper_alt, "reg_lower_alt": reg_lower_alt,
+        "delta_hi_alt_cfs": delta_hi_alt, "delta_lo_alt_cfs": delta_lo_alt,
+        "asymmetry_alt": asymmetry_alt,
     }
 
 
@@ -1030,33 +1268,42 @@ def report_uncertainty(freq, unc, fit):
     if not UNCERTAINTY_REPORT:
         return
     pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
-    print("\nREGULATED CURVE UNCERTAINTY  (%d%% band, log10 sigmas)" % pct)
-    st = np.atleast_1d(unc["sigma_transform"])
-    print("   transform term : %.4f to %.4f dex (%s, %s%s)"
-          % (np.nanmin(st), np.nanmax(st), TRANSFORM_SIGMA_MODE,
-             TRANSFORM_UNCERTAINTY_BASIS,
+    z = unc["z"]
+    print("\nREGULATED CURVE UNCERTAINTY  (%d%% band -> z=%.3f, reviewer's formula)"
+          % (pct, z))
+    print("   Upper = RegBest + sqrt(freq_term_hi^2 + transform_term_hi^2)")
+    print("   Lower = RegBest - sqrt(freq_term_lo^2 + transform_term_lo^2)")
+    print("   FREQ_TERM_MODE = %r (adopted band below); alt = %r (comparison "
+          "columns *_alt)" % (unc["freq_term_mode"], unc["alt_freq_term_mode"]))
+    st_hi = np.atleast_1d(unc["sigma_transform_hi"])
+    st_lo = np.atleast_1d(unc["sigma_transform_lo"])
+    print("   transform sigma: hi %.4f-%.4f dex, lo %.4f-%.4f dex (%s, %s%s)"
+          % (np.nanmin(st_hi), np.nanmax(st_hi), np.nanmin(st_lo), np.nanmax(st_lo),
+             TRANSFORM_SIGMA_MODE, TRANSFORM_UNCERTAINTY_BASIS,
              ", scatter/sqrt(%d)" % fit["n"]
              if TRANSFORM_UNCERTAINTY_BASIS == "mean" else ", full scatter"))
-    if TRANSFORM_SIGMA_MODE == "local":
-        print("                    the scatter grows with magnitude -- a big "
-              "flood's fate")
-        print("                    depends on its shape, a small one is just held")
+    if unc["transform_sigma_fallback"]:
+        print("   %d of %d side-evaluations fell back to the pooled transform "
+              "sigma (too few effective points on that side)"
+              % (unc["transform_sigma_fallback"], unc["transform_sigma_sides"]))
     print("   frequency term : from the SSP %g/%g limits%s"
           % (SSP_CONF_LIMITS[0], SSP_CONF_LIMITS[1],
              " -- %s" % unc["note"] if unc["note"] else ""))
-    print("   carried through the transform by its local slope b")
     show = pd.DataFrame({
         "AEP": freq["AEP"].values,
-        "b": unc["slope"],
-        "sig_trans": np.broadcast_to(st, (len(freq),)),
         "sig_freq_lo": unc["sigma_freq_lo"], "sig_freq_hi": unc["sigma_freq_hi"],
-        "sig_reg_lo": unc["sigma_reg_lo"], "sig_reg_hi": unc["sigma_reg_hi"],
+        "freq_lo_cfs": unc["freq_term_lo_cfs"], "freq_hi_cfs": unc["freq_term_hi_cfs"],
+        "trans_lo_cfs": unc["transform_term_lo_cfs"],
+        "trans_hi_cfs": unc["transform_term_hi_cfs"],
+        "reg_lower": unc["reg_lower"], "reg_upper": unc["reg_upper"],
+        "reg_upper_alt": unc["reg_upper_alt"],
         "asym": unc["asymmetry"],
     })
     show = show[show["AEP"].isin([0.5, 0.1, 0.02, 0.01, 0.005, 0.002, 0.001])]
-    print(show.round({"AEP": 4, "b": 3, "sig_trans": 4, "sig_freq_lo": 4,
-                      "sig_freq_hi": 4, "sig_reg_lo": 4, "sig_reg_hi": 4,
-                      "asym": 3}).to_string(index=False))
+    print(show.round({"AEP": 4, "sig_freq_lo": 4, "sig_freq_hi": 4,
+                      "freq_lo_cfs": 0, "freq_hi_cfs": 0, "trans_lo_cfs": 0,
+                      "trans_hi_cfs": 0, "reg_lower": 0, "reg_upper": 0,
+                      "reg_upper_alt": 0, "asym": 3}).to_string(index=False))
     n_clip = int(unc["reg_upper_clipped"].sum())
     if n_clip:
         aeps = freq["AEP"].values[unc["reg_upper_clipped"]]
@@ -1131,11 +1378,14 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
     ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
     if FINAL_SHOW_FORMULA_NOTE:
         ax.text(0.995, 0.015,
-                "Regulated band = sqrt( (b x freq sigma)$^2$ + transform "
-                "sigma$^2$ ), b = dlog(reg)/dlog(unreg)\ntransform sigma "
-                "%.3f to %.3f dex (%s, %s)"
-                % (np.nanmin(unc["sigma_transform"]),
-                   np.nanmax(unc["sigma_transform"]),
+                "Regulated band = RegBest +/- sqrt(freq term$^2$ + transform "
+                "term$^2$), FREQ_TERM_MODE=%s\ntransform sigma hi %.3f-%.3f, "
+                "lo %.3f-%.3f dex (%s, %s)"
+                % (unc["freq_term_mode"],
+                   np.nanmin(unc["sigma_transform_hi"]),
+                   np.nanmax(unc["sigma_transform_hi"]),
+                   np.nanmin(unc["sigma_transform_lo"]),
+                   np.nanmax(unc["sigma_transform_lo"]),
                    TRANSFORM_SIGMA_MODE, TRANSFORM_UNCERTAINTY_BASIS),
                 transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
                 color="0.25",
@@ -1313,20 +1563,34 @@ def main():
     out["reg_inferred_cfs"] = reg_curve
     out["reg_lower_1se_cfs"] = reg_curve / band
     out["reg_upper_1se_cfs"] = reg_curve * band
-    # --- combined uncertainty (PART 4) --------------------------------------
+    # --- combined uncertainty (PART 4), reviewer's formula ------------------
     pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
     out["unreg_lower_%dpct_cfs" % pct] = unc["unreg_lower"]
     out["unreg_upper_%dpct_cfs" % pct] = unc["unreg_upper"]
     out["reg_lower_%dpct_cfs" % pct] = unc["reg_lower"]
     out["reg_upper_%dpct_cfs" % pct] = unc["reg_upper"]
+    out["freq_term_mode"] = unc["freq_term_mode"]
     out["transform_slope_b"] = unc["slope"]
     out["sigma_freq_lo_dex"] = unc["sigma_freq_lo"]
     out["sigma_freq_hi_dex"] = unc["sigma_freq_hi"]
-    out["sigma_transform_dex"] = unc["sigma_transform"]
-    out["sigma_reg_lo_dex"] = unc["sigma_reg_lo"]
-    out["sigma_reg_hi_dex"] = unc["sigma_reg_hi"]
+    out["sigma_transform_lo_dex"] = unc["sigma_transform_lo"]
+    out["sigma_transform_hi_dex"] = unc["sigma_transform_hi"]
+    out["freq_term_lo_cfs"] = unc["freq_term_lo_cfs"]
+    out["freq_term_hi_cfs"] = unc["freq_term_hi_cfs"]
+    out["transform_term_lo_cfs"] = unc["transform_term_lo_cfs"]
+    out["transform_term_hi_cfs"] = unc["transform_term_hi_cfs"]
+    out["delta_lo_cfs"] = unc["delta_lo_cfs"]
+    out["delta_hi_cfs"] = unc["delta_hi_cfs"]
     out["band_asymmetry"] = unc["asymmetry"]
     out["reg_upper_clipped_at_unreg"] = unc["reg_upper_clipped"]
+    # --- the OTHER FREQ_TERM_MODE, for comparison only -----------------------
+    out["alt_freq_term_mode"] = unc["alt_freq_term_mode"]
+    out["reg_lower_%dpct_alt_cfs" % pct] = unc["reg_lower_alt"]
+    out["reg_upper_%dpct_alt_cfs" % pct] = unc["reg_upper_alt"]
+    out["freq_term_lo_literal_cfs"] = unc["freq_term_lo_literal_cfs"]
+    out["freq_term_hi_literal_cfs"] = unc["freq_term_hi_literal_cfs"]
+    out["freq_term_lo_curve_cfs"] = unc["freq_term_lo_curve_cfs"]
+    out["freq_term_hi_curve_cfs"] = unc["freq_term_hi_curve_cfs"]
     out["reg_powerlaw_cfs"] = apply_power_law(fit["power"],
                                               out["unreg_expected_cfs"].values)
     out["reduction_pct"] = 100.0 * (1.0 - reg_curve / out["unreg_expected_cfs"])
