@@ -42,9 +42,10 @@ NETWORK
     nwis.waterdata.usgs.gov and apps.ecology.wa.gov.
 
 THE ECOLOGY FILES
-    Two per water year, and the extension is UPPERCASE -- ".txt" 403s:
-        .../Prod/26C075/26C075_2020_DSG_FM.TXT    15 minute
-        .../Prod/26C075/26C075_2020_DSG_DV.TXT    mean daily
+    Two per water year, and THE EXTENSION CASE DIFFERS BETWEEN THEM. Asking
+    for the wrong one 403s:
+        .../Prod/26C075/26C075_2020_DSG_FM.TXT    15 minute, has a TIME column
+        .../Prod/26C075/26C075_2019_DSG_DV.txt    mean daily, no TIME column
     The year in the name is the WATER year: the 2020 file opens on 10/01/2019.
 
     Layout, after a paragraph of download instructions and above a key to the
@@ -102,14 +103,18 @@ ECOLOGY_LAST_YEAR = 2020
 IV_PARAMETER = "00060"               # discharge, cfs
 
 # --- Ecology endpoint --------------------------------------------------------
-# NOTE THE EXTENSION IS UPPERCASE. The server 403s on ".txt", which is what
-# the earlier guessed suffixes were all hitting -- the failures were the URL
-# being wrong, not the request being refused.
 ECOLOGY_BASE = ("https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/"
-                "Prod/%s/%s_%d_DSG_%s.TXT")
-# FM is the 15-minute file, DV the mean-daily one. FM first; DV is a fallback
-# so a year missing its sub-daily file still contributes to Part 1.
-ECOLOGY_SUFFIXES = ["FM", "DV"]
+                "Prod/%s/%s_%d_DSG_%s.%s")
+# (suffix, extension), tried in order. THE CASE OF THE EXTENSION IS NOT
+# COSMETIC AND IT IS NOT THE SAME FOR BOTH FILES: the 15-minute file is
+# FM + ".TXT" and the mean-daily one is DV + ".txt". Serving one extension for
+# both 403s on whichever it guessed wrong, which is what the original guessed
+# suffixes were all doing.
+#
+# FM first -- it carries the TIME column and is the only one Part 2 can use.
+# DV is a fallback so a water year missing its sub-daily file still shows up,
+# and fetch_ecology says loudly when the record it assembled is daily.
+ECOLOGY_FILES = [("FM", "TXT"), ("DV", "txt")]
 # A known-good URL with %d where the year goes, if the pattern ever changes.
 ECOLOGY_URL_OVERRIDE = None
 # THE YEAR IN THE FILE NAME IS A WATER YEAR. 26C075_2020_DSG_FM.TXT opens on
@@ -516,15 +521,15 @@ def parse_ecology(text):
 def fetch_ecology(site, first_year, last_year):
     """Ecology sub-daily flow across the requested years.
 
-    Each year is tried against ECOLOGY_SUFFIXES until one parses. The suffix
+    Each year is tried against ECOLOGY_FILES until one parses. The file type
     that worked is reported, because it is a guess -- see the docstring.
     """
     pieces, used, failed = [], {}, []
     for year in range(first_year, last_year + 1):
         got = None
         candidates = ([ECOLOGY_URL_OVERRIDE % year] if ECOLOGY_URL_OVERRIDE
-                      else [ECOLOGY_BASE % (site, site, year, s)
-                            for s in ECOLOGY_SUFFIXES])
+                      else [ECOLOGY_BASE % (site, site, year, suffix, ext)
+                            for suffix, ext in ECOLOGY_FILES])
         for url in candidates:
             # Case-insensitive: the URL ends ".TXT", so stripping a lowercase
             # ".txt" left the tag as "FM.TXT" and cache files named
@@ -549,11 +554,11 @@ def fetch_ecology(site, first_year, last_year):
     if not pieces:
         print("   Ecology %s: NOTHING PARSED for %d-%d"
               % (site, first_year, last_year))
-        print("   Tried suffixes: %s" % ", ".join(ECOLOGY_SUFFIXES))
+        print("   Tried: %s" % ", ".join("%s.%s" % f for f in ECOLOGY_FILES))
         print("   Set ECOLOGY_URL_OVERRIDE to a known-good URL with %d for the "
               "year.")
         probe = cache_path("ecology_%s_%d_%s.txt"
-                           % (site, first_year, ECOLOGY_SUFFIXES[0]))
+                           % (site, first_year, ECOLOGY_FILES[0][0]))
         if os.path.isfile(probe):
             with open(probe, "r", errors="replace") as handle:
                 print("   First lines of what came back:")
