@@ -41,16 +41,34 @@ NETWORK
     cache to refresh. The three hosts used are waterservices.usgs.gov,
     nwis.waterdata.usgs.gov and apps.ecology.wa.gov.
 
-THE ECOLOGY FILE FORMAT IS NOT ASSUMED
-    Only the daily-value URL was known when this was written:
-        .../StationData/Prod/26C075/26C075_2019_DSG_DV.txt
-    The 15-minute file name is a guess, so ECOLOGY_SUFFIXES holds several
-    candidates and the first that returns data is used and reported. The
-    column layout is sniffed rather than hard coded -- delimiter, date column
-    and flow column are all detected, and if detection fails the script prints
-    the first lines of the file it could not read instead of failing silently.
-    If none of the candidates work, paste a known-good 15-minute URL into
-    ECOLOGY_URL_OVERRIDE.
+THE ECOLOGY FILES
+    Two per water year, and the extension is UPPERCASE -- ".txt" 403s:
+        .../Prod/26C075/26C075_2020_DSG_FM.TXT    15 minute
+        .../Prod/26C075/26C075_2020_DSG_DV.TXT    mean daily
+    The year in the name is the WATER year: the 2020 file opens on 10/01/2019.
+
+    Layout, after a paragraph of download instructions and above a key to the
+    quality codes:
+
+        DATE          TIME   Discharge (cfs)   QUALITY
+        ----------   -----   ---------------   -------
+        10/01/2019   00:00              76.5         2
+
+    The header cannot be used to split the columns, because "Discharge (cfs)"
+    contains a space: a whitespace split yields five header tokens against four
+    data tokens, and a generic parser silently mis-assigns them. Data rows are
+    matched by pattern instead, which also steps over the preamble and the
+    trailing code key without having to find where either ends. Missing record
+    is a large negative, not a blank, and is dropped.
+
+    Quality codes are read and counted but NOT interpreted -- the distribution
+    is printed so the codes can be judged against the key in the file, and
+    ECOLOGY_EXCLUDE_QUALITY drops whichever are decided to be unusable. It is
+    empty by default: guessing which code means bad data would quietly bin good
+    record.
+
+    The generic sniffer is kept underneath as a fallback in case the format
+    changes or another station differs.
 """
 
 import os
@@ -84,14 +102,24 @@ ECOLOGY_LAST_YEAR = 2020
 IV_PARAMETER = "00060"               # discharge, cfs
 
 # --- Ecology endpoint --------------------------------------------------------
+# NOTE THE EXTENSION IS UPPERCASE. The server 403s on ".txt", which is what
+# the earlier guessed suffixes were all hitting -- the failures were the URL
+# being wrong, not the request being refused.
 ECOLOGY_BASE = ("https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/"
-                "Prod/%s/%s_%d_DSG_%s.txt")
-# Tried in order; the first that returns parseable data wins and is reported.
-# "DV" is the daily file whose URL was known -- it is last so that a 15-minute
-# file is preferred, but the script still produces something if only DV exists.
-ECOLOGY_SUFFIXES = ["15", "UV", "Inst", "15Min", "QC", "DV"]
-# A known-good URL with %d where the year goes, if the candidates all miss.
+                "Prod/%s/%s_%d_DSG_%s.TXT")
+# FM is the 15-minute file, DV the mean-daily one. FM first; DV is a fallback
+# so a year missing its sub-daily file still contributes to Part 1.
+ECOLOGY_SUFFIXES = ["FM", "DV"]
+# A known-good URL with %d where the year goes, if the pattern ever changes.
 ECOLOGY_URL_OVERRIDE = None
+# THE YEAR IN THE FILE NAME IS A WATER YEAR. 26C075_2020_DSG_FM.TXT opens on
+# 10/01/2019, so requesting 2006-2020 covers Oct 2005 through Sep 2020.
+#
+# Quality codes ride in the last column. The key is printed at the foot of each
+# file and is NOT interpreted here -- the distribution is reported so the codes
+# can be judged, and anything listed below is dropped. Left empty because
+# guessing which code means unusable data would silently bin good record.
+ECOLOGY_EXCLUDE_QUALITY = []
 
 # --- timezone ----------------------------------------------------------------
 # USGS instantaneous values come back timezone-aware and shift with daylight
@@ -132,11 +160,16 @@ def cache_path(name):
     return os.path.join(CACHE_DIR, name)
 
 
+# Some agency hosts refuse a bare python-requests user agent outright. Cheap
+# to set, and it removes one candidate explanation when a download 403s.
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; USACE-hydrology-script)"}
+
+
 def http_text(url, timeout=120):
     """GET returning text, or None with the reason printed."""
     import requests
     try:
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(url, timeout=timeout, headers=HTTP_HEADERS)
         if response.status_code != 200:
             print("      HTTP %d  %s" % (response.status_code, url))
             return None
@@ -303,6 +336,66 @@ def fetch_usgs_iv(site, start, end):
 # Ecology
 # ----------------------------------------------------------------------------
 
+# Data rows in the Ecology station files, which look like:
+#     DATE          TIME   Discharge (cfs)   QUALITY
+#     ----------   -----   ---------------   -------
+#     10/01/2019   00:00              76.5         2
+# The header cannot be used to split columns: "Discharge (cfs)" contains a
+# space, so a whitespace split gives five header tokens against four data
+# tokens and every generic parser mis-assigns them. The data lines are matched
+# directly instead, which also steps over the paragraph of instructions at the
+# top and the quality-code key at the bottom without needing to find where
+# either ends.
+ECOLOGY_ROW_DT = re.compile(
+    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2})\s+"
+    r"(-?[\d.]+)(?:\s+(\S+))?\s*$")
+ECOLOGY_ROW_D = re.compile(
+    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(-?[\d.]+)(?:\s+(\S+))?\s*$")
+
+
+def parse_ecology_columnar(text):
+    """The documented Ecology layout: DATE [TIME] value [QUALITY].
+
+    Handles both the 15-minute file (FM, with a TIME column) and the mean-daily
+    one (DV, without). Returns (series, quality Series, spec) or (None, ...).
+    """
+    stamps, values, quality = [], [], []
+    for line in text.splitlines():
+        match = ECOLOGY_ROW_DT.match(line)
+        if match:
+            date, clock, value, flag = match.groups()
+            stamps.append("%s %s" % (date, clock))
+        else:
+            match = ECOLOGY_ROW_D.match(line)
+            if not match:
+                continue
+            date, value, flag = match.groups()
+            stamps.append(date)
+        values.append(value)
+        quality.append(flag)
+    if len(values) < 2:
+        return None, None, None
+    # Carried as a frame so the flag stays with its value positionally. Aligning
+    # the two by reindexing on the timestamp raises the moment the file repeats
+    # one -- which a daily file does trivially, and any file can at a clock
+    # change or a re-issued row.
+    frame = pd.DataFrame({"stamp": stamps, "value": values, "flag": quality})
+    frame["stamp"] = pd.to_datetime(frame["stamp"], format="mixed",
+                                    errors="coerce")
+    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
+    frame = frame.dropna(subset=["stamp", "value"])
+    # Ecology writes missing record as a large negative rather than a blank.
+    frame = frame[frame["value"] > -900.0]
+    frame = frame.drop_duplicates(subset="stamp", keep="first")
+    frame = frame.sort_values("stamp")
+    index = pd.DatetimeIndex(frame["stamp"])
+    series = pd.Series(frame["value"].to_numpy(), index=index)
+    flags = pd.Series(frame["flag"].to_numpy(), index=index)
+    spec = {"sep": "ecology-columnar", "date_col": "DATE",
+            "time_col": "TIME", "flow_col": "Discharge (cfs)"}
+    return (series if len(series) else None), flags, spec
+
+
 def sniff_ecology(text):
     """Find the date and flow columns in an Ecology station file.
 
@@ -377,7 +470,22 @@ def sniff_ecology(text):
 
 
 def parse_ecology(text):
-    """One Ecology file to a flow Series, or None."""
+    """One Ecology file to a flow Series, or None.
+
+    The documented layout is tried first; the generic sniffer is kept as a
+    fallback in case Ecology changes the format or another station differs.
+    """
+    series, flags, spec = parse_ecology_columnar(text)
+    if series is not None:
+        if ECOLOGY_EXCLUDE_QUALITY:
+            before = len(series)
+            series = series[~flags.isin([str(q) for q in
+                                         ECOLOGY_EXCLUDE_QUALITY])]
+            if before != len(series):
+                print("      dropped %d value(s) on quality %s"
+                      % (before - len(series), ECOLOGY_EXCLUDE_QUALITY))
+        spec["quality"] = flags.value_counts().to_dict()
+        return series, spec
     spec = sniff_ecology(text)
     if spec is None:
         return None, None
@@ -418,7 +526,11 @@ def fetch_ecology(site, first_year, last_year):
                       else [ECOLOGY_BASE % (site, site, year, s)
                             for s in ECOLOGY_SUFFIXES])
         for url in candidates:
-            tag = url.rsplit("_", 1)[-1].replace(".txt", "")
+            # Case-insensitive: the URL ends ".TXT", so stripping a lowercase
+            # ".txt" left the tag as "FM.TXT" and cache files named
+            # "..._FM.TXT.txt".
+            tag = re.sub(r"\.txt$", "", url.rsplit("_", 1)[-1],
+                         flags=re.IGNORECASE)
             text = cached_text("ecology_%s_%d_%s.txt" % (site, year, tag), url)
             if not text or len(text) < 200:
                 continue
@@ -431,7 +543,8 @@ def fetch_ecology(site, first_year, last_year):
             continue
         series, tag, spec = got
         pieces.append(series)
-        used[year] = (tag, len(series), spec["date_col"], spec["flow_col"])
+        used[year] = (tag, len(series), spec["date_col"], spec["flow_col"],
+                      spec.get("quality"))
 
     if not pieces:
         print("   Ecology %s: NOTHING PARSED for %d-%d"
@@ -456,6 +569,21 @@ def fetch_ecology(site, first_year, last_year):
     print("   Ecology %s: %d values, %s to %s (file type %s, step %s)"
           % (site, len(combined), combined.index.min().date(),
              combined.index.max().date(), "/".join(tags), step))
+    codes = {}
+    for entry in used.values():
+        for code, count in (entry[4] or {}).items():
+            codes[code] = codes.get(code, 0) + count
+    if codes:
+        print("      quality codes: %s"
+              % ", ".join("%s x%d" % (k, v)
+                          for k, v in sorted(codes.items(),
+                                             key=lambda kv: -kv[1])))
+        print("      (key is at the foot of each file; set "
+              "ECOLOGY_EXCLUDE_QUALITY to drop any)")
+    if step >= pd.Timedelta(hours=12):
+        print("      *** this is DAILY data. Part 2 needs sub-daily record, so")
+        print("      the lag it reports would be quantised to whole days. Check")
+        print("      that the FM files downloaded rather than only the DV ones.")
     if failed:
         print("      no data for: %s" % ", ".join(str(y) for y in failed))
     return combined
