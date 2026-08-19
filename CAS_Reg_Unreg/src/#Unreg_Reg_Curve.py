@@ -377,30 +377,22 @@ TRANSFORM_SIGMA_SPAN = 0.50
 # How the "frequency" (unregulated-curve) term of the combination is
 # expressed, before it is RSS'd against the transform term. The reviewer's
 # formula is written as (Unreg_bound - Unreg_best) -- a delta in UNREGULATED
-# cfs -- added directly to a REGULATED-cfs transform term. That mixes units
-# (a regulated flow cannot literally gain "unregulated cfs of uncertainty"),
-# and while the two modes track each other reasonably closely over most of
-# THIS curve, that is a property of this transform's particular shape (its
-# attenuation ratio and log-log slope partly offsetting), not something
-# guaranteed for a different basin or a re-fit transform -- see
-# freq_term_mode_comparison.txt. "literal" implicitly assumes the transform's
-# local slope is 1 (pure pass-through) wherever it skips the conversion,
-# which is false through most of this curve (30-37% attenuation). Switched
-# to "transform_curve" for that reason -- it is correct by construction
-# rather than by coincidence, and costs nothing (the fitted curve is already
-# on hand).
+# cfs -- added directly to a REGULATED-cfs transform term, which mixes units
+# unless the bound is pushed through the transform first. Set back to
+# "literal" (the reviewer's formula exactly) on 19 Aug 2026, pending the
+# reviewer's answer to whether he wants it converted -- "transform_curve" is
+# the dimensionally consistent version and is still fully supported (both
+# modes are always computed either way; this only picks which one is the
+# adopted band vs. the "_alt" comparison columns), just not adopted while
+# that question is open. See freq_term_mode_comparison.txt for the
+# reasoning either way.
 #   "literal"         reviewer's formula exactly: freq term = Unreg_bound -
-#                      Unreg_best, in raw unregulated cfs. Kept only for
-#                      comparison (freq_term_mode_comparison.txt/plots) and
-#                      as the literal reading of the reviewer's request.
+#                      Unreg_best, in raw unregulated cfs. ADOPTED for now.
 #   "transform_curve"  push the unregulated bound through the fitted transform
 #                      curve first (apply_transform), so the freq term is
 #                      already in regulated cfs before combining. Dimensionally
-#                      consistent -- ADOPTED. Both modes are always computed
-#                      and written to the CSV/report; this only picks which
-#                      one is the adopted band vs. the "_alt" comparison
-#                      columns.
-FREQ_TERM_MODE = "transform_curve"
+#                      consistent; was adopted 19 Aug 2026, reverted same day.
+FREQ_TERM_MODE = "literal"
 # Keep the two sides of the frequency interval separate so the noncentral-t
 # asymmetry survives the combination. False averages them into one sigma.
 COMBINE_ASYMMETRIC = True
