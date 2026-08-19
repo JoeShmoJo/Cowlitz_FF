@@ -412,6 +412,13 @@ UNCERTAINTY_REPORT = True
 # Flag if the combined band gets more lopsided than this -- past here the
 # two-piece lognormal is being over-asked and Monte Carlo is worth doing.
 ASYMMETRY_MC_TRIGGER = 2.0
+# Make the FREQ_TERM_MODE comparison output: two figures (one per mode, each
+# alone) plus one figure with both bands overlaid so they can be told apart
+# directly, and a plain-text methodology writeup covering both. This is for
+# deciding which mode belongs in the memo, not for the memo itself -- nothing
+# here touches the adopted band, which is still whichever mode FREQ_TERM_MODE
+# is set to.
+MAKE_FREQ_MODE_COMPARISON = True
 
 # Hold the regulated UPPER bound at or below the unregulated upper bound at the
 # same confidence level. Without this the band goes non-physical at the top: the
@@ -1459,6 +1466,227 @@ def plot_final_curves(freq, fit, reg_curve, unc, table_2009, stem):
     plt.close(fig)
 
 
+def _freqmode_bands(unc):
+    """Pull out the literal and transform_curve bands from unc by name.
+
+    combine_uncertainty() always computes both -- FREQ_TERM_MODE only picks
+    which one is "reg_lower"/"reg_upper" (the adopted band) versus
+    "reg_lower_alt"/"reg_upper_alt" (kept for comparison). This unwinds that
+    so the comparison plots are correct no matter which mode is currently
+    adopted, rather than assuming "literal" is always unc["reg_..."].
+    """
+    if unc["freq_term_mode"] == "literal":
+        literal = (unc["reg_lower"], unc["reg_upper"])
+        curve = (unc["reg_lower_alt"], unc["reg_upper_alt"])
+    else:
+        curve = (unc["reg_lower"], unc["reg_upper"])
+        literal = (unc["reg_lower_alt"], unc["reg_upper_alt"])
+    return literal, curve
+
+
+def _freqmode_axes(ax):
+    """Shared axis dressing for the FREQ_TERM_MODE comparison figures."""
+    ax.set_yscale("log")
+    ax.set_ylim(FLOW_LIMITS)
+    ticks = [t for t in AEP_TICKS if FINAL_AEP_LIMITS[1] <= t <= FINAL_AEP_LIMITS[0]]
+    probability_axis(ax, ticks, FINAL_AEP_LIMITS)
+    ax.yaxis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: format(int(v), ",")))
+    ax.grid(which="major", alpha=0.45, lw=0.8)
+    ax.grid(which="minor", alpha=0.2, lw=0.5)
+    ax.set_ylabel("Peak flow (cfs)")
+
+
+def plot_freq_term_mode_comparison(freq, fit, reg_curve, unc, stem):
+    """The two ways of combining the frequency term, plotted apart and together.
+
+    Not a memo figure. This exists so the choice between FREQ_TERM_MODE =
+    "literal" (the reviewer's formula, applied to unregulated cfs directly)
+    and "transform_curve" (the same bound pushed through the fitted transform
+    first, so both terms are in regulated cfs before combining) can be SEEN
+    rather than argued about in the abstract. See PART 4 in the module
+    docstring and write_freq_term_mode_description() for the reasoning; this
+    only draws it.
+
+    Three files:
+      _freqmode_literal.png          curve + the literal band alone
+      _freqmode_transform_curve.png  curve + the transform_curve band alone
+      _freqmode_compare.png          both bands on one axis, one solid, one
+                                      hatched, so the gap between them is
+                                      visible directly rather than inferred
+                                      from two separate figures
+    """
+    z = stats.norm.ppf(1.0 - freq["AEP"].values)
+    unreg_curve = freq[FREQ_VALUE_COL].values
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+    (literal_lo, literal_hi), (curve_lo, curve_hi) = _freqmode_bands(unc)
+
+    panels = [
+        ("literal", literal_lo, literal_hi,
+         "FREQ_TERM_MODE = 'literal' -- reviewer's formula, "
+         "unregulated-cfs delta added directly"),
+        ("transform_curve", curve_lo, curve_hi,
+         "FREQ_TERM_MODE = 'transform_curve' -- unregulated bound pushed "
+         "through the fitted transform first"),
+    ]
+    for key, lo, hi, subtitle in panels:
+        fig, ax = plt.subplots(figsize=(11, 8.4))
+        ax.fill_between(z, lo, hi, color=C_REG, alpha=0.18, zorder=1, lw=0,
+                        label="Regulated, %d%% band" % pct)
+        ax.plot(z, unreg_curve, color=C_UNREG, lw=2.2, zorder=5,
+                label="Unregulated")
+        ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=5, label="Regulated")
+        _freqmode_axes(ax)
+        ax.set_title("Castle Rock regulated frequency\n%s" % subtitle,
+                    fontsize=11)
+        ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
+        fig.tight_layout()
+        fig.savefig("%s_freqmode_%s.png" % (stem, key), dpi=150)
+        plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(11, 8.4))
+    ax.fill_between(z, literal_lo, literal_hi, color=C_REG, alpha=0.22,
+                    zorder=1, lw=0, label="literal (reviewer's formula)")
+    ax.fill_between(z, curve_lo, curve_hi, facecolor="none",
+                    edgecolor="#1b1b1b", hatch="//", lw=0.9, zorder=2,
+                    label="transform_curve (dimensionally consistent)")
+    ax.plot(z, unreg_curve, color=C_UNREG, lw=2.2, zorder=5, label="Unregulated")
+    ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=5, label="Regulated")
+    _freqmode_axes(ax)
+    ax.set_title("Castle Rock regulated frequency, %d%% band\n"
+                "FREQ_TERM_MODE comparison: literal vs. transform_curve"
+                % pct, fontsize=11)
+    ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
+    fig.tight_layout()
+    fig.savefig("%s_freqmode_compare.png" % stem, dpi=150)
+    plt.close(fig)
+
+
+def write_freq_term_mode_description(freq, unc, reg_curve, out_path):
+    """Methodology writeup for the FREQ_TERM_MODE choice, as a plain text
+    file -- not the memo. The memo's Section 5.6 states whichever mode is
+    adopted; this lays out both so that choice can be made and the memo text
+    written or revised deliberately, instead of by whatever FREQ_TERM_MODE
+    happens to be set to in this script.
+    """
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+    z = unc["z"]
+    (literal_lo, literal_hi), (curve_lo, curve_hi) = _freqmode_bands(unc)
+    aep = freq["AEP"].values
+
+    lines = []
+
+    def w(s=""):
+        lines.append(s)
+
+    w("REGULATED UNCERTAINTY: TWO WAYS TO COMBINE THE FREQUENCY TERM")
+    w("=" * 64)
+    w("Generated by #Unreg_Reg_Curve.py -- reflects whatever the analysis")
+    w("currently produces, not a fixed record. Re-run the script to refresh.")
+    w("")
+    w("BACKGROUND")
+    w("-" * 64)
+    w("The regulated flow at a given AEP carries uncertainty from two")
+    w("independent sources: the unregulated frequency estimate itself (HEC-SSP")
+    w("confidence limits), and the scatter of the unregulated-to-regulated")
+    w("transform about its fitted line. EM 1110-2-1619 (29 Sep 2025) Sec.")
+    w("4-4.b(3), Eq. 4-6, combines independent standard deviations by")
+    w("root-sum-of-squares; Sec. 4-6a treats each side of the best estimate as")
+    w("its own Normal distribution, which is how the asymmetry in both the SSP")
+    w("limits and the transform residuals survives the combination instead of")
+    w("being averaged into one symmetric spread.")
+    w("")
+    w("The reviewer's formula for the combination itself:")
+    w("")
+    w("  Upper = RegBest + sqrt((Unreg97.5 - UnregBest)^2 + (Transform97.5 - TransformBest)^2)")
+    w("  Lower = RegBest - sqrt((UnregBest - Unreg2.5)^2 + (TransformBest - Transform2.5)^2)")
+    w("")
+    w("at the %d%% two-sided level (z = %.3f). The transform term is" % (pct, z))
+    w("unambiguous: the LOESS fit's own confidence spread, evaluated at the")
+    w("unregulated best estimate, already in regulated cfs. The frequency term")
+    w("is where the two approaches below diverge.")
+    w("")
+    w("THE TWO APPROACHES")
+    w("-" * 64)
+    w("literal  (FREQ_TERM_MODE = \"literal\")")
+    w("    freq_term = Unreg_bound - Unreg_best, taken directly in")
+    w("    UNREGULATED cfs and combined as-is against the transform term.")
+    w("    This is the reviewer's formula exactly, read literally: the")
+    w("    formula as given subtracts unregulated flows and adds the result")
+    w("    to a regulated-cfs quantity. It does not push the unregulated")
+    w("    bound through the transform first.")
+    w("")
+    w("transform_curve  (FREQ_TERM_MODE = \"transform_curve\")")
+    w("    freq_term = Transform(Unreg_bound) - Transform(Unreg_best), i.e.")
+    w("    the unregulated bound is pushed through the SAME fitted transform")
+    w("    curve as the central estimate before differencing, so the result")
+    w("    is already in REGULATED cfs -- the same units as the transform")
+    w("    term it is then combined with.")
+    w("")
+    w("WHY THEY DIFFER")
+    w("-" * 64)
+    w("\"literal\" adds an unregulated-cfs delta to a regulated-cfs quantity")
+    w("without converting units first. That is only an approximation of the")
+    w("true regulated-cfs delta -- the exact conversion is Transform(Unreg +")
+    w("delta) - Transform(Unreg), which is what \"transform_curve\" computes,")
+    w("and the two are equal only where the transform is locally linear.")
+    w("")
+    w("The transform is NOT linear -- its local slope (d log(reg) / d log(unreg))")
+    w("runs about 0.6 through the middle of the curve, where the projects")
+    w("absorb most of an increase, and rises toward 1.5 near the top, where")
+    w("the curve bends toward 1:1 pass-through. Where the slope is below 1,")
+    w("\"literal\" OVERSTATES the frequency term relative to \"transform_curve\"")
+    w("(an unregulated-cfs delta is larger than the regulated-cfs delta the")
+    w("project would actually produce from it); where the slope approaches or")
+    w("exceeds 1, near pass-through, the two converge and can cross.")
+    w("")
+    w("Neither is \"more correct\" about the AEP or the best-estimate curve --")
+    w("both use the same reg_curve and the same transform term. They differ")
+    w("only in how the frequency term is expressed before combining, i.e. how")
+    w("literally the reviewer's formula is followed versus how dimensionally")
+    w("consistent the combination is.")
+    w("")
+    w("QUANTITATIVE COMPARISON")
+    w("-" * 64)
+    hdr = ("%6s  %12s  %12s  %22s  %22s  %9s" %
+          ("AEP", "Unreg cfs", "Reg cfs", "literal lo - hi", "transform_curve lo - hi",
+           "% diff (hi)"))
+    w(hdr)
+    w("-" * len(hdr))
+    show_aep = [0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001]
+    for a in show_aep:
+        i = int(np.argmin(np.abs(aep - a)))
+        u = freq[FREQ_VALUE_COL].values[i]
+        r = reg_curve[i]
+        ll, lh = literal_lo[i], literal_hi[i]
+        cl, ch = curve_lo[i], curve_hi[i]
+        pdiff = 100.0 * (lh - ch) / ch if ch else float("nan")
+        w("%6.4f  %12s  %12s  %22s  %22s  %+8.1f%%" % (
+            a, format(int(round(u)), ","), format(int(round(r)), ","),
+            "%s - %s" % (format(int(round(ll)), ","), format(int(round(lh)), ",")),
+            "%s - %s" % (format(int(round(cl)), ","), format(int(round(ch)), ",")),
+            pdiff))
+    w("")
+    w("Positive % diff (hi) means the literal upper bound is WIDER than the")
+    w("transform_curve upper bound at that AEP; negative means narrower.")
+    w("")
+    w("FIGURES")
+    w("-" * 64)
+    w("  unreg_reg_freqmode_literal.png          literal band alone")
+    w("  unreg_reg_freqmode_transform_curve.png  transform_curve band alone")
+    w("  unreg_reg_freqmode_compare.png          both bands on one axis")
+    w("")
+    w("This file and the three figures are diagnostic output, not the memo.")
+    w("The memo's Section 5.6 currently states FREQ_TERM_MODE = %r; changing"
+      % unc["freq_term_mode"])
+    w("the adopted mode is a one-line change (FREQ_TERM_MODE, near the top of")
+    w("#Unreg_Reg_Curve.py) followed by re-running the script and updating the")
+    w("memo text and Appendix E table to match.")
+
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def plot_2009_comparison(out, stem):
     """Ratio of the inferred regulated curve to the 2009 adopted curve."""
     sub = out.dropna(subset=["reg_2009_cfs"])
@@ -1588,6 +1816,15 @@ def main():
         plot_final_curves(freq, fit, reg_curve, unc, table_2009, PLOT_STEM)
     if MAKE_FINAL_UNCERTAINTY_PLOT:
         plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, PLOT_STEM)
+    if MAKE_FREQ_MODE_COMPARISON:
+        plot_freq_term_mode_comparison(freq, fit, reg_curve, unc, PLOT_STEM)
+        desc_path = os.path.join(os.path.dirname(PLOT_STEM),
+                                 "freq_term_mode_comparison.txt")
+        write_freq_term_mode_description(freq, unc, reg_curve, desc_path)
+        print("FreqMode: %s_freqmode_literal.png, %s_freqmode_transform_curve.png,"
+              % (PLOT_STEM, PLOT_STEM))
+        print("          %s_freqmode_compare.png" % PLOT_STEM)
+        print("          %s" % desc_path)
 
     out = freq[["AEP", "Value", FREQ_VALUE_COL]].copy()
     out = out.rename(columns={"Value": "unreg_computed_cfs",
