@@ -422,6 +422,21 @@ UNCERTAINTY_REPORT = True
 # Flag if the combined band gets more lopsided than this -- past here the
 # two-piece lognormal is being over-asked and Monte Carlo is worth doing.
 ASYMMETRY_MC_TRIGGER = 2.0
+# Run the Monte Carlo check itself rather than just flagging that it would be
+# worth doing. Draws MC_N_DRAWS samples per AEP from the two independent
+# sources -- each as a split (two-piece) Normal using the same sigma_lo/hi
+# already in unc -- pushes the frequency draws through the actual fitted
+# transform curve (not the local-slope approximation), multiplies in the
+# transform-side scatter, and compares the empirical 2.5/97.5 percentiles to
+# the closed-form band. The closed-form combination (RSS the upper sigmas,
+# RSS the lower sigmas) is itself an approximation once two skewed
+# distributions are involved; this checks how much that approximation is
+# costing, concentrated exactly where ASYMMETRY_MC_TRIGGER says to check it.
+# ~50 microseconds per curve evaluation, so 50,000 draws x 16 AEPs runs in
+# well under a minute -- turn off only if that is not affordable right now.
+RUN_MONTE_CARLO_CHECK = True
+MC_N_DRAWS = 50000
+MC_SEED = 20260819
 # Make the FREQ_TERM_MODE comparison output: two figures (one per mode, each
 # alone) plus one figure with both bands overlaid so they can be told apart
 # directly, and a plain-text methodology writeup covering both. This is for
@@ -1335,12 +1350,208 @@ def report_uncertainty(freq, unc, fit):
     if worst_ratio > ASYMMETRY_MC_TRIGGER:
         print("   *** past ASYMMETRY_MC_TRIGGER (%.1fx). The two-piece lognormal"
               % ASYMMETRY_MC_TRIGGER)
-        print("   is being over-asked -- run a simple Monte Carlo over the two")
-        print("   terms instead of trusting this band.")
+        print("   is being over-asked%s" %
+              (" -- see monte_carlo_check.txt" if RUN_MONTE_CARLO_CHECK
+               else " -- run monte_carlo_check() instead of trusting this band"))
     else:
         print("   within ASYMMETRY_MC_TRIGGER (%.1fx), so the closed-form"
               % ASYMMETRY_MC_TRIGGER)
         print("   two-piece combination is adequate -- no Monte Carlo needed.")
+
+
+def sample_split_normal(sigma_lo, sigma_hi, n, rng):
+    """n draws from a two-piece (split) Normal: Half-Normal(sigma_lo) below
+    zero, Half-Normal(sigma_hi) above, continuous at the join.
+
+    The mixture weight on each side has to be proportional to that side's
+    sigma -- p_lo = sigma_lo / (sigma_lo + sigma_hi) -- for the density to
+    actually be continuous at zero. A 50/50 split would put a visible step
+    in the density at the best estimate whenever sigma_lo != sigma_hi.
+    """
+    sigma_lo = max(float(sigma_lo), 1e-12)
+    sigma_hi = max(float(sigma_hi), 1e-12)
+    p_lo = sigma_lo / (sigma_lo + sigma_hi)
+    is_lo = rng.random(n) < p_lo
+    out = np.empty(n)
+    out[is_lo] = -np.abs(rng.normal(0.0, sigma_lo, int(is_lo.sum())))
+    out[~is_lo] = np.abs(rng.normal(0.0, sigma_hi, int((~is_lo).sum())))
+    return out
+
+
+def monte_carlo_check(freq, fit, unc, reg_curve, n_draws=MC_N_DRAWS, seed=MC_SEED):
+    """Simulate the combined band instead of RSS-ing the two sigmas, and
+    compare. See RUN_MONTE_CARLO_CHECK for what this is checking and why.
+
+    Per AEP: draw n_draws frequency-side offsets from a split-Normal using
+    sigma_freq_lo/hi, push them through the SAME fitted transform curve used
+    everywhere else (apply_transform -- monotonic and 1:1-clipped exactly
+    like the deterministic curve), then draw transform-side offsets from a
+    split-Normal using sigma_transform_lo/hi (evaluated at Unreg_best, the
+    same fixed point the closed form uses -- this isolates the question of
+    whether RSS-combining the two sources is accurate, not whether transform
+    scatter should vary with the sampled draw, which the closed form does
+    not attempt either).
+
+    The reg <= unreg physical floor is applied per draw, but ONLY above
+    BAND_CLIP_MIN_CFS -- matching CLIP_BAND_TO_UNREG's own condition, not
+    applying it unconditionally. Below that threshold reg > unreg is real
+    (minimum release and refill drawdown put more water in the river than
+    nature would), so clipping every draw there would manufacture a fake
+    ceiling on the low-flow upper tail and understate that part of the band
+    for a reason that has nothing to do with the two-piece-lognormal
+    question this check exists to answer.
+
+    Returns a DataFrame with the closed-form and MC bounds side by side.
+    """
+    rng = np.random.default_rng(seed)
+    unreg_best = freq[FREQ_VALUE_COL].values.astype(float)
+    aep = freq["AEP"].values
+    n = len(aep)
+
+    mc_lower = np.empty(n)
+    mc_upper = np.empty(n)
+    mc_median = np.empty(n)
+
+    for i in range(n):
+        freq_dex = sample_split_normal(unc["sigma_freq_lo"][i],
+                                       unc["sigma_freq_hi"][i], n_draws, rng)
+        unreg_draws = unreg_best[i] * 10.0 ** freq_dex
+        reg_from_curve = apply_transform(fit, unreg_draws)
+
+        trans_dex = sample_split_normal(unc["sigma_transform_lo"][i],
+                                        unc["sigma_transform_hi"][i],
+                                        n_draws, rng)
+        reg_draws = reg_from_curve * 10.0 ** trans_dex
+        if CLIP_BAND_TO_UNREG and unreg_best[i] >= BAND_CLIP_MIN_CFS:
+            reg_draws = np.minimum(reg_draws, unreg_draws)
+
+        mc_lower[i] = np.percentile(reg_draws, 2.5)
+        mc_upper[i] = np.percentile(reg_draws, 97.5)
+        mc_median[i] = np.percentile(reg_draws, 50.0)
+
+    out = pd.DataFrame({
+        "AEP": aep,
+        "reg_best_cfs": reg_curve,
+        "closed_lower_cfs": unc["reg_lower"],
+        "closed_upper_cfs": unc["reg_upper"],
+        "mc_lower_cfs": mc_lower,
+        "mc_median_cfs": mc_median,
+        "mc_upper_cfs": mc_upper,
+    })
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["lower_diff_pct"] = 100.0 * (out["closed_lower_cfs"] -
+                                         out["mc_lower_cfs"]) / out["mc_lower_cfs"]
+        out["upper_diff_pct"] = 100.0 * (out["closed_upper_cfs"] -
+                                         out["mc_upper_cfs"]) / out["mc_upper_cfs"]
+    return out
+
+
+def plot_monte_carlo_check(freq, fit, reg_curve, mc, stem):
+    """Closed-form band (solid) against the simulated band (hatched), same
+    visual language as plot_freq_term_mode_comparison's _compare figure.
+    """
+    z = stats.norm.ppf(1.0 - freq["AEP"].values)
+    unreg_curve = freq[FREQ_VALUE_COL].values
+    pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+
+    fig, ax = plt.subplots(figsize=(11, 8.4))
+    ax.fill_between(z, mc["closed_lower_cfs"], mc["closed_upper_cfs"],
+                    color=C_REG, alpha=0.22, zorder=1, lw=0,
+                    label="closed form (RSS of sigmas)")
+    ax.fill_between(z, mc["mc_lower_cfs"], mc["mc_upper_cfs"],
+                    facecolor="none", edgecolor="#1b1b1b", hatch="//",
+                    lw=0.9, zorder=2,
+                    label="Monte Carlo (%d draws/AEP)" % MC_N_DRAWS)
+    ax.plot(z, unreg_curve, color=C_UNREG, lw=2.2, zorder=5, label="Unregulated")
+    ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=5, label="Regulated")
+    _freqmode_axes(ax)
+    ax.set_title("Castle Rock regulated frequency, %d%% band\n"
+                "closed-form two-piece combination vs. Monte Carlo" % pct,
+                fontsize=11)
+    ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
+    fig.tight_layout()
+    fig.savefig("%s_montecarlo_compare.png" % stem, dpi=150)
+    plt.close(fig)
+
+
+def write_monte_carlo_report(mc, out_path):
+    """Plain-text summary: does the closed-form band hold up against a
+    direct simulation of the same two sources? Written for the same
+    paraphrase-into-the-memo use as freq_term_mode_comparison.txt.
+    """
+    lines = []
+
+    def w(s=""):
+        lines.append(s)
+
+    worst_lo = mc["lower_diff_pct"].abs().max()
+    worst_hi = mc["upper_diff_pct"].abs().max()
+    worst = max(worst_lo, worst_hi)
+
+    w("REGULATED FLOW UNCERTAINTY -- MONTE CARLO CHECK")
+    w("=" * 64)
+    w("Generated by #Unreg_Reg_Curve.py. Re-run the script to refresh.")
+    w("")
+    w("WHAT THIS CHECKS")
+    w("-" * 64)
+    w("The adopted band combines the frequency-term sigma and the")
+    w("transform-term sigma by root-sum-of-squares on each side separately")
+    w("(the closed-form two-piece-lognormal treatment). That combination")
+    w("rule is exact for two ordinary Normals, but only an approximation")
+    w("once the two things being combined are themselves asymmetric -- the")
+    w("true combined distribution of two independent split-Normals is not")
+    w("itself exactly a split-Normal. This check draws directly from the")
+    w("two source distributions (%d draws per AEP, split-Normal on each"
+      % MC_N_DRAWS)
+    w("side using the same sigmas already adopted), pushes the frequency")
+    w("draws through the actual fitted transform curve, and compares the")
+    w("simulated 2.5/97.5 percentiles to the closed-form band.")
+    w("")
+    w("RESULT")
+    w("-" * 64)
+    if worst <= 5.0:
+        w("The closed-form band matches the simulated band closely -- the")
+        w("largest difference at any AEP is %.1f%%. The two-piece-lognormal" % worst)
+        w("approximation is adequate here; no correction is warranted.")
+    elif worst <= 15.0:
+        w("The closed-form band is close to the simulated band but not")
+        w("exact -- the largest difference at any AEP is %.1f%%, at the" % worst)
+        w("most asymmetric AEPs. Small enough to note rather than act on,")
+        w("but the closed-form band is an approximation, not the final word,")
+        w("at the most lopsided AEPs.")
+    else:
+        w("The closed-form band diverges from the simulated band by more")
+        w("than 15%% at at least one AEP (largest: %.1f%%). At the most" % worst)
+        w("asymmetric AEPs the two-piece-lognormal approximation is being")
+        w("asked to do more than it can -- the Monte Carlo result is the")
+        w("more defensible number there, not the closed-form formula.")
+    w("")
+    w("PER-AEP COMPARISON")
+    w("-" * 64)
+    hdr = ("%8s  %14s  %22s  %22s  %9s  %9s" %
+          ("AEP", "Reg best", "closed-form lo - hi", "Monte Carlo lo - hi",
+           "% lo", "% hi"))
+    w(hdr)
+    w("-" * len(hdr))
+    for _, r in mc.iterrows():
+        w("%8.4f  %14s  %22s  %22s  %+8.1f%%  %+8.1f%%" % (
+            r["AEP"], format(int(round(r["reg_best_cfs"])), ","),
+            "%s - %s" % (format(int(round(r["closed_lower_cfs"])), ","),
+                        format(int(round(r["closed_upper_cfs"])), ",")),
+            "%s - %s" % (format(int(round(r["mc_lower_cfs"])), ","),
+                        format(int(round(r["mc_upper_cfs"])), ",")),
+            r["lower_diff_pct"], r["upper_diff_pct"]))
+    w("")
+    w("% columns = how much wider (positive) or narrower (negative) the")
+    w("closed-form bound is than the Monte Carlo bound, at that AEP.")
+    w("")
+    w("FIGURE")
+    w("-" * 64)
+    w("  unreg_reg_montecarlo_compare.png  closed-form band vs. Monte Carlo")
+    w("                                    band, overlaid")
+
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
@@ -1822,6 +2033,16 @@ def main():
               % (PLOT_STEM, PLOT_STEM))
         print("          %s_freqmode_compare.png" % PLOT_STEM)
         print("          %s" % desc_path)
+
+    if RUN_MONTE_CARLO_CHECK:
+        mc = monte_carlo_check(freq, fit, unc, reg_curve)
+        plot_monte_carlo_check(freq, fit, reg_curve, mc, PLOT_STEM)
+        mc_path = os.path.join(os.path.dirname(PLOT_STEM), "monte_carlo_check.txt")
+        write_monte_carlo_report(mc, mc_path)
+        worst = max(mc["lower_diff_pct"].abs().max(), mc["upper_diff_pct"].abs().max())
+        print("MonteCarlo: %s_montecarlo_compare.png" % PLOT_STEM)
+        print("            %s" % mc_path)
+        print("            largest closed-form vs. MC difference: %.1f%%" % worst)
 
     out = freq[["AEP", "Value", FREQ_VALUE_COL]].copy()
     out = out.rename(columns={"Value": "unreg_computed_cfs",
