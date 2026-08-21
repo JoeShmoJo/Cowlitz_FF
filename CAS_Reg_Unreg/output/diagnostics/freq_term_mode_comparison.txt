@@ -77,4 +77,4 @@ FIGURES
                                           (= the adopted band)
   unreg_reg_freqmode_compare.png          both bands on one axis
 
-FREQ_TERM_MODE is currently 'transform_curve' (near the top of #Unreg_Reg_Curve.py).
+FREQ_TERM_MODE is currently 'literal' (near the top of #Unreg_Reg_Curve.py).
