@@ -9,25 +9,44 @@ WHY THIS EXISTS
     marginal frequency curve for two of the combination methods --
     #Coincident_PerfectCorrelation.py (same-AEP sum, the CDID3 Phase 1
     precedent) and #Coincident_CorrConditioned.py (correlation-conditioned
-    combination). This script builds that curve so those two have something
-    real to run against.
+    combination).
 
-WHAT THIS IS, AND WHAT IT IS NOT
-    The CDID3 Phase 2a report (2016) built its own Coweeman curve in
-    HEC-SSP: Bulletin 17C draft methods, multiple Grubbs-Beck low-outlier
-    screening, the Expected Moments Algorithm (EMA) to weight the 1933 and
-    1996 historic peaks and the 1985-2006 perception threshold against the
-    systematic record, and a regional skew from Cooper (2005). That is real
-    statistical machinery -- this repo's OWN unregulated Cowlitz curve goes
-    through the same kind of process. See
+CORRECTION -- THE FIRST VERSION OF THIS SCRIPT MISSED THE OBVIOUS ANSWER
+    The CDID3 Phase 2a report already contains a real, reviewed Coweeman
+    peak flow-frequency curve (its Table 5-2): HEC-SSP, Bulletin 17C draft
+    methods, multiple Grubbs-Beck low-outlier screening, the Expected
+    Moments Algorithm weighting the 1933 and 1996 historic peaks and the
+    1985-2006 perception threshold against the systematic record, and the
+    same regional skew from Cooper (2005) used below. That table was
+    already transcribed into CDID3_Coincident_Frequency_Notes.md before
+    this script was first written. The first version of this script built
+    a method-of-moments LP3 fit from raw gage data INSTEAD of using it --
+    strictly worse than the number already sitting in the repo, since it
+    has no historical weighting at all. That was a plain miss, not a
+    considered choice; caught when asked directly why the report's own
+    curve wasn't used.
+
+    CDID3_TABLE_5_2 below is that curve, transcribed with its AEP grid
+    converted to decimal. It supplies every point on this script's own
+    16-point AEP_GRID except 0.0002, which sits between CDID3's 0.0005 and
+    0.0001 points and is filled by log-flow/z interpolation (see
+    interpolate_cdid3()) -- not a refit, just reading a point off their own
+    published curve the same way the plot's twin-axis AEP labels do.
+
+    The method-of-moments fit below is KEPT, but demoted to a labeled
+    comparison line -- useful for seeing how much the historical weighting
+    CDID3 did (and this fit doesn't) moves the tail, not used as the
+    output the combination scripts actually run on.
+
+WHAT THE COMPARISON FIT IS, AND WHAT IT IS NOT
+    This repo's OWN unregulated Cowlitz curve goes through the same kind of
+    HEC-SSP/EMA process CDID3 used for Coweeman -- see
     CAS_Unreg_FF/src/Frequency_Curves_And_Table.py, which only PARSES an
-    HEC-SSP report; the actual fit happens in SSP, not in Python.
-
-    HEC-SSP is not available in this environment. Rather than hand-roll an
-    EMA / multiple-Grubbs-Beck implementation from memory -- exactly the
-    kind of thing that produces a plausible-looking curve with a subtle,
-    hard-to-catch error in it -- this script does something more modest and
-    easier to check by hand:
+    HEC-SSP report; the actual fit happens in SSP, not in Python. HEC-SSP is
+    not available in this environment, and hand-rolling an EMA / multiple-
+    Grubbs-Beck implementation from memory is exactly the kind of thing
+    that produces a plausible-looking curve with a subtle, hard-to-catch
+    error in it. So the comparison fit below does something more modest:
       - Log-Pearson III fit by ordinary method of moments, on the
         SYSTEMATIC record alone (USGS 1950-1984 annual peaks, plus
         Ecology-derived water-year maxima 2007-2020).
@@ -36,21 +55,25 @@ WHAT THIS IS, AND WHAT IT IS NOT
         weighting formula (a closed-form algebraic formula, not an
         iterative EMA solve).
       - The 1933 and 1996 historic peaks are PLOTTED at a historic-adjusted
-        plotting position for context, but are NOT folded into the moment
-        estimates -- no historical weighting, no EMA.
+        plotting position for context, but are NOT folded into this fit --
+        no historical weighting, no EMA. This is exactly the gap CDID3's
+        own curve fills, which is the whole reason to prefer their number.
       - Confidence limits by bootstrap (resample the systematic record with
         replacement, refit, repeat many times, take percentiles) rather
         than the WRC/Bulletin 17B noncentral-t confidence-limit tables.
 
-    This is an interim approximation, not a substitute for an actual
-    HEC-SSP run. It should be expected to disagree with a real EMA fit,
-    especially at the low-AEP tail, where the perception threshold and the
-    two historic peaks would carry real weight in a full Bulletin 17C
-    treatment and carry none here. It exists so the coincident-frequency
-    scripts have real numbers to develop and test against now. BEFORE this
-    curve goes in the memo: run the same record through HEC-SSP the way the
-    Cowlitz curve was, and turn this script into a report parser the way
-    Frequency_Curves_And_Table.py is for Cowlitz, rather than a fitter.
+UNCERTAINTY BAND ON THE ADOPTED (CDID3) CURVE
+    CDID3's report states 44 equivalent years of record for this curve and
+    plots 5%/95% confidence limits (its Figure 5-5), but the CI VALUES
+    themselves were not in the table text transcribed into
+    CDID3_Coincident_Frequency_Notes.md -- only the point estimates were.
+    Rather than invent a band, this script applies the comparison fit's own
+    bootstrap band WIDTH, as a ratio, around CDID3's real point values:
+    LowerConf = CDID3_value * (own_fit_lower / own_fit_value), and
+    likewise for UpperConf. The center is real; the spread is an
+    approximation of the spread, clearly labeled as such in the output
+    columns. If CDID3's actual 5%/95% figures are ever read off Figure 5-5
+    by hand, replace this step outright.
 
 LOCATION -- ONE OPEN ITEM
     This curve is left at the gage (USGS 14245000, "Coweeman River near
@@ -114,6 +137,34 @@ HISTORIC_PERIOD_START = 1933     # for the historic-adjusted plotting position
 REGIONAL_SKEW = 0.2
 REGIONAL_SKEW_MSE = 0.112        # Cooper (2005)
 
+# CDID3 Phase 2a report, Table 5-2, Coweeman column (unregulated, winter,
+# instantaneous peak, HEC-SSP Bulletin 17C/EMA, 44 equivalent years of
+# record). Transcribed via CAS_Reg_Unreg/docs/CDID3_Coincident_Frequency_
+# Notes.md, AEP converted from percent to decimal. This is the ADOPTED
+# curve -- see the CORRECTION section of the module docstring.
+CDID3_TABLE_5_2 = {
+    0.9999: 1700.0,
+    0.99: 2500.0,
+    0.95: 3100.0,
+    0.90: 3500.0,
+    0.80: 4000.0,
+    0.70: 4500.0,
+    0.60: 4900.0,
+    0.50: 5400.0,
+    0.40: 6000.0,
+    0.30: 6600.0,
+    0.20: 7500.0,
+    0.10: 9000.0,
+    0.05: 10500.0,
+    0.02: 12500.0,
+    0.01: 14100.0,
+    0.005: 15800.0,
+    0.002: 18200.0,
+    0.001: 20100.0,
+    0.0005: 22200.0,
+    0.0001: 27400.0,
+}
+
 # Matches the AEP grid already used in CAS_Unreg_FF/output/
 # CAS_Unreg_frequency_table.csv and CAS_Reg_Unreg/output/
 # regulated_frequency_inferred.csv, so the three curves interpolate onto a
@@ -126,10 +177,11 @@ BOOT_SEED = 20260821
 CONF_LOWER_PCT = 5
 CONF_UPPER_PCT = 95
 
+C_ADOPTED = "#b7410e"
 C_FIT = "#1a4f8a"
-C_BAND = "#8fbcdb"
+C_BAND = "#e8b9a8"
 C_SYS = "#1a4f8a"
-C_HIST = "#b7410e"
+C_HIST = "#4c8c4a"
 
 # ----------------------------------------------------------------------------
 
@@ -304,6 +356,29 @@ def historic_plotting_positions(historic_dict, period_start, period_end):
     return {yr: (rank + 1) / (h + 1.0) for rank, (yr, val) in enumerate(ordered)}
 
 
+def interpolate_cdid3(aep_grid):
+    """CDID3_TABLE_5_2 -> flow at every AEP in aep_grid.
+
+    Every point in AEP_GRID except 0.0002 is an exact key in
+    CDID3_TABLE_5_2; that one is filled by linear interpolation in
+    log10(flow)-vs-z space between CDID3's own bracketing points
+    (0.0005 and 0.0001), the same space frequency curves are normally
+    read in, not a refit of anything.
+    """
+    table_aep = np.array(sorted(CDID3_TABLE_5_2, reverse=True))
+    table_lf = np.log10(np.array([CDID3_TABLE_5_2[a] for a in table_aep]))
+    table_z = stats.norm.ppf(1 - table_aep)
+    order = np.argsort(table_z)
+    out = []
+    for aep in aep_grid:
+        if aep in CDID3_TABLE_5_2:
+            out.append(CDID3_TABLE_5_2[aep])
+        else:
+            z = stats.norm.ppf(1 - aep)
+            out.append(10 ** np.interp(z, table_z[order], table_lf[order]))
+    return np.array(out)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -314,24 +389,39 @@ def main():
 
     mean, std, station_skew = fit_lp3(values)
     wskew = weighted_skew(station_skew, n)
-    print("Station skew=%.3f  regional-blended skew=%.3f" % (station_skew, wskew))
+    print("Comparison fit -- station skew=%.3f  regional-blended skew=%.3f"
+          % (station_skew, wskew))
 
-    best = lp3_quantiles(mean, std, wskew, AEP_GRID)
-    lower, upper = bootstrap_band(values, AEP_GRID)
+    own_fit = lp3_quantiles(mean, std, wskew, AEP_GRID)
+    own_lower, own_upper = bootstrap_band(values, AEP_GRID)
+
+    adopted = interpolate_cdid3(AEP_GRID)
+    # Center on CDID3's real curve; spread from the comparison fit's own
+    # bootstrap band, carried over as a ratio (see the module docstring's
+    # UNCERTAINTY BAND section for why).
+    lower = adopted * (own_lower / own_fit)
+    upper = adopted * (own_upper / own_fit)
 
     out = pd.DataFrame({
         "AEP": AEP_GRID,
-        "Value": best,
+        "Value": adopted,
         "LowerConf": lower,
         "UpperConf": upper,
+        "own_fit_value": own_fit,
+        "own_fit_lower": own_lower,
+        "own_fit_upper": own_upper,
     })
     out["N_systematic"] = n
     out["StationSkew"] = station_skew
     out["WeightedSkew"] = wskew
-    out["Method"] = "LP3_MoM_bootstrap_INTERIM_not_SSP"
+    out["Method"] = "CDID3_Table5-2_adopted__own_LP3_MoM_bootstrap_for_band_shape_only"
     out.to_csv(OUT_CSV, index=False)
     print("Wrote", OUT_CSV)
-    print(out[["AEP", "Value", "LowerConf", "UpperConf"]].to_string(index=False))
+    print(out[["AEP", "Value", "LowerConf", "UpperConf", "own_fit_value"]].to_string(index=False))
+    diff_1pct = 100 * (own_fit[AEP_GRID.index(0.01)] / adopted[AEP_GRID.index(0.01)] - 1)
+    print("\nAt 1%% AEP: CDID3 adopted=%.0f cfs vs. own comparison fit=%.0f cfs (%+.1f%%) --"
+          " the gap is the historical weighting CDID3 has and the comparison fit doesn't."
+          % (adopted[AEP_GRID.index(0.01)], own_fit[AEP_GRID.index(0.01)], diff_1pct))
 
     # -- plot --
     aep_pp = plotting_positions(values)
@@ -339,9 +429,13 @@ def main():
 
     fig, ax = plt.subplots(figsize=(9, 6.5))
     z_grid = stats.norm.ppf(1 - np.array(AEP_GRID))
-    ax.plot(z_grid, best, color=C_FIT, lw=2, label="LP3 fit (method of moments, interim)")
+    ax.plot(z_grid, adopted, color=C_ADOPTED, lw=2.5,
+            label="ADOPTED: CDID3 Table 5-2 (HEC-SSP/EMA, real curve)")
     ax.fill_between(z_grid, lower, upper, color=C_BAND, alpha=0.35,
-                     label="%d-%d%% bootstrap band" % (CONF_LOWER_PCT, CONF_UPPER_PCT))
+                     label="%d-%d%% band (CDID3 center, comparison-fit spread)"
+                     % (CONF_LOWER_PCT, CONF_UPPER_PCT))
+    ax.plot(z_grid, own_fit, color=C_FIT, lw=1.5, ls="--",
+            label="Comparison: own LP3 fit (method of moments, no historical weighting)")
     ax.scatter(stats.norm.ppf(1 - aep_pp), values, color=C_SYS, s=28, zorder=5,
                label="Systematic peaks (n=%d)" % n)
     for yr, p in hist_pp.items():
@@ -354,8 +448,8 @@ def main():
     ax.set_yscale("log")
     ax.set_xlabel("Standard normal variate  (z = Φ⁻¹(1 − AEP))")
     ax.set_ylabel("Coweeman River peak flow (cfs)")
-    ax.set_title("Coweeman River near mouth — interim unregulated peak flow-frequency\n"
-                  "(method-of-moments LP3 — NOT an HEC-SSP/EMA result, see script docstring)")
+    ax.set_title("Coweeman River near mouth — unregulated peak flow-frequency\n"
+                  "Adopted curve is CDID3's own Table 5-2; own fit shown only for comparison")
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper left", fontsize=9)
 
