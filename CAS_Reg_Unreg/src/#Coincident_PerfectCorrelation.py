@@ -151,11 +151,13 @@ def main():
     ax.fill_between(z, out["combined_lower_cfs"], out["combined_upper_cfs"],
                      color=C_COMBINED, alpha=0.15,
                      label="Combined 5-95% band (bounds summed, r=1)")
-    ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
-    ax.text(stats.norm.ppf(1 - TARGET_AEP), ax.get_ylim()[0], " 1,000-yr",
-            rotation=90, va="bottom", ha="right", fontsize=8, color="gray")
-
     ax.set_yscale("log")
+    ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
+    # Anchored in axes-fraction y so this doesn't depend on ylim being
+    # finalized yet -- see #Coincident_CorrConditioned.py for why placing it
+    # via a pre-log-scale get_ylim() crushes the real data into a sliver.
+    ax.text(stats.norm.ppf(1 - TARGET_AEP), 0.01, " 1,000-yr", transform=ax.get_xaxis_transform(),
+            rotation=90, va="bottom", ha="right", fontsize=8, color="gray")
     ax.set_xlabel("Standard normal variate  (z = Φ⁻¹(1 − AEP))")
     ax.set_ylabel("Flow at Castle Rock confluence (cfs)")
     ax.set_title("Coincident Castle Rock peak — perfect-correlation (same-AEP) method\n"
