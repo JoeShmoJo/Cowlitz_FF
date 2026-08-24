@@ -290,10 +290,49 @@ extremely large events... a later surge well after the other larger
 tributaries have peaked") -- now with a number behind it, for one of the
 three creeks.
 
-Two caveats, both already familiar in this analysis: n=9 at the tail is
-thin, and this bin very likely overlaps with the rating-curve-capped
-events already flagged (32/79 events overall) -- not yet checked which of
-the 9 overlap. Also, this is measured against UNREGULATED Castle Rock
+**Checked the overlap directly rather than leaving it as a caveat** (asked
+directly: how do you know the tail isn't just the capping?). Pulled the
+quality code on BOTH readings behind each of the 9 tail-bin ratios (the
+"own peak" denominator and the "value when Castle Rock peaks" numerator):
+
+| event_time | Castle Rock (cfs) | own peak (code) | at-Castle-Rock-peak (code) | ratio |
+|---|---|---|---|---|
+| 2006-11-07 | 155,018 | 7,297.5 (160) | 4,062.5 (160) | 0.557 |
+| 2015-12-09 | 152,270 | 3,327.5 (10) | **254.0 (MISSING)** | 0.076 |
+| 2009-01-08 | 143,468 | 7,810.0 (160) | 2,442.5 (160) | 0.313 |
+| 2007-12-04 | 89,749 | 5,292.5 (160) | 2,780.0 (160) | 0.525 |
+| 2011-01-17 | 85,794 | 5,372.5 (100) | 2,765.0 (10) | 0.515 |
+| 2015-11-18 | 73,658 | 6,120.0 (100) | 2,422.5 (10) | 0.396 |
+| 2017-03-16 | 68,453 | 3,335.0 (10) | 2,556.0 (**MISSING**) | 0.766 |
+| 2006-12-15 | 63,582 | 3,025.0 (160) | 2,127.5 (50) | 0.703 |
+| 2008-11-13 | 62,213 | 7,640.0 (160) | 2,005.0 (10) | 0.262 |
+
+One event (2015-12-09) is not a capped-but-real reading -- it's
+interpolated across an actual data gap (`MISSING`), during the exact
+event CDID3's own report says has no reliable flow measurement at all.
+That one is fair to drop outright, no ambiguity. Its ratio (0.076) is by
+far the lowest in the bin, so it looked like it might be doing a lot of
+work.
+
+It isn't, though: dropping it moves the bin median from 0.515 to 0.520 --
+essentially nothing. Also dropping the other `MISSING`-flagged point
+(2017-03-16) leaves median 0.515 on n=7. The pattern -- tail running well
+below 0.80 -- does NOT depend on the one point that was genuinely broken.
+
+What it DOES depend on, and what I should be more careful claiming: the
+remaining seven readings are not all clean. Their codes are 10 ("above
+rating, within 2x" -- a real reading, modestly extrapolated), 50
+("estimated"), 100 ("modeled flow"), and an undocumented code **160** that
+shows up on several of the oldest events and that I have not found a
+legend definition for anywhere in the cached files. I don't know how much
+error 160 represents. So the correct claim is narrower than "the tail
+ratio is 0.46-0.52": it's "the tail ratio is well below 0.80, and that
+conclusion survives removing the one point known to be invalid, but most
+of the remaining points still carry non-good quality flags of uncertain
+size." Real and worth acting on, not fully resolved -- same posture as
+everything else flagged in this document, not a clean result.
+
+Also worth remembering: this is measured against UNREGULATED Castle Rock
 timing (matching how `coweeman_proportion.csv` was built), not the real
 regulated gage timing the East Fork Lewis figure used -- a true
 apples-to-apples check would use the regulated peak timestamps in
