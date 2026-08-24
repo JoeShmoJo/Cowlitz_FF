@@ -257,6 +257,58 @@ on top of the better Coweeman curve and current StreamStats numbers, to
 rebuild the downstream-confluence combination fresh rather than splice
 the 2009-era regulated-Castle-Rock column into a new combination.
 
+### 4. Is the borrowed 80% timing factor actually evidenced? Split answer -- no for Arkansas/Ostrander, and for Coweeman the real number is lower at the tail
+
+Arkansas Creek and Ostrander Creek: no, and it can't be -- the document
+says so directly ("no long-term, systematic records of peak flow available
+for Arkansas Creek and Ostrander Creek"), which is exactly why it reached
+for the East Fork Lewis analog instead of measuring either creek directly.
+Nothing in this repo changes that; worth a check for a newer gage but not
+assumed.
+
+Coweeman: unlike in 2009, we now HAVE the concurrent data to check this
+directly, instead of borrowing an analog basin. Computed straight from
+`coweeman_proportion.csv` (79 events): the fraction of the Coweeman's OWN
+peak it is running at when the (unregulated) Castle Rock peak arrives --
+the same quantity the East Fork Lewis 80% describes, for the Coweeman
+itself.
+
+| | n | mean | median |
+|---|---|---|---|
+| Overall | 79 | 0.740 | 0.775 |
+| 20,000-40,000 cfs bin | 51 | 0.794 | 0.809 |
+| 40,000-60,000 cfs bin | 19 | 0.732 | 0.764 |
+| **>60,000 cfs bin** | **9** | **0.457** | **0.515** |
+| 2009-era analog (East Fork Lewis, n=17) | -- | 0.80 | -- |
+
+At moderate magnitude the borrowed 80% actually holds up well -- the
+20-40k bin's median (0.809) nearly matches it. At the flood tail, where a
+frequency study lives, the real Coweeman-specific number is roughly HALF
+the borrowed one (0.457-0.515, not 0.80). This is the same mechanism the
+2009-era report's own caveat gestures at conceptually ("especially for
+extremely large events... a later surge well after the other larger
+tributaries have peaked") -- now with a number behind it, for one of the
+three creeks.
+
+Two caveats, both already familiar in this analysis: n=9 at the tail is
+thin, and this bin very likely overlaps with the rating-curve-capped
+events already flagged (32/79 events overall) -- not yet checked which of
+the 9 overlap. Also, this is measured against UNREGULATED Castle Rock
+timing (matching how `coweeman_proportion.csv` was built), not the real
+regulated gage timing the East Fork Lewis figure used -- a true
+apples-to-apples check would use the regulated peak timestamps in
+`coweeman_event_timing.csv` instead, not yet done.
+
+**Implication if this holds up**: using the flat 80% for the Coweeman at
+flood-tail AEPs would overstate its coincident contribution to the
+combined downstream peak by roughly a factor of 1.5-1.7x versus what the
+Coweeman's own concurrent record actually shows. Whether Arkansas and
+Ostrander share this same tail drop-off can't be checked the same way
+(no data), but there's no particular reason to think they wouldn't, given
+the mechanism (reservoir regulation delaying the Castle Rock peak past
+the locals' peaks at extreme magnitude) is about Castle Rock's behavior,
+not about which tributary is on the other end.
+
 ## Not yet decided — flagging rather than picking
 
 - Whether to rebuild the downstream-confluence combination fresh (own
