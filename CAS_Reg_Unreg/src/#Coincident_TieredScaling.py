@@ -4,17 +4,33 @@
 Castle Rock regulated peak + Arkansas Creek + Ostrander Creek + Coweeman,
 combined with a two-tier same-AEP scaling factor.
 
-THE RULE (decided in chat, not derived fresh here)
-    For AEP > 1% (more frequent than 1-in-100):
-        combined(AEP) = Cowlitz_reg(AEP) + 0.80 * tributary(AEP)
-    For AEP <= 1% (1-in-100 and rarer, out to 1,000-yr):
-        combined(AEP) = Cowlitz_reg(AEP) + 0.50 * tributary(AEP)
+THE RULE
+    combined(AEP) = Cowlitz_reg(AEP) + factor(AEP) * tributary(AEP)
     Applied to each of Arkansas Creek, Ostrander Creek, and the Coweeman
     independently, then summed with Cowlitz's regulated curve. No separate
-    timing-lag correction on top -- both factors are COINCIDENT ratios
-    (tributary flow at the moment Castle Rock peaks, over the tributary's
-    own peak), so whatever lag exists is already inside the number; adding
-    a second timing adjustment would double-count it.
+    timing-lag correction on top -- both endpoints of factor() are
+    COINCIDENT ratios (tributary flow at the moment Castle Rock peaks,
+    over the tributary's own peak), so whatever lag exists is already
+    inside the number; adding a second timing adjustment would
+    double-count it.
+
+    factor(AEP) is a SMOOTH logistic transition in z-space (z =
+    Phi^-1(1-AEP), the same axis every curve in this analysis is plotted
+    against), not a hard step -- changed from an earlier version of this
+    script after the step was flagged as an unrealistic discontinuity to
+    write into a design curve. It runs from FACTOR_COMMON at common AEPs
+    to FACTOR_RARE at rare AEPs, centered on TRANSITION_CENTER_AEP with
+    width TRANSITION_WIDTH_Z (in z-units):
+
+        factor(z) = FACTOR_RARE + (FACTOR_COMMON - FACTOR_RARE)
+                    / (1 + exp((z - z_center) / TRANSITION_WIDTH_Z))
+
+    TRANSITION_WIDTH_Z=0.4 puts most of the transition within about one
+    AEP_GRID step on either side of the center (roughly the 2% to 0.5%
+    AEP range) -- narrow enough to still mean something like "common" vs
+    "rare" behavior, wide enough not to be a cliff. It is a judgment
+    call, not a fitted number; there are only 3 magnitude bins per basin
+    behind this, nowhere near enough to fit a transition shape to.
 
 WHERE THE TWO NUMBERS COME FROM, AND HOW MUCH TO TRUST THEM
     0.80: the 2009-era East Fork Lewis analog-basin figure
@@ -35,12 +51,20 @@ WHERE THE TWO NUMBERS COME FROM, AND HOW MUCH TO TRUST THEM
     data of their own to check it against -- two stacked assumptions
     (the AEP extrapolation, and the cross-basin transfer), not one.
 
-    A same-basin, better-instrumented check (East Fork Lewis itself,
-    against the long unregulated Castle Rock series back to 1928) was
-    proposed to see whether the same high-AEP/low-AEP transition shows
-    up independently -- blocked in this environment (USGS hosts are not
-    reachable from this sandbox's network policy). Worth running locally,
-    not done here.
+    UPDATE -- the East Fork Lewis check ran (#EFLewis_Analog_Check.py,
+    n=71, real USGS data, no longer blocked once fetched locally). It
+    corroborates the DIRECTION of the tail effect but not its MAGNITUDE:
+        Coweeman:   20-40k 0.809 -> >60k 0.520  (n=8,  36% drop)
+        EF Lewis:   20-40k 0.669 -> >60k 0.624  (n=18,  7% drop)
+    EF Lewis's tail bin has more than double Coweeman's sample and comes
+    from a USGS gage without Coweeman's documented rating-curve capping
+    problem -- there is a real argument that 0.50 is too aggressive a
+    reduction and something closer to 0.62-0.65 is both better evidenced
+    and the more conservative choice (LOWER factor means LESS added
+    flow, i.e. 0.50 is the less conservative of the two, not the
+    safer one -- easy to get backwards). FACTOR_RARE is left at 0.50
+    below pending an explicit decision on this; change the one constant
+    when that's settled.
 
 CAP AT AEP=0.001 (1,000-YEAR)
     Arkansas/Ostrander's StreamStats table (CDID3_Coincident... no --
@@ -82,9 +106,12 @@ OUT_CSV = os.path.join(OUT_DIR, "coincident_tiered_scaling.csv")
 PLOT_PNG = os.path.join(OUT_DIR, "coincident_tiered_scaling.png")
 SENS_CSV = os.path.join(OUT_DIR, "coincident_method_sensitivity.csv")
 
-TIER_BREAK_AEP = 0.01     # 1% -- at and rarer than this, use FACTOR_RARE
-FACTOR_COMMON = 0.80      # AEP > 0.01
-FACTOR_RARE = 0.50        # AEP <= 0.01
+TRANSITION_CENTER_AEP = 0.01   # 1% -- logistic transition midpoint
+TRANSITION_WIDTH_Z = 0.4       # smaller = sharper transition, in z-units
+FACTOR_COMMON = 0.80           # factor at common AEPs (AEP >> center)
+FACTOR_RARE = 0.50             # factor at rare AEPs (AEP << center) -- see
+                                # docstring's EF Lewis update before trusting
+                                # this over ~0.62-0.65
 
 # Downstream_Confluence_Notes.md, Table B-VI (USGS StreamStats via
 # COWLITZ_HYDROLOGY_REPORT_DRAFT2.docx). Point estimates only -- no
@@ -109,8 +136,14 @@ C_TIER = "gray"
 # ----------------------------------------------------------------------------
 
 
-def tier_factor(aep):
-    return FACTOR_RARE if aep <= TIER_BREAK_AEP else FACTOR_COMMON
+def scaling_factor(aep):
+    """Smooth logistic transition from FACTOR_COMMON to FACTOR_RARE as AEP
+    gets rarer, centered (in z-space) on TRANSITION_CENTER_AEP. Replaces an
+    earlier hard step at the same center -- see docstring."""
+    z = stats.norm.ppf(1 - aep)
+    z_center = stats.norm.ppf(1 - TRANSITION_CENTER_AEP)
+    return FACTOR_RARE + (FACTOR_COMMON - FACTOR_RARE) / (
+        1 + np.exp((z - z_center) / TRANSITION_WIDTH_Z))
 
 
 def main():
@@ -145,7 +178,7 @@ def main():
 
     rows = []
     for aep in aep_grid:
-        factor = tier_factor(aep)
+        factor = scaling_factor(aep)
 
         cas_best = lookup(reg, aep, "reg_inferred_cfs")
         cas_lo = lookup(reg, aep, "reg_lower_95pct_cfs")
@@ -171,7 +204,7 @@ def main():
 
         rows.append({
             "AEP": aep,
-            "tier_factor": factor,
+            "scaling_factor": factor,
             "cowlitz_reg_cfs": cas_best,
             "arkansas_cfs_x_factor": factor * ark,
             "ostrander_cfs_x_factor": factor * ost,
@@ -186,7 +219,7 @@ def main():
     out = pd.DataFrame(rows)
     out.to_csv(OUT_CSV, index=False)
     print("Wrote", OUT_CSV)
-    print(out[["AEP", "tier_factor", "cowlitz_reg_cfs", "below_arkansas_cfs",
+    print(out[["AEP", "scaling_factor", "cowlitz_reg_cfs", "below_arkansas_cfs",
                "below_ostrander_cfs", "below_coweeman_cfs"]].to_string(index=False))
 
     target = out.iloc[(out["AEP"] - 0.001).abs().idxmin()]
@@ -220,11 +253,11 @@ def main():
                      out["combined_upper_incomplete_band_cfs"],
                      color=C_COMBINED, alpha=0.10,
                      label="Band (incomplete -- Cowlitz+Coweeman only)")
-    ax.axvline(stats.norm.ppf(1 - TIER_BREAK_AEP), color=C_TIER, lw=1, ls=":")
     ax.set_yscale("log")
     ax.set_ylabel("Flow below Coweeman confluence (cfs)")
-    ax.set_title("Downstream combined peak -- tiered same-AEP scaling\n"
-                  "80% common (AEP>1%) / 50% rare (AEP<=1%)")
+    ax.set_title("Downstream combined peak -- smooth same-AEP scaling\n"
+                  "factor(AEP): %.2f (common) -> %.2f (rare), logistic, centered "
+                  "on %.0f%% AEP" % (FACTOR_COMMON, FACTOR_RARE, TRANSITION_CENTER_AEP * 100))
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper left", fontsize=8)
 
@@ -234,13 +267,18 @@ def main():
     axp.fill_between(z, 100 * (a2 - base) / base, 100 * (a3 - base) / base,
                       color="#e08a4a", alpha=0.65)
     axp.plot(z, 100 * (a3 - base) / base, color=C_COMBINED, lw=2)
-    axp.axvline(stats.norm.ppf(1 - TIER_BREAK_AEP), color=C_TIER, lw=1, ls=":")
-    axp.text(stats.norm.ppf(1 - TIER_BREAK_AEP), 0.97, " 1% tier break (80->50) ",
-             transform=axp.get_xaxis_transform(), rotation=90, va="top", ha="right",
-             fontsize=8, color=C_TIER)
     axp.set_ylabel("Added flow, % of Cowlitz alone")
     axp.set_xlabel("Standard normal variate  (z = Phi^-1(1 - AEP))")
     axp.grid(True, alpha=0.3)
+
+    # scaling_factor itself, on its own right-hand axis of the bottom panel,
+    # so the smooth transition shape is directly visible, not just implied
+    # by the curves it produced.
+    axf = axp.twinx()
+    axf.plot(z, out["scaling_factor"], color=C_TIER, lw=1.5, ls=":")
+    axf.set_ylabel("scaling_factor(AEP)", color=C_TIER, fontsize=9)
+    axf.tick_params(axis="y", colors=C_TIER, labelsize=8)
+    axf.set_ylim(0, 1)
 
     ax2 = ax.twiny()
     ax2.set_xlim(ax.get_xlim())
@@ -256,7 +294,7 @@ def main():
     # Recover each tributary's UNSCALED contribution by dividing out the tier
     # factor, then rebuild the two alternative methods from the same inputs.
     trib = (out["arkansas_cfs_x_factor"] + out["ostrander_cfs_x_factor"]
-            + out["coweeman_cfs_x_factor"]) / out["tier_factor"]
+            + out["coweeman_cfs_x_factor"]) / out["scaling_factor"]
     m100 = out["cowlitz_reg_cfs"] + trib
     m80 = out["cowlitz_reg_cfs"] + 0.80 * trib
     mstep = out["below_coweeman_cfs"]
