@@ -6,6 +6,47 @@ already solves most of this problem. Read this before re-deriving anything
 below — the precedent method is real, numeric, and closer to finished than
 it looked from the CDID3 report alone.
 
+## Script run sequence
+
+**Group A — pre-existing pipeline, outputs already committed; only re-run to
+refresh source data:**
+
+1. HEC-SSP (external tool) -> Cowlitz unregulated Bulletin 17 report,
+   `CAS_Unreg_FF/ssp/`
+2. `CAS_Unreg_FF/src/Frequency_Curves_And_Table.py` -> parses #1 ->
+   `CAS_Unreg_FF/output/CAS_Unreg_frequency_table.csv`
+3. `CAS_Reg_Unreg/src/#Unreg_Reg_Curve.py` -> needs #2 ->
+   `CAS_Reg_Unreg/output/regulated_frequency_inferred.csv`
+4. HEC-ResSim "WCM_RC" run (external) ->
+   `CAS_Reg_Unreg/output/ResSim_WCM_RC.dss` (both `Flow-UNREG` and `Flow`
+   paths at Castle Rock)
+5. `CAS_Reg_Unreg/src/#Coweeman_Timing.py` -> fetches/caches raw USGS +
+   Ecology Coweeman data into `CAS_Reg_Unreg/data/coweeman/` -- **needs
+   network access** (USGS hosts are blocked from this sandbox by policy;
+   run locally). Cached files are already committed, so this only needs
+   re-running to pull newer years.
+6. `CAS_Reg_Unreg/src/#Coweeman_Proportion.py` -> needs #4 + #5's cache ->
+   `coweeman_proportion.csv`
+
+**Group B — this sub-task's new scripts, run in this order:**
+
+7. `#Coweeman_FlowFrequency.py` -> needs #5's cached files (already
+   present) -> `coweeman_frequency_table.csv`
+8. `#Coweeman_RegPeak_Timing.py` -> needs #4 + #5 -- diagnostic only,
+   nothing downstream depends on it
+9. `#Coincident_PerfectCorrelation.py` -> needs #3 + #7 ->
+   `coincident_perfect_correlation.csv`
+10. `#Coincident_CorrConditioned.py` -> needs #2 + #3 + #6 + #7 (#9
+    optional, only used for a comparison line on its plot) ->
+    `coincident_corr_conditioned.csv`
+11. `#Coincident_TieredScaling.py` -> needs #3 + #7 ->
+    `coincident_tiered_scaling.csv`, the current deliverable
+
+Since Group A's outputs are already committed, a fresh clone can run
+steps 7-11 directly without touching 1-6 -- those only matter for
+refreshing source data (a newer SSP run, more years of Coweeman gage
+data, a different ResSim run).
+
 ## What exists today
 
 - **Castle Rock, regulated and unregulated**: built by `#Unreg_Reg_Curve.py`
