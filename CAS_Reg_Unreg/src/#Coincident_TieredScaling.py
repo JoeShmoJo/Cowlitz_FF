@@ -80,6 +80,7 @@ COW_CSV = r"../output/diagnostics/coweeman_frequency_table.csv"
 OUT_DIR = r"../output/diagnostics"
 OUT_CSV = os.path.join(OUT_DIR, "coincident_tiered_scaling.csv")
 PLOT_PNG = os.path.join(OUT_DIR, "coincident_tiered_scaling.png")
+SENS_CSV = os.path.join(OUT_DIR, "coincident_method_sensitivity.csv")
 
 TIER_BREAK_AEP = 0.01     # 1% -- at and rarer than this, use FACTOR_RARE
 FACTOR_COMMON = 0.80      # AEP > 0.01
@@ -194,40 +195,100 @@ def main():
     print("(band shown in the CSV is INCOMPLETE -- missing Arkansas/Ostrander's own "
           "uncertainty entirely; see module docstring)")
 
-    # -- plot --
+    # -- plot: two panels --
+    #   top    absolute curves, with each tributary's contribution shaded so
+    #          Arkansas and Ostrander are actually visible rather than being
+    #          a sliver hidden under the combined line
+    #   bottom the same contributions as a PERCENT of the Cowlitz-only curve,
+    #          which is the only way the two small creeks read at all on a
+    #          log axis spanning 20,000-200,000 cfs
     z = stats.norm.ppf(1 - out["AEP"].values)
-    fig, ax = plt.subplots(figsize=(9, 6.5))
-    ax.plot(z, out["cowlitz_reg_cfs"], color=C_CAS, lw=2, ls="--",
-            label="Cowlitz regulated alone (Castle Rock)")
-    ax.plot(z, out["below_coweeman_cfs"], color=C_COMBINED, lw=2.5,
-            label="Combined below Coweeman confluence (tiered 80%/50%)")
+    fig, (ax, axp) = plt.subplots(2, 1, figsize=(9.5, 9), sharex=True,
+                                   gridspec_kw={"height_ratios": [2, 1]})
+
+    base = out["cowlitz_reg_cfs"].values
+    a1 = out["below_arkansas_cfs"].values
+    a2 = out["below_ostrander_cfs"].values
+    a3 = out["below_coweeman_cfs"].values
+
+    ax.fill_between(z, base, a1, color="#4c8c4a", alpha=0.55, label="+ Arkansas Creek")
+    ax.fill_between(z, a1, a2, color="#8a5aa8", alpha=0.55, label="+ Ostrander Creek")
+    ax.fill_between(z, a2, a3, color="#e08a4a", alpha=0.65, label="+ Coweeman River")
+    ax.plot(z, base, color=C_CAS, lw=2, ls="--", label="Cowlitz regulated alone (Castle Rock)")
+    ax.plot(z, a3, color=C_COMBINED, lw=2.5, label="Combined below Coweeman confluence")
     ax.fill_between(z, out["combined_lower_incomplete_band_cfs"],
                      out["combined_upper_incomplete_band_cfs"],
-                     color=C_COMBINED, alpha=0.15,
+                     color=C_COMBINED, alpha=0.10,
                      label="Band (incomplete -- Cowlitz+Coweeman only)")
     ax.axvline(stats.norm.ppf(1 - TIER_BREAK_AEP), color=C_TIER, lw=1, ls=":")
-    ax.text(stats.norm.ppf(1 - TIER_BREAK_AEP), 0.02, " 1% tier break\n (80% -> 50%)",
-            transform=ax.get_xaxis_transform(), rotation=90, va="bottom", ha="right",
-            fontsize=8, color=C_TIER)
-
     ax.set_yscale("log")
-    ax.set_xlabel("Standard normal variate  (z = Φ⁻¹(1 − AEP))")
     ax.set_ylabel("Flow below Coweeman confluence (cfs)")
-    ax.set_title("Downstream combined peak — tiered same-AEP scaling\n"
-                  "80% common (AEP>1%) / 50% rare (AEP<=1%), Arkansas+Ostrander+Coweeman")
+    ax.set_title("Downstream combined peak -- tiered same-AEP scaling\n"
+                  "80% common (AEP>1%) / 50% rare (AEP<=1%)")
     ax.grid(True, which="both", alpha=0.3)
-    ax.legend(loc="upper left", fontsize=9)
+    ax.legend(loc="upper left", fontsize=8)
 
-    aep_ticks = aep_grid
+    axp.fill_between(z, 0, 100 * (a1 - base) / base, color="#4c8c4a", alpha=0.55)
+    axp.fill_between(z, 100 * (a1 - base) / base, 100 * (a2 - base) / base,
+                      color="#8a5aa8", alpha=0.55)
+    axp.fill_between(z, 100 * (a2 - base) / base, 100 * (a3 - base) / base,
+                      color="#e08a4a", alpha=0.65)
+    axp.plot(z, 100 * (a3 - base) / base, color=C_COMBINED, lw=2)
+    axp.axvline(stats.norm.ppf(1 - TIER_BREAK_AEP), color=C_TIER, lw=1, ls=":")
+    axp.text(stats.norm.ppf(1 - TIER_BREAK_AEP), 0.97, " 1% tier break (80->50) ",
+             transform=axp.get_xaxis_transform(), rotation=90, va="top", ha="right",
+             fontsize=8, color=C_TIER)
+    axp.set_ylabel("Added flow, % of Cowlitz alone")
+    axp.set_xlabel("Standard normal variate  (z = Phi^-1(1 - AEP))")
+    axp.grid(True, alpha=0.3)
+
     ax2 = ax.twiny()
     ax2.set_xlim(ax.get_xlim())
-    ax2.set_xticks(stats.norm.ppf(1 - np.array(aep_ticks)))
-    ax2.set_xticklabels(["%.2f%%" % (a * 100) for a in aep_ticks], rotation=45, fontsize=7)
+    ax2.set_xticks(stats.norm.ppf(1 - np.array(aep_grid)))
+    ax2.set_xticklabels(["%.2f%%" % (a * 100) for a in aep_grid], rotation=45, fontsize=7)
     ax2.set_xlabel("AEP")
 
     fig.tight_layout()
     fig.savefig(PLOT_PNG, dpi=150)
     print("Wrote", PLOT_PNG)
+
+    # -- method sensitivity: does the factor choice actually matter? --
+    # Recover each tributary's UNSCALED contribution by dividing out the tier
+    # factor, then rebuild the two alternative methods from the same inputs.
+    trib = (out["arkansas_cfs_x_factor"] + out["ostrander_cfs_x_factor"]
+            + out["coweeman_cfs_x_factor"]) / out["tier_factor"]
+    m100 = out["cowlitz_reg_cfs"] + trib
+    m80 = out["cowlitz_reg_cfs"] + 0.80 * trib
+    mstep = out["below_coweeman_cfs"]
+    band = (out["combined_upper_incomplete_band_cfs"]
+            - out["combined_lower_incomplete_band_cfs"])
+    sens = pd.DataFrame({
+        "AEP": out["AEP"],
+        "cowlitz_alone_cfs": out["cowlitz_reg_cfs"],
+        "combined_stepped_cfs": mstep,
+        "combined_80pct_cfs": m80,
+        "combined_100pct_cfs": m100,
+        "trib_share_of_100pct_pct": 100 * trib / m100,
+        "method_spread_cfs": m100 - mstep,
+        "uncertainty_band_cfs": band,
+        "band_over_method_spread": band / (m100 - mstep),
+    })
+    sens.to_csv(SENS_CSV, index=False)
+    print("Wrote", SENS_CSV)
+    print()
+    print("METHOD SENSITIVITY -- the factor choice vs. the uncertainty it sits inside:")
+    print(sens[["AEP", "combined_stepped_cfs", "combined_80pct_cfs",
+                "combined_100pct_cfs", "trib_share_of_100pct_pct",
+                "method_spread_cfs", "band_over_method_spread"]]
+          .round(1).to_string(index=False))
+    tail = sens[np.isclose(sens["AEP"], 0.001)].iloc[0]
+    print()
+    print("At 1,000-yr: tributaries are %.1f%% of the combined total, but the whole "
+          "spread between the\n  three scaling methods is %.0f cfs -- %.0fx SMALLER than "
+          "the uncertainty band (%.0f cfs)\n  it sits inside. The factor choice is not "
+          "what decides this number."
+          % (tail["trib_share_of_100pct_pct"], tail["method_spread_cfs"],
+             tail["band_over_method_spread"], tail["uncertainty_band_cfs"]))
 
 
 if __name__ == "__main__":
