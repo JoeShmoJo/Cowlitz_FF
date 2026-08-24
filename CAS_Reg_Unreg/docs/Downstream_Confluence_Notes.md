@@ -341,12 +341,77 @@ apples-to-apples check would use the regulated peak timestamps in
 **Implication if this holds up**: using the flat 80% for the Coweeman at
 flood-tail AEPs would overstate its coincident contribution to the
 combined downstream peak by roughly a factor of 1.5-1.7x versus what the
-Coweeman's own concurrent record actually shows. Whether Arkansas and
-Ostrander share this same tail drop-off can't be checked the same way
-(no data), but there's no particular reason to think they wouldn't, given
-the mechanism (reservoir regulation delaying the Castle Rock peak past
-the locals' peaks at extreme magnitude) is about Castle Rock's behavior,
-not about which tributary is on the other end.
+Coweeman's own concurrent record actually shows. (The mechanism proposed
+here originally -- reservoir regulation delaying the Castle Rock peak
+past the locals' peaks -- turns out NOT to be well supported once tested
+directly; see #5 below. The tail drop-off itself is real, but it isn't
+because the regulated peak arrives meaningfully later than the
+unregulated one.)
+
+### 5. Everything above uses UNREGULATED Castle Rock timing -- tested against the REGULATED peak directly, and the "regulation delays it" story doesn't hold up
+
+Asked directly: all of #4 measures the Coweeman against the moment the
+*unregulated* Castle Rock peak arrives, not the *regulated* one -- and the
+regulated peak is the one that actually matters for a downstream combined
+flow. If regulation delays the peak (the mechanism assumed above), the
+Coweeman should have receded further still by the time the real,
+regulated peak shows up.
+
+Tested this directly with a new script, `#Coweeman_RegPeak_Timing.py`,
+using the SAME ResSim run's regulated companion series
+(`//CastleRock_NWS/Flow//1Hour/ResSim_WCM_RC/`, current operating rules
+applied to the same reconstructed unregulated inflow -- the right,
+consistent basis, matching how the rest of this project's regulated
+curves are built, though NOT the actual historically-observed regulated
+record for these specific events).
+
+**Lag (regulated peak time minus unregulated peak time)**:
+
+| bin | n | mean | median | range |
+|---|---|---|---|---|
+| 20-40k | 51 | -0.6h | +0.0h | -72h to +37h |
+| 40-60k | 18 | -0.5h | +0.0h | -13h to +7h |
+| **>60k** | **8** | **-3.2h** | **-3.5h** | **-15h to +5h** |
+
+The lag is small at every magnitude, and at the flood tail it's slightly
+NEGATIVE on average -- the regulated peak tends to arrive a few hours
+EARLIER than the unregulated one in this ResSim run, not later. That's
+the opposite of the "reservoir fills and passes flow through late"
+mechanism assumed above (and stated as a caveat in the 2009-era report
+itself). It can still happen event-by-event -- the range reaches +37h in
+the smallest bin -- but it isn't the dominant pattern in this data.
+
+**Ratio, unregulated-timing vs. regulated-timing**:
+
+| bin | n | ratio @ unreg-timing (mean/median) | ratio @ reg-timing (mean/median) |
+|---|---|---|---|
+| 20-40k | 51 | 0.792 / 0.809 | 0.791 / 0.809 |
+| 40-60k | 18 | 0.721 / 0.762 | 0.730 / 0.762 |
+| **>60k** | **8** | **0.533 / 0.520** | **0.571 / 0.494** |
+
+Switching to regulated-peak timing barely moves the numbers -- mean goes
+up slightly, median down slightly, both still well below 0.80. **The
+tail-drop-off finding in #4 survives this test**, but the explanation for
+WHY changes: it is not primarily a timing-lag effect. Something else is
+driving it (possibly the largest storms' hydrograph shape putting the
+Coweeman's own peak and Castle Rock's peak on genuinely different points
+of two different-shaped curves, independent of any regulation-driven
+delay) -- not yet investigated further.
+
+**Two things caught while building this, flagged rather than smoothed
+over**:
+- One event (2017-03-16) shows ratio=0.9965 here, at both timings --
+  but the direct quality-code check in #4 found this same event's
+  at-Castle-Rock-peak reading flagged `MISSING` in the raw file. The two
+  scripts are reading the same underlying data two different ways
+  (exact-timestamp lookup in #4 vs. `.resample('1h').mean()` here), and
+  the resample appears to be interpolating across the same gap the exact
+  lookup correctly flagged as missing. This is the same underlying
+  problem wearing a different disguise -- worth fixing how gaps are
+  handled before trusting this event either way.
+- 1 of 77 events had its regulated peak land within 3 hours of the
+  +/-72 hour search window edge -- flagged by the script itself, not
+  yet re-run with a wider window to confirm the true peak was found.
 
 ## Not yet decided — flagging rather than picking
 
