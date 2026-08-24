@@ -215,6 +215,48 @@ Flagged as an open item in `#Coweeman_FlowFrequency.py`. Now precedented
 twice (CDID3 2016, this document 2009-era) — reasonable to just apply it
 rather than continue flagging it as unresolved.
 
+### 3. The 2009-era method pairs a REGULATED Castle Rock AEP against NATURAL tributary AEPs — a real, separate conflation
+
+Caught when asked directly whether the paired Castle Rock value was
+regulated or unregulated. It's regulated (Section B.6 title, and the
+Castle Rock column is an exact match to `reg_2009_cfs`). Whether that's a
+coherent thing to pair against three naturally-driven tributary curves
+depends on how the regulated curve's AEP axis was built, and there are two
+different cases:
+
+- **Transform-based** (rank-preserving by construction): each unregulated
+  annual value is routed through the dam and KEEPS its original rank, so
+  regulated-AEP and unregulated-AEP are literally the same axis, read off
+  two different y-curves. This is how **our own** Castle Rock pipeline
+  works (`#Unreg_Reg_Curve.py`: `reg_inferred_cfs` is a transform of
+  `unreg_computed_cfs` at the same AEP, one shared AEP column). Under this
+  construction, pairing tributary AEP against regulated or unregulated
+  Castle Rock AEP is identical -- no conflation.
+- **Independently, graphically fit** to the regulated series' own rank
+  order: this is what `COWLITZ_HYDROLOGY_REPORT_DRAFT2.docx` did --
+  "the regulated discharge-frequency curve at Castle Rock is graphically
+  fit," "graphically drawn... through the 83 years" (paras 14, 48) --
+  fit directly to the regulated annual-peak series, not derived by
+  transforming the unregulated curve. Regulation can and does reorder
+  years (a middling natural year can produce a relatively large regulated
+  peak if the reservoir was already full going in; we've seen this same
+  rank-sensitivity in the reg/unreg transform work elsewhere in this
+  project, e.g. the transform slope exceeding 1 near pass-through). Under
+  this construction, "Castle Rock regulated 1% AEP" and "Arkansas Creek
+  natural 1% AEP" are not guaranteed to represent the same underlying
+  storm year.
+
+This document is the second case. So pairing its regulated Castle Rock
+column against Arkansas/Ostrander/Coweeman's natural AEPs is a real,
+separate weakness from the flat-80%-timing-factor caveat already
+catalogued above -- worth listing on its own.
+
+**Practical upshot**: this doesn't apply to a rebuild on our own current
+Castle Rock curve, which IS transform-based (case 1). One more reason,
+on top of the better Coweeman curve and current StreamStats numbers, to
+rebuild the downstream-confluence combination fresh rather than splice
+the 2009-era regulated-Castle-Rock column into a new combination.
+
 ## Not yet decided — flagging rather than picking
 
 - Whether to rebuild the downstream-confluence combination fresh (own
