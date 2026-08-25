@@ -81,10 +81,12 @@ import matplotlib.pyplot as plt
 # USER SETTINGS
 # ----------------------------------------------------------------------------
 BASIN_FILES = {
-    "Coweeman": r"../data/basins/coweeman_14245000.geojson",
-    "CastleRock": r"../data/basins/cowlitz_14243000.geojson",
+    # StreamStats "globalwatershed" delineations, uploaded and verified:
+    # 118.2 and 2229.3 sq mi against StreamStats' own report, within 0.1%.
+    "Coweeman": r"../data/BasinDelinations/Coweeman_SHP/layers/globalwatershed.shp",
+    "CastleRock": r"../data/BasinDelinations/CastleRock_SHP/layers/globalwatershed.shp",
 }
-EXPECTED_SQ_MI = {"Coweeman": 119.0, "CastleRock": 2238.0}
+EXPECTED_SQ_MI = {"Coweeman": 118.2, "CastleRock": 2229.3}
 
 PRISM_DIR = r"../data/prism"          # grids live/cache here
 YEAR_START, YEAR_END = 1950, 2020     # PRISM stable series starts 1895
@@ -94,8 +96,16 @@ YEAR_START, YEAR_END = 1950, 2020     # PRISM stable series starts 1895
 # does not resolve on every network -- if it fails, the script says exactly
 # what to download by hand and carries on with whatever is already local.
 # Paste a working URL pattern here if you have one; %d is the year.
-PRISM_URL = "https://services.nacse.org/prism/data/public/4km/ppt/%d"
+# Per CAS_Reg_Unreg/data/PRISM_downloads_web_service.pdf (26 Mar 2025):
+# .../data/get/<region>/<res>/<element>/<date>?format=bil -- one grid per
+# request, delivered as COG (.tif) by default; ?format=bil asks for the BIL
+# variant instead so the rest of this script does not need to change. The
+# OLD path this used, .../data/public/4km/ppt/<year>, is retired.
+PRISM_URL = "https://services.nacse.org/prism/data/get/us/4km/ppt/%d?format=bil"
 ALLOW_DOWNLOAD = True
+# The service blocks a second download of the same file within 24h (see the
+# PDF's DOWNLOAD LIMITS section) -- another reason gather_years() never
+# re-requests a year that is already on disk.
 
 OUT_CSV = r"../output/diagnostics/prism_basin_precip_ratio.csv"
 PLOT_PNG = r"../output/diagnostics/prism_basin_precip_ratio.png"
