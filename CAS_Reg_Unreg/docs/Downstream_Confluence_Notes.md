@@ -465,3 +465,82 @@ over**:
 - Whether the capped-event correlation issue needs fixing now or can
   ride as a documented caveat, same posture as the interim Coweeman
   curve before CDID3's was adopted.
+
+---
+
+## Ecology gage 26C075 quality codes — parsing bug and a hard record limit (25 Aug 2026)
+
+Found while building `#Coweeman_Event_Plotly.py`. Two separate problems, one a
+bug in our code, one a limit of the gage. The second is the more important.
+
+### The bug: quality codes read as discharge
+
+The FM files are fixed-width, and the **Discharge column is BLANK** whenever
+Ecology declines to report a value — the quality code then sits alone on the
+line:
+
+    10/01/2016   00:00              35.2         2     value 35.2, code 2
+    03/16/2017   05:00                          254     NO VALUE, code 254
+
+`ECOLOGY_ROW_DT` made the value mandatory and the quality optional:
+
+    r"^\s*(date)\s+(clock)\s+(-?[\d.]+)(?:\s+(\S+))?\s*$"     # WRONG
+
+so the second form parsed as **a discharge of 254.0 cfs**. Code 254 is
+"Rating table exceeded (data will not be reported)" — so the gage's *highest*
+flows became one of its *lowest* values, silently, with no flag left behind.
+305 readings over 10 days, WY2016-WY2019. Code 151 ("Data Missing") is the
+same class: those rows DO carry a number and it decays to 0.0 as the sensor
+fails, putting a 0 cfs Coweeman in the middle of the second largest Cowlitz
+event in the record on 09 Dec 2015.
+
+Correct pattern — optional value, REQUIRED integer quality:
+
+    r"^\s*(date)\s+(clock)\s+(-?[\d.]+)?\s+(\d+)\s*$"
+
+Given "   254" the engine tries value="254", finds no quality token, and
+backtracks to value=None, quality=254. Verified: 462,445 rows parse, 0 rows
+without a quality code.
+
+**`#Coweeman_Timing.py`, `#Coweeman_Proportion.py` and
+`#Coweeman_RegPeak_Timing.py` all still carry the old regex.** Only
+`#Coweeman_Event_Plotly.py` is fixed.
+
+Impact, measured:
+- `ratio_peak` (LocalScalingFactor): **unaffected.** A window `max()` never
+  picks 254 over the neighbouring in-rating 3,390s.
+- `LagScalingFactor` (the coincident value, read at ONE timestamp): affected.
+  Tail bin median 0.389 -> 0.413. Two events (Dec 2015, Mar 2017) had the
+  regulated crest fall inside a censored block and were scored 254/3390 =
+  0.075. Correctly they are UNKNOWN AND HIGH, so the bug **understated** the
+  Coweeman's coincident contribution.
+
+### The limit: the tail has no gaged data in it
+
+The rating tops out near 3,400 cfs. Of the nine events in the >60k bin —
+the bin the whole coincident-frequency tail rests on — **zero** have a
+Coweeman peak from an in-rating gaged reading:
+
+| event | CAS unreg | Coweeman peak | quality code |
+|---|---|---|---|
+| 07 Nov 2006 | 155,017 | 7,510 | 160 undocumented |
+| 09 Dec 2015 | 152,269 | 3,390 | 10 above rating |
+| 08 Jan 2009 | 143,468 | 8,020 | 160 undocumented |
+| 04 Dec 2007 | 89,748 | 5,390 | 160 undocumented |
+| 17 Jan 2011 | 85,794 | 5,440 | 100 modeled |
+| 18 Nov 2015 | 73,657 | 6,220 | 100 modeled |
+| 16 Mar 2017 | 68,453 | 3,390 | 10 above rating |
+| 15 Dec 2006 | 63,582 | 3,080 | 160 undocumented |
+| 13 Nov 2008 | 62,213 | 7,790 | 160 undocumented |
+
+**Code 160 appears in no legend in any of the 15 files** and carries 1,012
+readings spanning 2,450-8,020 cfs, including the record maximum. It is the
+single most load-bearing code in this analysis and we do not know what it
+means. Worth an email to Ecology.
+
+Consequence for the earlier "converges to the drainage-area ratio" reading:
+the 09 Dec 2015 ratio of 0.022 that looked like evidence the tail ratio falls
+BELOW area proportionality is a **censored lower bound** — 16.2 h of the
+crest unmeasured. The two clean-ish events over 100,000 cfs give 0.048 and
+0.056, straddling the DA ratio of 0.053. So the convergence reading stands;
+it was the censored value that argued against it.
