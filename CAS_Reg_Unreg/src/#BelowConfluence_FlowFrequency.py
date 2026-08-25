@@ -1,70 +1,83 @@
 #BelowConfluence_FlowFrequency.py
 # -*- coding: utf-8 -*-
 """
-FINAL regulated peak flow-frequency curve for the Cowlitz BELOW the Coweeman
-confluence, adding the three ungaged-at-the-confluence locals: Coweeman,
-Arkansas Creek and Ostrander Creek.
+FINAL regulated peak flow-frequency curves for the Cowlitz at four locations
+between the Castle Rock gage and the Coweeman confluence.
 
 THE METHOD, IN ONE LINE
 
-    combined(AEP) = CAS_reg(AEP)
-                    + CAS_unreg(AEP) x LOCAL_RATIO x lag_factor(AEP)
+    Q(AEP, site) = CAS_reg(AEP)
+                   + CAS_unreg(AEP) x (DA_site - DA_gage)/DA_gage x LAG_FACTOR
 
-    LOCAL_RATIO   = UNIT_RUNOFF_UPLIFT x (sum local DA / CAS DA)
-    lag_factor    = 0.80 -> 0.50, smooth in z, centred on 1% AEP
+    The middle term is the LOCAL contribution: the incremental drainage area
+    between the gage and the site, scaled off the unregulated curve by simple
+    area ratio, then reduced because the local tributaries do not crest at the
+    same moment the regulated mainstem does.
 
 WHY THE LOCAL SCALES OFF THE *UNREGULATED* CURVE
-    The Coweeman does not know Riffe and Mossyrock exist. Its flow responds to
-    the storm, and the storm is what the UNREGULATED Castle Rock curve
-    describes. Scaling the local off CAS_reg instead would shrink the
-    tributary in proportion to a reservoir upstream of it -- about 18% low at
-    the 1,000-yr.
+    The Coweeman, Ostrander and Arkansas all enter below Mossyrock and Riffe.
+    They respond to the storm, not to the release, so the storm-scale curve --
+    the UNREGULATED one -- is what governs them. Scaling them off the
+    regulated curve instead would shrink them in proportion to a reservoir
+    upstream of them, about 18% low at the 1,000-yr.
 
-    Pairing CAS_unreg(AEP) with CAS_reg(AEP) is not a coincidence assumption:
-    it is the same river in the same event, and reg was DERIVED from unreg by
-    routing in #Unreg_Reg_Curve.py. Nothing here assumes the Coweeman is
-    simultaneously at its own 1,000-yr event -- that assumption, which the
-    earlier same-AEP methods carried, is gone.
+    Pairing CAS_unreg(AEP) with CAS_reg(AEP) is not a coincidence assumption.
+    It is the same river in the same event, and the regulated curve was
+    DERIVED from the unregulated one by routing in #Unreg_Reg_Curve.py.
+    Nothing here assumes a tributary is simultaneously at its own AEP.
 
-WHERE THE TWO FACTORS COME FROM
+INCREMENTAL AREA, NOT TRIBUTARY AREA
+    Each site's local term uses the FULL incremental area between it and the
+    gage, not just the named tributary's basin. Between Castle Rock and the
+    Coweeman confluence that is 247 sq mi, against 197.5 sq mi for the three
+    named basins alone -- the difference is ungaged local drainage along both
+    banks, which contributes whether or not it has a name.
 
-    LOCAL_RATIO -- drainage-area ratio, lightly corrected.
-        Measured over 76 storm events, WY2007-WY2019, the Coweeman's own peak
-        runs at 1.11x its plain drainage-area share of the unregulated Castle
-        Rock peak in the >60k bin (0.0590 measured vs 0.0532 by area). That
-        1.11 is UNIT_RUNOFF_UPLIFT. Set it to 1.00 for a pure area ratio; the
-        two differ by ~10%, which is inside the scatter.
+    site                      DA      incremental   local as % of gage DA
+    Castle Rock gage        2229              --           --
+    below Arkansas Creek    2278              49          2.2%
+    below Ostrander Creek   2335             106          4.8%
+    below Coweeman River    2476             247         11.1%
 
-        Arkansas and Ostrander have no gage, so they inherit the Coweeman's
-        unit rate. They are adjacent basins in the same low coastal hills, so
-        that transfer is defensible. It would NOT be defensible from a
-        dissimilar basin: East Fork Lewis, in the Cascade foothills, yields
-        about twice the Coweeman's rate per unit area.
+WHY A PLAIN AREA RATIO
+    Tested three ways and it holds up at the magnitudes that matter:
+      - USGS 14245000 annual peaks, WY1950-1996, paired same-storm against the
+        routed unregulated Castle Rock peak: the Coweeman runs about 1.5x its
+        area share at common events but converges monotonically toward 1.0x as
+        events grow. WY1996 -- a 212,245 cfs unregulated event, 92% of the
+        1,000-yr flow -- sits at 1.04x. See #Coweeman_HistoricPeakRatio.py.
+      - Ecology gage 26C075 storm events WY2007-WY2019: 1.11x in the >60k bin,
+        and that figure is a LOWER bound because the gage's rating ceiling
+        censors its largest events. See #Coweeman_Proportion.py.
+      - PRISM basin precipitation over the StreamStats delineations, which
+        tests the equal-depth assumption the area ratio rests on directly.
+        See #Coweeman_PRISM_PrecipRatio.py.
+    At the design magnitude the ratio is at area proportionality, so no
+    unit-runoff uplift is applied.
 
-        The measured ratio is a LOWER BOUND. Three events were dropped
-        because the Coweeman was above its rating at the crest and Ecology
-        reported nothing -- those are events where the tributary was
-        LARGEST. See Modules/ecology_io.py.
+WHY LAG_FACTOR = 0.80
+    Measured ratio of Coweeman flow at the REGULATED Castle Rock crest to its
+    own event peak, over 78 storm events:
 
-    lag_factor -- the tributary is not at its own crest when the mainstem is.
-        The Coweeman peaks a median 13-20 h BEFORE the regulated Castle Rock
-        crest and is already receding when the mainstem arrives. Measured
-        ratio of Coweeman flow at the regulated crest to its own event peak:
+        20-40k   n=52   median 0.806
+        40-60k   n=19   median 0.781
+        >60k     n= 7   median 0.413   (mean 0.511, range 0.36-0.81)
+        ALL      n=78   median 0.789
 
-            20-40k   n=51   median 0.809
-            40-60k   n=18   median 0.762
-            >60k     n= 7   median 0.420   (mean 0.511, range 0.36-0.81)
+    0.80 is where the two well-sampled bins group, and it is the value the
+    2009 study used, so it carries precedent as well as data. It is very
+    likely CONSERVATIVE: a higher lag factor adds more local flow, and the
+    seven largest events in this record sit well below it.
 
-        The decline with magnitude is real (rho -0.32, p=0.004) but the tail
-        value is poorly constrained: n=7, and the mechanism is a longer lead
-        time (20 h vs 13 h) which is NOT itself significantly related to event
-        size (rho -0.07, p=0.53). So 0.50 is a defensible tail estimate, not a
-        measured constant. LAG_RARE is the single number to move; the
-        sensitivity table at the foot of the run shows what it costs.
+    Not adopting the tail's 0.41 is deliberate. That figure rests on seven
+    storms, its mechanism is lead time rather than magnitude (lag vs |lead|
+    rho -0.55 p<0.0001; lead vs event size rho -0.04 p=0.73), and the three
+    events whose Coweeman crest exceeded the gage rating are missing from it
+    entirely -- and those are the events where the tributary was largest.
+    See #Coweeman_LagFactor_Evidence.py for every event behind both numbers.
 
 INPUT
     ../output/regulated_frequency_inferred.csv   (from #Unreg_Reg_Curve.py)
-        supplies CAS_unreg and CAS_reg on one AEP grid, with 95% bounds.
 
 OUTPUT
     ../output/below_confluence_frequency.csv
@@ -88,157 +101,149 @@ REG_CSV = r"../output/regulated_frequency_inferred.csv"
 OUT_CSV = r"../output/below_confluence_frequency.csv"
 PLOT_PNG = r"../output/diagnostics/below_confluence_frequency.png"
 
-CAS_DA = 2238.0                  # Cowlitz above Castle Rock, sq mi
-TRIB_DA = {                      # sq mi at the confluence, not at the gage
-    "Coweeman": 127.0,           # gage is 119; CDID3 used the same 1.07 step
-    "Arkansas": 44.7,
-    "Ostrander": 25.8,
-}
+GAGE_DA = 2229.0                 # Cowlitz at the Castle Rock gage, sq mi
 
-UNIT_RUNOFF_UPLIFT = 1.11        # 1.00 = plain drainage-area ratio.
-                                 # 1.11 = measured Coweeman rate, >60k bin.
+# Ordered downstream. Each entry is the TOTAL drainage area at that point;
+# the local term is the difference from GAGE_DA, so the areas do the work and
+# no tributary basin is named twice.
+LOCATIONS = [
+    ("Castle Rock gage",      2229.0),
+    ("Below Arkansas Creek",  2278.0),
+    ("Below Ostrander Creek", 2335.0),
+    ("Below Coweeman River",  2476.0),
+]
 
-LAG_COMMON = 0.80                # lag factor at common AEPs
-LAG_RARE = 0.50                  # lag factor at rare AEPs -- least certain
-                                 # number in this script, n=7. See docstring.
-LAG_CENTER_AEP = 0.01            # logistic midpoint
-LAG_WIDTH_Z = 0.40               # smaller = sharper transition, in z units
+LAG_FACTOR = 0.80                # flat. See WHY LAG_FACTOR = 0.80 above.
 
-TARGET_AEP = 0.001               # called out on the plot and in the print
-LAG_SENSITIVITY = (0.36, 0.50, 0.66, 0.80)   # tail range actually observed
+TARGET_AEP = 0.001
+LAG_SENSITIVITY = (0.41, 0.60, 0.80, 1.00)
 
-C_REG = "#1a4f8a"
-C_COMB = "#b7410e"
-C_LOCAL = "#4c8c4a"
+COLORS = ["#1a4f8a", "#4c8c4a", "#d99b30", "#b7410e"]
 
 # ----------------------------------------------------------------------------
 
 
-def lag_factor(aep):
-    """Smooth LAG_COMMON -> LAG_RARE as the event gets rarer.
-
-    Logistic in z rather than a step, so the combined curve has no kink at the
-    transition. At LAG_CENTER_AEP it sits exactly halfway between the two.
-    """
-    z = stats.norm.ppf(1 - np.asarray(aep, dtype=float))
-    z0 = stats.norm.ppf(1 - LAG_CENTER_AEP)
-    return LAG_RARE + (LAG_COMMON - LAG_RARE) / (1 + np.exp((z - z0) / LAG_WIDTH_Z))
-
-
-def local_ratio():
-    """Local peak as a fraction of the unregulated Castle Rock peak."""
-    return {name: UNIT_RUNOFF_UPLIFT * da / CAS_DA for name, da in TRIB_DA.items()}
+def local_fraction(site_da):
+    """Incremental area as a fraction of the gage's own drainage area."""
+    return (site_da - GAGE_DA) / GAGE_DA
 
 
 def build(reg):
-    ratios = local_ratio()
     out = pd.DataFrame({"AEP": reg["AEP"]})
-    out["lag_factor"] = lag_factor(reg["AEP"].values)
     out["cowlitz_unreg_cfs"] = reg["unreg_computed_cfs"]
     out["cowlitz_reg_cfs"] = reg["reg_inferred_cfs"]
 
-    local_total = np.zeros(len(reg))
-    for name, ratio in ratios.items():
-        peak = reg["unreg_computed_cfs"].values * ratio
-        at_crest = peak * out["lag_factor"].values
-        out["%s_peak_cfs" % name.lower()] = peak
-        out["%s_at_crest_cfs" % name.lower()] = at_crest
-        local_total += at_crest
-    out["local_total_cfs"] = local_total
-    out["combined_cfs"] = out["cowlitz_reg_cfs"] + out["local_total_cfs"]
-
-    # Band: the regulated bound plus the local computed from the CORRESPONDING
-    # unregulated bound, so a single hydrologic state drives both terms rather
-    # than mixing a low mainstem with a high tributary.
-    share = sum(ratios.values())
-    for side, regcol, unregcol in [("lower", "reg_lower_95pct_cfs",
-                                    "unreg_lower_95pct_cfs"),
-                                   ("upper", "reg_upper_95pct_cfs",
-                                    "unreg_upper_95pct_cfs")]:
-        out["combined_%s_cfs" % side] = (
-            reg[regcol].values
-            + reg[unregcol].values * share * out["lag_factor"].values)
-
-    out["local_pct_of_combined"] = 100 * out["local_total_cfs"] / out["combined_cfs"]
-    out["increase_over_cowlitz_pct"] = (
-        100 * out["local_total_cfs"] / out["cowlitz_reg_cfs"])
-    return out, ratios
+    for name, site_da in LOCATIONS:
+        key = name.lower().replace(" ", "_")
+        frac = local_fraction(site_da)
+        local = reg["unreg_computed_cfs"].values * frac * LAG_FACTOR
+        out["%s_local_cfs" % key] = local
+        out["%s_cfs" % key] = reg["reg_inferred_cfs"].values + local
+        # Band: the regulated bound plus the local computed from the
+        # CORRESPONDING unregulated bound, so one hydrologic state drives both
+        # terms rather than pairing a low mainstem with a high tributary.
+        out["%s_lower_cfs" % key] = (reg["reg_lower_95pct_cfs"].values
+                                     + reg["unreg_lower_95pct_cfs"].values
+                                     * frac * LAG_FACTOR)
+        out["%s_upper_cfs" % key] = (reg["reg_upper_95pct_cfs"].values
+                                     + reg["unreg_upper_95pct_cfs"].values
+                                     * frac * LAG_FACTOR)
+    return out
 
 
-def report(out, ratios):
-    share = sum(ratios.values())
-    print("LOCAL RATIO  (local peak / unregulated Castle Rock peak)")
-    for name, r in sorted(ratios.items(), key=lambda kv: -kv[1]):
-        print("   %-10s %6.1f sq mi   %.5f   (%.4f by area x %.2f uplift)"
-              % (name, TRIB_DA[name], r, TRIB_DA[name] / CAS_DA,
-                 UNIT_RUNOFF_UPLIFT))
-    print("   %-10s %6.1f sq mi   %.5f" % ("TOTAL", sum(TRIB_DA.values()), share))
-    print("\n   lag factor: %.2f at common AEPs -> %.2f at rare, centred on "
-          "%.2f%% AEP" % (LAG_COMMON, LAG_RARE, LAG_CENTER_AEP * 100))
+def report(out):
+    print("=" * 78)
+    print("SITES")
+    print("=" * 78)
+    print("%-24s %8s %12s %10s" % ("site", "DA sq mi", "incremental", "local/gage"))
+    for name, site_da in LOCATIONS:
+        print("%-24s %8.0f %12s %9.1f%%"
+              % (name, site_da,
+                 "--" if site_da == GAGE_DA else "%.0f" % (site_da - GAGE_DA),
+                 100 * local_fraction(site_da)))
+    print("\n   lag factor %.2f applied to every local term" % LAG_FACTOR)
 
-    print("\n%8s %7s %11s %11s %10s %11s %7s"
-          % ("AEP", "lag", "CAS unreg", "CAS reg", "local", "combined", "+%"))
+    print("\n" + "=" * 78)
+    print("REGULATED PEAK FLOW FREQUENCY (cfs)")
+    print("=" * 78)
+    head = "%8s %11s" % ("AEP", "CAS unreg")
+    for name, _ in LOCATIONS:
+        head += " %14s" % name.replace("Below ", "< ")[:14]
+    print(head)
     for _, r in out.iterrows():
-        print("%8.4f %7.3f %11s %11s %10s %11s %7.1f"
-              % (r["AEP"], r["lag_factor"],
-                 format(int(r["cowlitz_unreg_cfs"]), ","),
-                 format(int(r["cowlitz_reg_cfs"]), ","),
-                 format(int(r["local_total_cfs"]), ","),
-                 format(int(r["combined_cfs"]), ","),
-                 r["increase_over_cowlitz_pct"]))
+        line = "%8.4f %11s" % (r["AEP"], format(int(r["cowlitz_unreg_cfs"]), ","))
+        for name, _ in LOCATIONS:
+            key = name.lower().replace(" ", "_")
+            line += " %14s" % format(int(r["%s_cfs" % key]), ",")
+        print(line)
 
     row = out.iloc[(out["AEP"] - TARGET_AEP).abs().idxmin()]
-    print("\nAt AEP=%.4f (1-in-%d):" % (row["AEP"], round(1 / row["AEP"])))
-    print("   Cowlitz regulated      %11s cfs" % format(int(row["cowlitz_reg_cfs"]), ","))
-    print("   local at the crest     %11s cfs  (%.1f%% of combined)"
-          % (format(int(row["local_total_cfs"]), ","), row["local_pct_of_combined"]))
-    print("   COMBINED               %11s cfs" % format(int(row["combined_cfs"]), ","))
-    print("   95%% band               %11s to %s cfs"
-          % (format(int(row["combined_lower_cfs"]), ","),
-             format(int(row["combined_upper_cfs"]), ",")))
+    print("\n" + "=" * 78)
+    print("AT AEP=%.4f  (1-in-%d)" % (row["AEP"], round(1 / row["AEP"])))
+    print("=" * 78)
+    print("   Castle Rock unregulated %11s cfs   (drives every local term)"
+          % format(int(row["cowlitz_unreg_cfs"]), ","))
+    print("%-24s %12s %11s %11s   %s"
+          % ("site", "local cfs", "TOTAL", "over gage", "95% band"))
+    base = row["castle_rock_gage_cfs"]
+    for name, _ in LOCATIONS:
+        key = name.lower().replace(" ", "_")
+        total = row["%s_cfs" % key]
+        print("%-24s %12s %11s %10.1f%%   %s to %s"
+              % (name, format(int(row["%s_local_cfs" % key]), ","),
+                 format(int(total), ","), 100 * (total - base) / base,
+                 format(int(row["%s_lower_cfs" % key]), ","),
+                 format(int(row["%s_upper_cfs" % key]), ",")))
 
-    print("\nSENSITIVITY to LAG_RARE at AEP=%.4f  (band width is %s cfs)"
-          % (TARGET_AEP,
-             format(int(row["combined_upper_cfs"] - row["combined_lower_cfs"]), ",")))
-    base = row["combined_cfs"]
-    keep = LAG_RARE
+    print("\n" + "=" * 78)
+    print("SENSITIVITY TO LAG_FACTOR, at the Coweeman confluence, AEP=%.4f"
+          % TARGET_AEP)
+    print("=" * 78)
+    frac = local_fraction(LOCATIONS[-1][1])
+    band = row["below_coweeman_river_upper_cfs"] - row["below_coweeman_river_lower_cfs"]
+    adopted = row["below_coweeman_river_cfs"]
     for trial in LAG_SENSITIVITY:
-        globals()["LAG_RARE"] = trial
-        f = float(lag_factor(row["AEP"]))
-        combined = row["cowlitz_reg_cfs"] + row["cowlitz_unreg_cfs"] * sum(
-            ratios.values()) * f
-        print("   LAG_RARE %.2f -> lag %.3f -> combined %11s cfs  (%+.1f%% vs base)"
-              % (trial, f, format(int(combined), ","), 100 * (combined - base) / base))
-    globals()["LAG_RARE"] = keep
+        total = row["cowlitz_reg_cfs"] + row["cowlitz_unreg_cfs"] * frac * trial
+        mark = "   <- adopted" if abs(trial - LAG_FACTOR) < 1e-9 else ""
+        print("   lag %.2f -> local %8s   total %11s  (%+.1f%% vs adopted)%s"
+              % (trial, format(int(row["cowlitz_unreg_cfs"] * frac * trial), ","),
+                 format(int(total), ","), 100 * (total - adopted) / adopted, mark))
+    print("\n   the whole 0.41-1.00 range spans %.1f%% of the adopted total, "
+          "against\n   a 95%% band %s cfs wide (%.0f%% of it)."
+          % (100 * (row["cowlitz_unreg_cfs"] * frac * (1.00 - 0.41)) / adopted,
+             format(int(band), ","),
+             100 * (row["cowlitz_unreg_cfs"] * frac * (1.00 - 0.41)) / band))
 
 
 def plot(out):
     z = stats.norm.ppf(1 - out["AEP"].values)
-    fig, (ax, axl) = plt.subplots(2, 1, figsize=(10, 10), sharex=True,
-                                  gridspec_kw=dict(height_ratios=[2.4, 1]))
+    fig, (ax, axl) = plt.subplots(2, 1, figsize=(10, 10.5), sharex=True,
+                                  gridspec_kw=dict(height_ratios=[2.3, 1]))
 
     ax.set_yscale("log")   # BEFORE any annotation -- a pre-log get_ylim()
                            # grabs a linear autoscale limit and crushes the
                            # data into a sliver once the scale changes.
-    ax.fill_between(z, out["combined_lower_cfs"], out["combined_upper_cfs"],
-                    color=C_COMB, alpha=0.13, label="Combined 95% band")
-    ax.plot(z, out["cowlitz_unreg_cfs"], color="#9bb8d4", lw=1.4, ls=":",
-            label="Cowlitz unregulated (drives the local)")
-    ax.plot(z, out["cowlitz_reg_cfs"], color=C_REG, lw=2, ls="--",
-            label="Cowlitz regulated at Castle Rock")
-    ax.plot(z, out["combined_cfs"], color=C_COMB, lw=2.6,
-            label="Below Coweeman confluence (regulated)")
+    last = LOCATIONS[-1][0].lower().replace(" ", "_")
+    ax.fill_between(z, out["%s_lower_cfs" % last], out["%s_upper_cfs" % last],
+                    color=COLORS[-1], alpha=0.11,
+                    label="95%% band, %s" % LOCATIONS[-1][0])
+    ax.plot(z, out["cowlitz_unreg_cfs"], color="#9bb8d4", lw=1.3, ls=":",
+            label="Cowlitz unregulated (drives the locals)")
+    for (name, site_da), color in zip(LOCATIONS, COLORS):
+        key = name.lower().replace(" ", "_")
+        ax.plot(z, out["%s_cfs" % key], color=color, lw=2.2,
+                label="%s  (%.0f sq mi)" % (name, site_da))
     ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
     ax.text(stats.norm.ppf(1 - TARGET_AEP), 0.02, " 1,000-yr",
             transform=ax.get_xaxis_transform(), rotation=90, va="bottom",
             ha="right", fontsize=8, color="gray")
-    ax.set_ylabel("Peak flow (cfs)")
-    ax.set_title("Regulated peak flow frequency below the Coweeman confluence\n"
-                 "Cowlitz regulated + Coweeman + Arkansas + Ostrander,\n"
-                 "drainage-area scaled off the unregulated curve, then lagged",
+    ax.set_ylabel("Regulated peak flow (cfs)")
+    ax.set_title("Regulated peak flow frequency, Castle Rock gage to the "
+                 "Coweeman confluence\nLocal = incremental drainage area x "
+                 "unregulated curve x %.2f lag factor" % LAG_FACTOR,
                  fontsize=11)
     ax.grid(True, which="both", alpha=0.3)
-    ax.legend(loc="upper left", fontsize=9)
+    ax.legend(loc="upper left", fontsize=8.5)
 
     ticks = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
     top = ax.twiny()
@@ -247,22 +252,15 @@ def plot(out):
     top.set_xticklabels(["%g%%" % (a * 100) for a in ticks], rotation=45, fontsize=8)
     top.set_xlabel("AEP")
 
-    bottom = np.zeros(len(out))
-    for name, color in [("Coweeman", C_LOCAL), ("Arkansas", "#7fb069"),
-                        ("Ostrander", "#b5d99c")]:
-        v = out["%s_at_crest_cfs" % name.lower()].values
-        axl.fill_between(z, bottom, bottom + v, color=color, alpha=0.85,
-                         label="%s (%.1f sq mi)" % (name, TRIB_DA[name]))
-        bottom = bottom + v
-    axl.set_ylabel("Local at the crest (cfs)")
+    base = out["castle_rock_gage_cfs"].values
+    for (name, _), color in list(zip(LOCATIONS, COLORS))[1:]:
+        key = name.lower().replace(" ", "_")
+        axl.plot(z, 100 * (out["%s_cfs" % key].values - base) / base,
+                 color=color, lw=2, label=name)
+    axl.set_ylabel("increase over the gage (%)")
     axl.set_xlabel("Standard normal variate  z = $\\Phi^{-1}$(1 − AEP)")
     axl.grid(True, alpha=0.3)
-    axl.legend(loc="upper left", fontsize=8, framealpha=0.95)
-
-    axf = axl.twinx()
-    axf.plot(z, out["lag_factor"], color="0.35", lw=1.6, ls=":")
-    axf.set_ylim(0, 1)
-    axf.set_ylabel("lag factor (dotted)", color="0.35", fontsize=9)
+    axl.legend(loc="upper right", fontsize=8.5)
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(PLOT_PNG), exist_ok=True)
@@ -272,9 +270,9 @@ def plot(out):
 
 def main():
     reg = pd.read_csv(REG_CSV).sort_values("AEP", ascending=False).reset_index(drop=True)
-    out, ratios = build(reg)
+    out = build(reg)
     out.to_csv(OUT_CSV, index=False)
-    report(out, ratios)
+    report(out)
     plot(out)
     print("Wrote", OUT_CSV)
 
