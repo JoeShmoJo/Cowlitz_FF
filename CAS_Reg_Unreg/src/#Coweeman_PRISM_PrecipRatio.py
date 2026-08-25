@@ -17,12 +17,21 @@ WHY
     the annual ratio tracks the storm ratio closely enough for this purpose.
     This is a check on the AREA assumption, not a rainfall-runoff model.
 
-WHY THIS SCRIPT DOES NOT RUN IN THE SANDBOX
-    It needs two things that must come from outside: PRISM grids
-    (services.nacse.org) and basin polygons. Both are blocked from the remote
-    session -- every data host tested returned a connection failure while
-    pypi.org returned 200, so it is host blocking, not an outage. Run this on
-    your own machine.
+GETTING THE GRIDS -- OFFLINE FIRST, ON PURPOSE
+    The download is a convenience, not a dependency. PRISM has restructured
+    its download service more than once, and services.nacse.org fails to
+    resolve on at least one network this has been run from (DNS, errno 11002)
+    -- so the script uses whatever grids are already in PRISM_DIR, tries to
+    fetch only the years that are missing, and gives up on the network after
+    the FIRST failure rather than repeating the same error once per year.
+
+    If the download does not work, download annual 4km precipitation by hand
+    from https://prism.oregonstate.edu/ and drop the .zip files straight into
+    PRISM_DIR -- the script unpacks them. Filenames do not matter as long as
+    the year appears in them; .bil and .tif are both read.
+
+    Partial coverage is fine. The ratio is a stable basin property, not a peak
+    statistic, so ten scattered years settle it about as well as seventy.
 
 WHAT YOU MUST SUPPLY
     Two basin polygons, in BASIN_FILES below. Any format geopandas reads
@@ -77,9 +86,16 @@ BASIN_FILES = {
 }
 EXPECTED_SQ_MI = {"Coweeman": 119.0, "CastleRock": 2238.0}
 
-PRISM_DIR = r"../data/prism"          # grids cached here
+PRISM_DIR = r"../data/prism"          # grids live/cache here
 YEAR_START, YEAR_END = 1950, 2020     # PRISM stable series starts 1895
+
+# Downloading is OPTIONAL and is tried only for years not already present.
+# PRISM has restructured its download service more than once and this host
+# does not resolve on every network -- if it fails, the script says exactly
+# what to download by hand and carries on with whatever is already local.
+# Paste a working URL pattern here if you have one; %d is the year.
 PRISM_URL = "https://services.nacse.org/prism/data/public/4km/ppt/%d"
+ALLOW_DOWNLOAD = True
 
 OUT_CSV = r"../output/diagnostics/prism_basin_precip_ratio.csv"
 PLOT_PNG = r"../output/diagnostics/prism_basin_precip_ratio.png"
@@ -101,24 +117,89 @@ def need(module):
             "%s is required.  pip install geopandas rasterio requests" % module)
 
 
-def fetch_year(year):
-    """Download and unpack one PRISM annual ppt grid, cached."""
+def unpack_local_zips():
+    """Unpack any PRISM .zip the user dropped in PRISM_DIR by hand."""
+    for archive_path in sorted(glob.glob(os.path.join(PRISM_DIR, "*.zip"))):
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                archive.extractall(PRISM_DIR)
+        except zipfile.BadZipFile:
+            print("   not a zip, skipped: %s" % os.path.basename(archive_path))
+
+
+def local_grid(year):
+    """Any already-present grid for this year, .bil or .tif, or None."""
+    for pattern in ("*%d*.bil" % year, "*%d*.tif" % year, "*%d*.tiff" % year):
+        hit = sorted(glob.glob(os.path.join(PRISM_DIR, pattern)))
+        if hit:
+            return hit[0]
+    return None
+
+
+def try_download(year):
+    """Fetch one year. Returns (path, None) or (None, short reason)."""
     import requests
+    try:
+        resp = requests.get(PRISM_URL % year, timeout=180)
+        resp.raise_for_status()
+    except Exception as exc:                                  # noqa: BLE001
+        text = str(exc)
+        if "getaddrinfo" in text or "NameResolution" in text:
+            return None, "DNS: %s does not resolve on this network" % (
+                PRISM_URL.split("/")[2])
+        return None, text.split("(Caused by")[0].strip()[:120]
+    try:
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as archive:
+            archive.extractall(PRISM_DIR)
+    except zipfile.BadZipFile:
+        return None, "response was not a zip (URL pattern probably stale)"
+    path = local_grid(year)
+    return (path, None) if path else (None, "no grid found inside the archive")
+
+
+def gather_years():
+    """Grids for every year we can get, downloading only what is missing.
+
+    Offline-first on purpose. A locked-down network is the normal case here,
+    and one clear instruction beats seventy identical stack traces.
+    """
     os.makedirs(PRISM_DIR, exist_ok=True)
-    hit = glob.glob(os.path.join(PRISM_DIR, "*_%d_*.bil" % year))
-    if hit:
-        return hit[0]
-    url = PRISM_URL % year
-    print("   downloading %d ..." % year, end="", flush=True)
-    resp = requests.get(url, timeout=180)
-    resp.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(resp.content)) as archive:
-        archive.extractall(PRISM_DIR)
-    hit = glob.glob(os.path.join(PRISM_DIR, "*_%d_*.bil" % year))
-    if not hit:
-        raise SystemExit("no .bil found in the %d archive" % year)
-    print(" ok")
-    return hit[0]
+    unpack_local_zips()
+    found, missing, reason = {}, [], None
+    for year in range(YEAR_START, YEAR_END + 1):
+        path = local_grid(year)
+        if path:
+            found[year] = path
+            continue
+        if not ALLOW_DOWNLOAD or reason is not None:
+            missing.append(year)          # already know the network is out;
+            continue                      # do not retry it 70 more times
+        path, reason = try_download(year)
+        if path:
+            found[year] = path
+            reason = None
+        else:
+            missing.append(year)
+
+    print("   %d year(s) available locally" % len(found))
+    if missing:
+        print("   %d year(s) missing" % len(missing))
+        if reason:
+            print("   download unavailable -- %s" % reason)
+        print("""
+   TO SUPPLY THEM BY HAND
+     1. Open  https://prism.oregonstate.edu/  ->  Data Explorer / downloads
+        and take ANNUAL total precipitation, 4km, for the years you want.
+     2. Drop the .zip files (or the unpacked .bil/.hdr/.prj sets) into
+          %s
+        Filenames do not matter as long as the year appears in them.
+     3. Re-run. Anything already there is used and never re-downloaded.
+
+   Partial coverage is fine -- the ratio is computed per year and averaged
+   over whatever is present. Even ten scattered years settles this question,
+   since the ratio is a stable basin property rather than a peak statistic.
+""" % os.path.abspath(PRISM_DIR))
+    return found
 
 
 def load_basins():
@@ -160,14 +241,15 @@ def main():
     print("Basins:")
     basins = load_basins()
 
-    rows = []
     print("\nPRISM annual precipitation:")
-    for year in range(YEAR_START, YEAR_END + 1):
-        try:
-            grid = fetch_year(year)
-        except Exception as exc:                     # noqa: BLE001
-            print("   %d skipped: %s" % (year, exc))
-            continue
+    grids = gather_years()
+    if not grids:
+        raise SystemExit(
+            "No PRISM grids available. See the instructions above -- the "
+            "basin polygons loaded fine, so this is the only thing missing.")
+
+    rows = []
+    for year, grid in sorted(grids.items()):
         row = {"year": year}
         for name, basin in basins.items():
             mean_mm, cells = basin_mean(grid, basin)
