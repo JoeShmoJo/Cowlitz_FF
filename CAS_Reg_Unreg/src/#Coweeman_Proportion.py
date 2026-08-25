@@ -60,6 +60,17 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from pydsstools.heclib.dss import HecDss
 
+import sys
+REPO_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Modules"))
+# The Ecology parser lives in /Modules because four scripts once carried
+# copy-pasted copies of it and all four shared the same bug: quality code 254
+# ("Rating table exceeded, data will not be reported") was parsed as a
+# discharge of 254 cfs. See Modules/ecology_io.py.
+from ecology_io import (read_ecology_cache, resample_censor_aware,
+                        MISSING_CODES, TRUSTED_CODES, CODE_MEANING)
+
 # ----------------------------------------------------------------------------
 # USER SETTINGS
 # ----------------------------------------------------------------------------
@@ -89,45 +100,6 @@ C_LOW, C_HIGH = "#8fbcdb", "#1a4f8a"
 C_COW = "#b7410e"
 
 # ----------------------------------------------------------------------------
-
-ECOLOGY_ROW_DT = re.compile(
-    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2})\s+(-?[\d.]+)(?:\s+(\S+))?\s*$")
-
-
-def read_ecology_cache(cache_dir):
-    """The Coweeman 15-minute record from the files #Coweeman_Timing.py cached.
-
-    Only the FM files are read -- the DV ones are daily and cannot support a
-    ratio taken at the hour of the peak.
-    """
-    files = sorted(glob.glob(os.path.join(cache_dir, "*_FM.txt")))
-    if not files:
-        raise SystemExit(
-            "No Ecology FM files in %s.\nRun #Coweeman_Timing.py first; it "
-            "downloads and caches them." % os.path.abspath(cache_dir))
-    stamps, values = [], []
-    for path in files:
-        with open(path, "r", errors="replace") as handle:
-            for line in handle:
-                match = ECOLOGY_ROW_DT.match(line)
-                if match:
-                    date, clock, value, _flag = match.groups()
-                    stamps.append("%s %s" % (date, clock))
-                    values.append(value)
-    frame = pd.DataFrame({"stamp": stamps, "value": values})
-    frame["stamp"] = pd.to_datetime(frame["stamp"], format="%m/%d/%Y %H:%M",
-                                    errors="coerce")
-    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
-    frame = frame.dropna()
-    frame = frame[frame["value"] > -900.0]
-    frame = frame.drop_duplicates(subset="stamp").sort_values("stamp")
-    series = pd.Series(frame["value"].to_numpy(),
-                       index=pd.DatetimeIndex(frame["stamp"]))
-    print("   Coweeman  : %d values from %d file(s), %s to %s"
-          % (len(series), len(files), series.index.min().date(),
-             series.index.max().date()))
-    return series
-
 
 def first_stamp(ts):
     first = next(iter(ts.times))
@@ -179,13 +151,13 @@ def find_events(series, n, min_separation_days, floor):
     return sorted(events)
 
 
-def build_table(cow, unreg):
+def build_table(cow, qual, unreg):
     """One row per event: both ratios, the lag, and the magnitude."""
     first = max(cow.index.min(), unreg.index.min())
     last = min(cow.index.max(), unreg.index.max())
     grid = pd.date_range(first.ceil(RESAMPLE), last.floor(RESAMPLE),
                          freq=RESAMPLE)
-    cow_h = cow.resample(RESAMPLE).mean().reindex(grid)
+    cow_h = resample_censor_aware(cow, qual, RESAMPLE).reindex(grid)
     unreg_h = unreg.resample(RESAMPLE).mean().reindex(grid)
     print("   overlap   : %s to %s (%d hours)"
           % (first.date(), last.date(), len(grid)))
@@ -447,10 +419,10 @@ def main():
     print("Coweeman as a proportion of UNREGULATED Castle Rock flow")
     print("=" * 78)
     print("\nINPUTS")
-    cow = read_ecology_cache(CACHE_DIR)
+    cow, qual = read_ecology_cache(CACHE_DIR, label="Coweeman")
     unreg = read_unreg(UNREG_DSS, UNREG_PATH)
 
-    table = build_table(cow, unreg)
+    table = build_table(cow, qual, unreg)
     if table is None or not len(table):
         raise SystemExit("No events with coverage in both records.")
     report(table)

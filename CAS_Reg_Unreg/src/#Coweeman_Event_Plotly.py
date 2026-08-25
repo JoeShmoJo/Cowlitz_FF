@@ -101,6 +101,18 @@ import numpy as np
 import pandas as pd
 from pydsstools.heclib.dss import HecDss
 
+import sys
+REPO_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Modules"))
+# The Ecology parser lives in /Modules because four scripts once carried
+# copy-pasted copies of it and all four shared the same bug: quality code 254
+# ("Rating table exceeded, data will not be reported") was parsed as a
+# discharge of 254 cfs. See Modules/ecology_io.py.
+from ecology_io import (read_ecology_cache, resample_censor_aware,
+                        MISSING_CODES, TRUSTED_CODES, CODE_MEANING)
+from ecology_io import censored_spans
+
 try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -139,121 +151,6 @@ C_UNREG = "#7aa9d0"
 C_REG = "#1a4f8a"
 C_COW = "#b7410e"
 C_COW_AT_REG = "#7b2d8e"
-
-# The Discharge column is BLANK whenever Ecology declines to report a value,
-# and the QUALITY code sits alone on the line. The optional value group plus a
-# REQUIRED integer quality group is what separates the two cases: given
-# "   254" the engine tries value="254", fails to find a quality token, then
-# backtracks to value=None, quality=254 -- which is the correct reading.
-#
-#     10/01/2016   00:00              35.2         2      value 35.2, code 2
-#     03/16/2017   05:00                          254      NO VALUE, code 254
-#
-# An earlier regex made the value mandatory and the quality optional, so the
-# second form parsed as a discharge of 254.0 cfs. See CENSORED_CODE below.
-ECOLOGY_ROW_DT = re.compile(
-    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2})\s+(-?[\d.]+)?\s+(\d+)\s*$")
-
-# Ecology quality codes, taken from the legend at the foot of each FM file.
-#
-#   NO USABLE VALUE -- must be NaN, never a number:
-#     254  Rating table exceeded (data will not be reported).  The Discharge
-#          column is BLANK; only the code is on the line.  The gage's rating
-#          tops out near 3,400 cfs, so these are the HIGHEST flows the
-#          Coweeman ever saw -- exactly what a flood-frequency tail needs.
-#          305 readings, 10 days, WY2016-WY2019.
-#     151  Data Missing.  These rows DO carry a number, and it decays to
-#          0.0 as the sensor fails.  On 09 Dec 2015 that puts a 0 cfs
-#          Coweeman in the middle of the second largest Cowlitz event in the
-#          record, immediately before the 254 block starts.  55 readings.
-#
-#   REAL ATTEMPTS AT A VALUE, but not measurements in rating:
-#     10   Above rating, but within 2x        7702 readings, 1220-3800 cfs
-#     50   Estimated data                    34444
-#     77   Estimated from another station     5735
-#     82   Linear interpolation across gap      71
-#     100  Modeled flow                        278 readings, 3800-6220 cfs
-#     140  Data not yet checked                513
-#     160  ** NOT IN ANY LEGEND IN ANY FILE ** 1012 readings, 2450-8020 cfs
-#          -- and it carries the record maximum, 8,020 cfs on 08 Jan 2009,
-#          which is a tail data point this analysis leans on. Undocumented.
-#
-#   IN RATING: 1 (reviewed), 2 (provisional), 3 (provisional-edited),
-#              8 (below rating)
-MISSING_CODES = (151, 254)
-TRUSTED_CODES = (1, 2, 3, 8)
-CODE_MEANING = {
-    1: "good, reviewed", 2: "good, provisional", 3: "good, prov-edited",
-    8: "below rating", 10: "ABOVE RATING (within 2x)", 50: "estimated",
-    77: "estimated from another station", 82: "interpolated across gap",
-    100: "MODELED", 140: "not yet checked", 151: "DATA MISSING",
-    160: "UNDOCUMENTED CODE", 254: "RATING EXCEEDED, not reported"}
-
-# ----------------------------------------------------------------------------
-
-
-def read_ecology_cache(cache_dir):
-    """Coweeman 15-minute record, as (flow, quality) with censored rows NaN.
-
-    Returns flow in cfs and the Ecology quality code alongside it. Rows coded
-    CENSORED_CODE carry no discharge at all -- they come back NaN, not as a
-    number. Reading them as a number is the single worst thing that can happen
-    to this record: the code is 254, which is a perfectly plausible-looking
-    Coweeman flow, so it fails silently and drags the coincident ratio toward
-    zero on precisely the largest events.
-    """
-    files = sorted(glob.glob(os.path.join(cache_dir, "*_FM.txt")))
-    if not files:
-        raise SystemExit(
-            "No Ecology FM files in %s.\nRun #Coweeman_Timing.py first; it "
-            "downloads and caches them." % os.path.abspath(cache_dir))
-    stamps, values, quals = [], [], []
-    for path in files:
-        with open(path, "r", errors="replace") as handle:
-            for line in handle:
-                match = ECOLOGY_ROW_DT.match(line.rstrip("\n").rstrip("\r"))
-                if match:
-                    date, clock, value, qual = match.groups()
-                    stamps.append("%s %s" % (date, clock))
-                    values.append(np.nan if value is None else float(value))
-                    quals.append(int(qual))
-    frame = pd.DataFrame({"stamp": stamps, "value": values, "qual": quals})
-    frame["stamp"] = pd.to_datetime(frame["stamp"], format="%m/%d/%Y %H:%M",
-                                    errors="coerce")
-    frame = frame.dropna(subset=["stamp"])
-    frame = frame.drop_duplicates(subset="stamp").sort_values("stamp")
-    frame = frame.set_index(pd.DatetimeIndex(frame.pop("stamp")))
-    frame.loc[frame["value"] <= -900.0, "value"] = np.nan
-    dropped = frame["qual"].isin(MISSING_CODES)
-    frame.loc[dropped, "value"] = np.nan
-
-    print("   Coweeman  : %d values from %d file(s), %s to %s"
-          % (len(frame), len(files), frame.index.min().date(),
-             frame.index.max().date()))
-    print("               %d reading(s) over %d day(s) carry NO usable value "
-          "(codes %s) and are held as unknown, not as a number"
-          % (int(dropped.sum()), frame.index[dropped].normalize().nunique(),
-             ", ".join(str(c) for c in MISSING_CODES)))
-    qualified = (~frame["qual"].isin(TRUSTED_CODES)) & (~dropped)
-    print("               %d reading(s) are estimated/modeled/above-rating "
-          "rather than gaged in rating" % int(qualified.sum()))
-    return frame["value"], frame["qual"]
-
-
-def censored_spans(qual, lo=None, hi=None):
-    """Contiguous runs with no usable value, as (start, end) timestamps."""
-    flag = qual.isin(MISSING_CODES)
-    if lo is not None:
-        flag = flag.loc[lo:hi]
-    if not flag.any():
-        return []
-    stamps = flag.index[flag]
-    breaks = np.flatnonzero(np.diff(stamps.values)
-                            > np.timedelta64(20, "m"))
-    starts = np.r_[0, breaks + 1]
-    ends = np.r_[breaks, len(stamps) - 1]
-    return [(stamps[a], stamps[b]) for a, b in zip(starts, ends)]
-
 
 def first_stamp(ts):
     """First timestamp of a DSS record, tolerant of both pydsstools builds.

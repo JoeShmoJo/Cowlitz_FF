@@ -544,3 +544,53 @@ BELOW area proportionality is a **censored lower bound** — 16.2 h of the
 crest unmeasured. The two clean-ish events over 100,000 cfs give 0.048 and
 0.056, straddling the DA ratio of 0.053. So the convergence reading stands;
 it was the censored value that argued against it.
+
+### Fix applied and all four scripts re-run (25 Aug 2026)
+
+The parser now lives once, in `Modules/ecology_io.py`, and
+`#Coweeman_Timing.py`, `#Coweeman_Proportion.py`,
+`#Coweeman_RegPeak_Timing.py` and `#Coweeman_Event_Plotly.py` all import it.
+No script re-declares the regex. `resample_censor_aware()` is in there too:
+a plain `.resample().mean()` skips NaN, so an hour where the flow climbed
+above the rating part-way through would come back as the average of the
+in-rating readings that preceded it — the same failure one level up.
+
+**Three events lost their Coweeman crest to censoring and are now excluded**
+rather than scored against a censored value:
+
+| event | CAS unreg | old cow peak | old ratio_peak |
+|---|---|---|---|
+| 09 Dec 2015 | 152,269 | 3,328 | 0.0219 |
+| 16 Mar 2017 | 68,453 | 3,335 | 0.0487 |
+| 30 Dec 2017 | 54,858 | 3,292 | 0.0600 |
+
+Effect on the numbers that feed the coincident work:
+
+| quantity | bin | before | after |
+|---|---|---|---|
+| ratio_peak (LocalScalingFactor) | 20-40k | 0.0693 (n=51) | 0.0693 (n=51) |
+| | 40-60k | 0.0596 (n=19) | 0.0578 (n=18) |
+| | >60k | 0.0544 (n=9) | **0.0590 (n=7)** |
+| ratio_coincident | all bins | 0.0547 / 0.0391 / 0.0322 | 0.0547 / 0.0389 / 0.0322 |
+| LagScalingFactor at REG crest | >60k | 0.494 (n=9) | **0.420 (n=7)** |
+
+Two readings change as a result:
+
+1. **The "converges to the drainage-area ratio" story softens.** As multiples
+   of the DA ratio (0.0532) the bins now run 1.30x -> 1.09x -> 1.11x, i.e.
+   converging toward ~1.1x and FLATTENING, not landing on 1.00x. The earlier
+   1.02x in the tail was pulled down by the censored Dec 2015 value. The
+   script's own trend test on ratio_peak is now Spearman rho -0.21, p = 0.072
+   — no longer significant. So the LocalScalingFactor declining with
+   magnitude is a plausible reading, not a demonstrated one.
+
+2. **The tail LagScalingFactor drops, 0.494 -> 0.420**, on n=7 with a mean of
+   0.511 — the median is volatile at that sample size and the two statistics
+   now straddle 0.42-0.51 rather than agreeing.
+
+**Both of these are still biased, and in a knowable direction.** Excluding a
+censored event removes an event where the Coweeman was above its rating —
+that is, one of the LARGEST tributary responses in the record. So 0.0590 in
+the tail is itself a lower bound on the true ratio, and the honest treatment
+is censored-data (a lower bound per event), not exclusion. Nothing in the
+current scripts does that.

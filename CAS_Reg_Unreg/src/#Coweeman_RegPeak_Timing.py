@@ -63,6 +63,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pydsstools.heclib.dss import HecDss
 
+import sys
+REPO_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Modules"))
+# The Ecology parser lives in /Modules because four scripts once carried
+# copy-pasted copies of it and all four shared the same bug: quality code 254
+# ("Rating table exceeded, data will not be reported") was parsed as a
+# discharge of 254 cfs. See Modules/ecology_io.py.
+from ecology_io import (read_ecology_cache, resample_censor_aware,
+                        MISSING_CODES, TRUSTED_CODES, CODE_MEANING)
+
 # ----------------------------------------------------------------------------
 # USER SETTINGS
 # ----------------------------------------------------------------------------
@@ -85,34 +96,6 @@ MIN_WINDOW_COVERAGE = 0.80
 
 MAGNITUDE_BINS = [20000, 40000, 60000, 200000]
 BIN_LABELS = ["20-40k", "40-60k", ">60k"]
-
-ECOLOGY_ROW_DT = re.compile(
-    r"^\s*(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2})\s+([\-\d.]+)\s+(\S+)\s*$")
-
-# ----------------------------------------------------------------------------
-
-
-def read_ecology_cache(cache_dir):
-    files = sorted(glob.glob(os.path.join(cache_dir, "*_FM.txt")))
-    if not files:
-        raise SystemExit("No Ecology FM files in %s." % os.path.abspath(cache_dir))
-    stamps, values = [], []
-    for path in files:
-        with open(path, "r", errors="replace") as handle:
-            for line in handle:
-                match = ECOLOGY_ROW_DT.match(line)
-                if match:
-                    date, clock, value, _flag = match.groups()
-                    stamps.append("%s %s" % (date, clock))
-                    values.append(value)
-    frame = pd.DataFrame({"stamp": stamps, "value": values})
-    frame["stamp"] = pd.to_datetime(frame["stamp"], format="%m/%d/%Y %H:%M", errors="coerce")
-    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
-    frame = frame.dropna()
-    frame = frame[frame["value"] > -900.0]
-    frame = frame.drop_duplicates(subset="stamp").sort_values("stamp")
-    return pd.Series(frame["value"].to_numpy(), index=pd.DatetimeIndex(frame["stamp"]))
-
 
 def first_stamp(ts):
     first = next(iter(ts.times))
@@ -162,7 +145,7 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
     print("Reading series...")
-    cow = read_ecology_cache(CACHE_DIR)
+    cow, qual = read_ecology_cache(CACHE_DIR, label="Coweeman")
     unreg = read_dss_series(DSS_PATH, UNREG_PATHNAME)
     reg = read_dss_series(DSS_PATH, REG_PATHNAME)
     print("   Coweeman   : %d values, %s to %s" % (len(cow), cow.index.min().date(), cow.index.max().date()))
@@ -172,7 +155,7 @@ def main():
     first = max(cow.index.min(), unreg.index.min(), reg.index.min())
     last = min(cow.index.max(), unreg.index.max(), reg.index.max())
     grid = pd.date_range(first.ceil(RESAMPLE), last.floor(RESAMPLE), freq=RESAMPLE)
-    cow_h = cow.resample(RESAMPLE).mean().reindex(grid)
+    cow_h = resample_censor_aware(cow, qual, RESAMPLE).reindex(grid)
     unreg_h = unreg.resample(RESAMPLE).mean().reindex(grid)
     reg_h = reg.resample(RESAMPLE).mean().reindex(grid)
     print("   overlap    : %s to %s (%d hours)" % (first.date(), last.date(), len(grid)))

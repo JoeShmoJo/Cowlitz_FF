@@ -84,6 +84,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import sys
+REPO_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Modules"))
+# Parser shared with the other Coweeman scripts -- see Modules/ecology_io.py
+# for why it is not a local constant any more.
+from ecology_io import parse_ecology_text
+
 # ----------------------------------------------------------------------------
 # USER SETTINGS
 # ----------------------------------------------------------------------------
@@ -351,54 +359,21 @@ def fetch_usgs_iv(site, start, end):
 # directly instead, which also steps over the paragraph of instructions at the
 # top and the quality-code key at the bottom without needing to find where
 # either ends.
-ECOLOGY_ROW_DT = re.compile(
-    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2})\s+"
-    r"(-?[\d.]+)(?:\s+(\S+))?\s*$")
-ECOLOGY_ROW_D = re.compile(
-    r"^\s*(\d{1,2}/\d{1,2}/\d{4})\s+(-?[\d.]+)(?:\s+(\S+))?\s*$")
-
-
 def parse_ecology_columnar(text):
     """The documented Ecology layout: DATE [TIME] value [QUALITY].
 
-    Handles both the 15-minute file (FM, with a TIME column) and the mean-daily
-    one (DV, without). Returns (series, quality Series, spec) or (None, ...).
+    Delegates to Modules/ecology_io.parse_ecology_text, which handles both the
+    15-minute (FM) and mean-daily (DV) forms and -- critically -- treats a
+    BLANK value column as missing rather than reading the quality code that
+    sits alone on the line as a discharge. Returns (series, quality, spec) or
+    (None, None, None), the shape the caller below expects.
     """
-    stamps, values, quality = [], [], []
-    for line in text.splitlines():
-        match = ECOLOGY_ROW_DT.match(line)
-        if match:
-            date, clock, value, flag = match.groups()
-            stamps.append("%s %s" % (date, clock))
-        else:
-            match = ECOLOGY_ROW_D.match(line)
-            if not match:
-                continue
-            date, value, flag = match.groups()
-            stamps.append(date)
-        values.append(value)
-        quality.append(flag)
-    if len(values) < 2:
+    series, quality = parse_ecology_text(text)
+    if series is None:
         return None, None, None
-    # Carried as a frame so the flag stays with its value positionally. Aligning
-    # the two by reindexing on the timestamp raises the moment the file repeats
-    # one -- which a daily file does trivially, and any file can at a clock
-    # change or a re-issued row.
-    frame = pd.DataFrame({"stamp": stamps, "value": values, "flag": quality})
-    frame["stamp"] = pd.to_datetime(frame["stamp"], format="mixed",
-                                    errors="coerce")
-    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
-    frame = frame.dropna(subset=["stamp", "value"])
-    # Ecology writes missing record as a large negative rather than a blank.
-    frame = frame[frame["value"] > -900.0]
-    frame = frame.drop_duplicates(subset="stamp", keep="first")
-    frame = frame.sort_values("stamp")
-    index = pd.DatetimeIndex(frame["stamp"])
-    series = pd.Series(frame["value"].to_numpy(), index=index)
-    flags = pd.Series(frame["flag"].to_numpy(), index=index)
     spec = {"sep": "ecology-columnar", "date_col": "DATE",
             "time_col": "TIME", "flow_col": "Discharge (cfs)"}
-    return (series if len(series) else None), flags, spec
+    return (series if len(series) else None), quality, spec
 
 
 def sniff_ecology(text):
