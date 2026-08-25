@@ -1,0 +1,9 @@
+PRISM_DATASET_FILENAME: prism_ppt_us_25m_1953.bil
+PRISM_DATASET_CREATE_DATE: 20191017-0148
+PRISM_SOURCE_FILENAME: cai_ppt_us_us_30s_195301.bil, cai_ppt_us_us_30s_195302.bil, cai_ppt_us_us_30s_195303.bil, cai_ppt_us_us_30s_195304.bil, cai_ppt_us_us_30s_195305.bil, cai_ppt_us_us_30s_195306.bil, cai_ppt_us_us_30s_195307.bil, cai_ppt_us_us_30s_195308.bil, cai_ppt_us_us_30s_195309.bil, cai_ppt_us_us_30s_195310.bil, cai_ppt_us_us_30s_195311.bil, cai_ppt_us_us_30s_195312.bil
+PRISM_SOURCE_CREATE_DATE: 20130810-0348, 20130810-0348, 20130810-0348, 20130810-0348, 20130810-0348, 20130810-0348, 20130810-0349, 20130810-0349, 20130810-0349, 20130810-0349, 20130810-0349, 20130810-0349
+PRISM_DATASET_TYPE: an81/r1308
+PRISM_DATASET_VERSION: M2
+PRISM_CODE_VERSION: 13.1-20130717-1308
+PRISM_DATASET_RELEASE_NUMBER: 7
+PRISM_DATASET_REMARKS: This grid was developed in three steps: (1) precipitation data were modeled with PRISM at 30-arc-second (~800m) resolution to produce the source grid(s) listed under PRISM_SOURCE_FILENAME, on the date(s) listed under PRISM_SOURCE_CREATE_DATE; (2) These twelve monthly 800m grids were then upscaled to 2.5-arc-minute(~ 4km) resolution with a Gaussian filter; and (3) The resulting twelve monthly 4km grids were summed to obtain a 4km mean annual precipitation grid.

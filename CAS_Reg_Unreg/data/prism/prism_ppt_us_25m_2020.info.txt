@@ -1,0 +1,9 @@
+PRISM_DATASET_FILENAME: prism_ppt_us_25m_2020.bil
+PRISM_DATASET_CREATE_DATE: 20210614-0209
+PRISM_SOURCE_FILENAME: adj_best_ppt_us_us_30s_202001.bil, adj_best_ppt_us_us_30s_202002.bil, adj_best_ppt_us_us_30s_202003.bil, adj_best_ppt_us_us_30s_202004.bil, adj_best_ppt_us_us_30s_202005.bil, adj_best_ppt_us_us_30s_202006.bil, adj_best_ppt_us_us_30s_202007.bil, adj_best_ppt_us_us_30s_202008.bil, adj_best_ppt_us_us_30s_202009.bil, adj_best_ppt_us_us_30s_202010.bil, adj_best_ppt_us_us_30s_202011.bil, adj_best_ppt_us_us_30s_202012.bil
+PRISM_SOURCE_CREATE_DATE: 20200713-2140, 20200817-0653, 20200912-0347, 20201016-0158, 20201116-0147, 20201213-0131, 20210116-0414, 20210214-0345, 20210315-1340, 20210417-0610, 20210517-2255, 20210612-0517
+PRISM_DATASET_TYPE: an81/r1812
+PRISM_DATASET_VERSION: M3
+PRISM_CODE_VERSION: 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20200123-1742, 16.1-20210412-1020, 16.1-20210412-1020, 16.1-20210412-1020
+PRISM_DATASET_RELEASE_NUMBER: 7
+PRISM_DATASET_REMARKS: This grid was developed in three steps: (1) precipitation data were modeled with PRISM at 30-arc-second (~800m) resolution to produce the source grid(s) listed under PRISM_SOURCE_FILENAME, on the date(s) listed under PRISM_SOURCE_CREATE_DATE; (2) These twelve monthly 800m grids were then upscaled to 2.5-arc-minute(~ 4km) resolution with a Gaussian filter; and (3) The resulting twelve monthly 4km grids were summed to obtain a 4km mean annual precipitation grid.
