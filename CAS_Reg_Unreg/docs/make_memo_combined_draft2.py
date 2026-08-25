@@ -63,6 +63,7 @@ from _appendix_data import APPENDIX_A_ROWS, APPENDIX_B_ROWS, APPENDIX_D_ROWS
 
 TEMPLATE_DOCX = r"../../CAS_Unreg_FF/docs/MEMO_CAS_Unreg_FF_04Aug2026.docx"
 OUT_DOCX = r"MEMO_CAS_Combined_FlowFrequency_DRAFT2.docx"
+PRISM_CSV = r"../output/diagnostics/prism_basin_precip_ratio.csv"
 # Section 8 / Appendix F, from #BelowConfluence_FlowFrequency.py
 BELOW_CONF_CSV = r"../output/below_confluence_frequency.csv"
 
@@ -261,6 +262,7 @@ def main():
     reg = pd.read_csv(REG_FREQ_CSV)
     conf = pd.read_csv(BELOW_CONF_CSV).sort_values(
         "AEP", ascending=False)
+    prism = pd.read_csv(PRISM_CSV)
     if reg["freq_term_mode"].nunique() != 1:
         REVIEW_NOTES.append("regulated_frequency_inferred.csv mixes "
                             "freq_term_mode values -- Section 5.6 text "
@@ -994,10 +996,28 @@ def main():
               "sat at 1.04 times its area share. The shorter Ecology record "
               "at gage 26C075 (WY2007–2019) gives 1.11 times for its largest "
               "bin, and that figure is a lower bound because the gage's "
-              "rating ceiling censors precisely its largest events. Basin "
-              "mean precipitation from PRISM over the delineated boundaries "
-              "tests the equal-depth assumption the area ratio rests on "
-              "directly.")
+              "rating ceiling censors precisely its largest events.")
+    para(doc, "Basin mean precipitation tests the equal-depth assumption "
+              "the area ratio rests on directly. Over the %d years %d–%d, "
+              "PRISM annual precipitation averaged across the delineated "
+              "boundaries gives a Coweeman-to-Castle-Rock ratio of %.2f "
+              "(median %.2f, interquartile range %.2f–%.2f). The two "
+              "basins receive very nearly the same depth."
+              % (len(prism), int(prism["year"].min()), int(prism["year"].max()),
+                 prism["ratio"].mean(), prism["ratio"].median(),
+                 prism["ratio"].quantile(0.25), prism["ratio"].quantile(0.75)))
+    para(doc, "Read together these lines resolve into one consistent "
+              "picture. Precipitation is essentially equal per unit area, so "
+              "the Coweeman's excess at common events is a RESPONSE "
+              "difference — a small, low, steep basin concentrating runoff "
+              "faster than a 2,229 square mile mainstem — rather than a "
+              "precipitation difference. Response differences shrink as both "
+              "basins saturate, which is why the flow ratio falls toward "
+              "parity as events grow, and why at the largest event on record "
+              "it converges on very nearly the precipitation ratio itself. "
+              "A plain area ratio is therefore the right form at the "
+              "magnitudes this study is concerned with, even though it would "
+              "understate the tributary at ordinary flows.")
 
     h2(doc, "8.3 Timing Adjustment")
     para(doc, "The tributaries do not crest when the regulated Cowlitz "
