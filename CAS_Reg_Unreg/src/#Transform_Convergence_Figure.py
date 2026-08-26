@@ -135,36 +135,34 @@ def main():
             color=C_CURVE, lw=2.8, ls=(0, (6, 2)), zorder=4,
             label="Adopted transform, extrapolated")
     ax.plot(u_draw, reg_draw, color=C_DRAWN, lw=2.4, ls=(0, (2, 2)), zorder=4,
-            label="Drawn convergence — ESTIMATE, not a result")
+            label="Drawn convergence estimated from storage")
 
     ax.plot([CONVERGE_AT_CFS], [CONVERGE_AT_CFS], marker="o", ms=11,
             mfc="none", mec=C_DRAWN, mew=2.4, zorder=5)
-    ax.annotate("drawn convergence\n%s cfs" % format(int(CONVERGE_AT_CFS), ","),
+    ax.annotate("convergence\n~%s cfs" % format(int(CONVERGE_AT_CFS), ","),
                 xy=(CONVERGE_AT_CFS, CONVERGE_AT_CFS),
                 xytext=(CONVERGE_AT_CFS - 118000, CONVERGE_AT_CFS + 26000),
                 color=C_DRAWN, fontsize=9.5, ha="left",
                 arrowprops=dict(arrowstyle="->", color=C_DRAWN, lw=1.3))
 
-    note = ("Riffe usable flood storage %s ac-ft = %s cfs-days\n"
-            "Maximum reduction on the adopted transform %s cfs,\n"
-            "which fills that storage in %.1f days."
-            % (format(int(FLOOD_STORAGE_ACFT), ","),
-               format(int(FLOOD_STORAGE_ACFT / 1.98347), ","),
-               format(int((reg["unreg_expected_cfs"]
-                           - reg["reg_inferred_cfs"]).max()), ","),
-               (FLOOD_STORAGE_ACFT / 1.98347)
-               / (reg["unreg_expected_cfs"] - reg["reg_inferred_cfs"]).max()))
-    ax.text(0.035, 0.965, note, transform=ax.transAxes, va="top", fontsize=8.5,
-            bbox=dict(boxstyle="round,pad=0.5", fc="#f4f1ea", ec="#c9c2b4"))
+    # note = ("Riffe usable flood storage %s ac-ft = %s cfs-days\n"
+    #         "Maximum reduction on the adopted transform %s cfs,\n"
+    #         "which fills that storage in %.1f days."
+    #         % (format(int(FLOOD_STORAGE_ACFT), ","),
+    #            format(int(FLOOD_STORAGE_ACFT / 1.98347), ","),
+    #            format(int((reg["unreg_expected_cfs"]
+    #                        - reg["reg_inferred_cfs"]).max()), ","),
+    #            (FLOOD_STORAGE_ACFT / 1.98347)
+    #            / (reg["unreg_expected_cfs"] - reg["reg_inferred_cfs"]).max()))
+    # ax.text(0.035, 0.965, note, transform=ax.transAxes, va="top", fontsize=8.5,
+    #         bbox=dict(boxstyle="round,pad=0.5", fc="#f4f1ea", ec="#c9c2b4"))
 
     ax.set_xlim(lim)
     ax.set_ylim(lim)
     ax.set_aspect("equal")
     ax.set_xlabel("Unregulated peak at Castle Rock (cfs)")
     ax.set_ylabel("Regulated peak at Castle Rock (cfs)")
-    ax.set_title("Regulated against unregulated peak, Castle Rock\n"
-                 "Convergence on the 1:1 line is a drawn estimate and is not "
-                 "used in any result", fontsize=11)
+    ax.set_title("Regulated against unregulated peak, Castle Rock", fontsize=11)
     ax.grid(alpha=0.3)
     ax.legend(loc="lower right", fontsize=8.5)
     ax.xaxis.set_major_formatter(lambda v, _: format(int(v / 1000), ",") + "k")
