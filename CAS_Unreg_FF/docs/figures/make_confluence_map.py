@@ -14,16 +14,15 @@ WHAT IS DIFFERENT FROM THE ORIGINAL
     - the Cowlitz is navigated DOWNSTREAM from Castle Rock as well as up, so
       the mainstem reaches past all three local confluences
     - Arkansas Creek, Ostrander Creek and the Coweeman River are drawn and
-      labelled
-    - CLIP_TO_BASIN is OFF. It has to be: every feature this map adds lies
-      BELOW the Castle Rock gage and therefore outside the basin delineated
-      above it. Leaving the clip on silently deletes the entire point of this
-      figure.
-    - the Coweeman basin is drawn from the StreamStats delineation already in
-      the repo, the same polygon the Section 8 drainage areas came from
-    - the Castle Rock basin is drawn as before, so the map shows the 2,229
-      square miles above the gage and the 247 square miles of local area
-      added below it as two distinct things
+      labelled exactly like the Toutle and the Tilton: one colour, one
+      weight, names written along their own lines. On this map they are all
+      the same kind of feature.
+    - ONE watershed boundary, delineated just BELOW the Coweeman confluence
+      so it contains every creek drawn. The Castle Rock basin alone would
+      leave all three creeks outside the boundary, which reads as an error.
+    - CLIP_TO_BASIN is OFF. The clip is against the basin ABOVE the gage in
+      the original; here the added features are below it, and clipping would
+      silently delete the entire point of this figure.
 
 SEEDING THE UNGAGED CREEKS
     The original seeds every tributary from an NWIS gage. Arkansas and
@@ -45,10 +44,11 @@ SEEDING THE UNGAGED CREEKS
 
 LABELS ARE TIGHT DOWN HERE
     The three confluences are within about 20 km of river and the creeks are
-    short, so their labels crowd each other and the mainstem. Two things help,
-    both tunable per creek: label_frac slides a name along its own line, and
-    the offsets in LOCAL_LABEL_OFFSETS push a name off its line with a leader
-    drawn back to it. Expect to adjust these once against the real basemap.
+    short, so their names crowd each other and the mainstem. label_frac slides
+    a name along its own line and is the dial to turn; which END it counts
+    from is not predictable, because linemerge does not preserve direction, so
+    treat it as a dial rather than as "0 is the mouth". Expect to adjust the
+    three of them once against the real basemap.
 
 RUNNING IT
     Same environment as make_basin_map.py -- environment.yml beside this file.
@@ -157,23 +157,23 @@ LOCAL_TRIBUTARIES = [
     {"label": "Arkansas Creek", "seed": {"point": (46.2430, -122.8880)},
      "up_km": 40, "down_km": 12, "label_frac": 0.40},
 ]
-# Push a creek name off its line, with a leader drawn back, when writing it
-# along the line collides with something. Points, keyed by label. An entry of
-# None writes the label along the line as usual.
-LOCAL_LABEL_OFFSETS = {
-    "Coweeman River": None,
-    "Ostrander Creek": (34, -16),
-    "Arkansas Creek": (34, 16),
-}
+# The creeks are drawn and named exactly like the Toutle and the Tilton --
+# same colour, same weight, names written along their own lines. On this map
+# they are all the same kind of feature and styling them apart would imply a
+# distinction that is not there. Crowding is handled with label_frac, which
+# slides a name along its own line.
 
-# Basin polygons already in the repo, drawn in addition to the NLDI basin
-# above the gage. The Coweeman polygon is the StreamStats delineation the
-# Section 8 drainage areas were taken from, so the map and the numbers come
-# from the same geometry.
-EXTRA_BASINS = [
-    ("Coweeman River basin",
-     r"../../../CAS_Reg_Unreg/data/BasinDelinations/Coweeman_SHP/layers/globalwatershed.shp"),
-]
+# ONE watershed boundary: the Cowlitz basin, delineated at a point just BELOW
+# the Coweeman confluence so it contains every creek this map draws. The
+# Castle Rock basin alone would leave all three creeks outside the boundary,
+# which reads as an error even though it is technically correct.
+#
+# Approximate seed, snapped to the nearest flowline like the creeks. The run
+# prints the resulting area -- expect roughly 2,480 sq mi against the 2,476
+# Section 8 uses at the confluence. A wildly different number means the seed
+# landed on the wrong stream; nudge it and delete the cached basin.
+BASIN_SEED = {"point": (46.1300, -122.9080)}
+BASIN_EXPECT_SQ_MI = 2476.0
 
 # --- gages -------------------------------------------------------------------
 # (NWIS number, label, sublabel, label offset in points)
@@ -272,10 +272,7 @@ C_NET = "#8fbcdb"         # the rest of the network
 C_BASIN = "#22313f"       # basin outline
 C_GAGE = "#c0392b"        # gage markers
 C_DAM = "#2c3e50"         # dam markers
-C_LOCAL = "#b7410e"       # the three local creeks below the gage
-C_LOCAL_BASIN = "#7a3b12"  # Coweeman basin outline
 LW_MAIN, LW_TRIB, LW_NET = 3.2, 2.2, 0.7
-LW_LOCAL = 2.2
 BASIN_FILL_ALPHA = 0.07
 LABEL_HALO = 2.6          # white outline on text, so labels read over imagery
 # A label offset at least this far (in points) gets a leader line back to its
@@ -283,8 +280,7 @@ LABEL_HALO = 2.6          # white outline on text, so labels read over imagery
 LEADER_MIN_POINTS = 22.0
 TITLE = ("Lower Cowlitz River - Castle Rock gage to the Coweeman confluence")
 SUBTITLE = ("Flowlines: USGS NHDPlus via NLDI.  Gage locations: USGS NWIS.  "
-            "Basin above the gage: NLDI delineation at 14243000.  "
-            "Coweeman basin: StreamStats.")
+            "Basin: NLDI delineation below the Coweeman confluence.")
 SHOW_SCALEBAR = True
 SCALEBAR_KM = 20
 # Scale bar anchor as a fraction of the axes, from the lower left. Nudge it if
@@ -580,18 +576,35 @@ def fetch_local_tributary(trib, mainstem_comids):
     return frame
 
 
-def read_local_basin(path):
-    """A basin polygon already on disk, e.g. a StreamStats delineation."""
-    if not os.path.exists(path):
-        print("   %-22s not found: %s" % ("extra basin", path))
-        return None
-    frame = gpd.read_file(path)
-    if frame.crs is None:
-        frame = frame.set_crs(WGS84)
-    area = frame.to_crs("EPSG:5070").area.sum() / 2.589988e6
-    print("   %-22s %.1f sq mi from %s"
-          % ("extra basin", area, os.path.basename(path)))
-    return frame.to_crs(WGS84)
+def fetch_basin_seeded(name, seed, fallback_site):
+    """The one watershed boundary, delineated from a seed below the confluence.
+
+    Falls back to the gage's own basin if the seed will not resolve, so a bad
+    coordinate degrades to the Castle Rock boundary rather than to no boundary
+    at all. Either way the area is printed, which is the check that matters.
+    """
+    cached = read_cached_geojson(name)
+    if cached is None:
+        prefix, note = seed_path(seed)
+        data = nldi_get("%s/basin" % prefix, {"f": "json"}) if prefix else None
+        if not data:
+            print("   basin from seed UNAVAILABLE -- falling back to the "
+                  "basin above gage %s" % fallback_site)
+            return fetch_basin(name, fallback_site)
+        cached = gpd.GeoDataFrame.from_features(data["features"], crs=WGS84)
+        ensure_cache_dir()
+        cached.to_file(cache_path(name), driver="GeoJSON")
+        print("   %-22s fetched (seed %s)" % (name, note))
+    else:
+        print("   %-22s cached" % name)
+    try:
+        area = cached.to_crs("EPSG:5070").area.sum() / 2.589988e6
+        flag = ("" if abs(area - BASIN_EXPECT_SQ_MI) / BASIN_EXPECT_SQ_MI < 0.15
+                else "   <-- CHECK: expected about %.0f" % BASIN_EXPECT_SQ_MI)
+        print("   %-22s %.0f sq mi%s" % ("basin area", area, flag))
+    except Exception:                                     # noqa: BLE001
+        pass
+    return cached
 
 
 def fetch_basin(name, site):
@@ -812,7 +825,7 @@ def main():
 
     sites, used_fallback = fetch_sites([n for n, _, _, _ in GAGES])
 
-    basin = fetch_basin("basin.geojson", OUTLET_SITE)
+    basin = fetch_basin_seeded("basin.geojson", BASIN_SEED, OUTLET_SITE)
     network = fetch_flowlines("network_ut.geojson", OUTLET_SITE, "UT")
     mainstem = fetch_flowlines("cowlitz_um.geojson", OUTLET_SITE, "UM")
 
@@ -835,14 +848,12 @@ def main():
     local_trim = mainstem_comids | comid_set(downstream)
     locals_ = [(t, fetch_local_tributary(t, local_trim))
                for t in LOCAL_TRIBUTARIES]
-    extra_basins = [(nm, read_local_basin(pth)) for nm, pth in EXTRA_BASINS]
 
     # Include everything this map adds, or a run that fetched the creeks but
     # not the upstream basin would bail out with a map it could have drawn.
     if all(x is None for x in [basin, network, mainstem, downstream]
            + [f for _, f in tribs]
-           + [f for _, f in locals_]
-           + [f for _, f in extra_basins]):
+           + [f for _, f in locals_]):
         raise SystemExit(
             "No geometry was fetched and the cache is empty, so there is "
             "nothing to draw.\nCheck the network, then re-run. The gage "
@@ -855,7 +866,6 @@ def main():
     # NOT clipped -- these lie below the gage, outside the basin above it.
     downstream_w = to_web(downstream)
     locals_w = [(t, to_web(f)) for t, f in locals_]
-    extra_w = [(nm, to_web(f)) for nm, f in extra_basins]
 
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
@@ -863,8 +873,7 @@ def main():
     # The extent has to span the basin above the gage AND everything added
     # below it, or the whole reason for this map falls off the bottom edge.
     extent_parts = [f for f in ([basin_w, network_w, downstream_w]
-                                + [f for _, f in locals_w]
-                                + [f for _, f in extra_w])
+                                + [f for _, f in locals_w])
                     if f is not None and len(f)]
     if not extent_parts:
         raise SystemExit("nothing to set an extent from")
@@ -881,19 +890,14 @@ def main():
         basin_w.boundary.plot(ax=ax, color=C_BASIN, lw=1.6, ls="--", zorder=3)
     if network_w is not None:
         network_w.plot(ax=ax, color=C_NET, lw=LW_NET, zorder=4)
-    for name, frame in extra_w:
-        if frame is not None and len(frame):
-            frame.plot(ax=ax, facecolor=C_LOCAL_BASIN, alpha=BASIN_FILL_ALPHA,
-                       edgecolor="none", zorder=2)
-            frame.boundary.plot(ax=ax, color=C_LOCAL_BASIN, lw=1.4, ls=":",
-                                zorder=3)
     if mainstem_w is not None:
         mainstem_w.plot(ax=ax, color=C_MAIN, lw=LW_MAIN, zorder=6)
     if downstream_w is not None and len(downstream_w):
         downstream_w.plot(ax=ax, color=C_MAIN, lw=LW_MAIN, zorder=6)
+    # same style as the Toutle and the Tilton -- one kind of feature
     for _, frame in locals_w:
         if frame is not None and len(frame):
-            frame.plot(ax=ax, color=C_LOCAL, lw=LW_LOCAL, zorder=5)
+            frame.plot(ax=ax, color=C_TRIB, lw=LW_TRIB, zorder=5)
     # every named tributary in ONE style -- they are the same kind of thing on
     # this map, and colouring them differently would imply a distinction that
     # is not there
@@ -906,24 +910,8 @@ def main():
         label_along_line(ax, frame, trib["label"], trib.get("label_frac", 0.45),
                          C_TRIB)
     for trib, frame in locals_w:
-        if frame is None or not len(frame):
-            continue
-        offset = LOCAL_LABEL_OFFSETS.get(trib["label"])
-        if offset is None:
-            label_along_line(ax, frame, trib["label"],
-                             trib.get("label_frac", 0.45), C_LOCAL, size=9)
-        else:
-            # Crowded down here: write the name clear of the line and lead
-            # back to it rather than overprinting a neighbouring creek.
-            # Same strand label_along_line would have used, so the leader
-            # points at the river and not at some stray headwater reach.
-            line = longest_strand(frame)
-            if line is None:
-                continue
-            anchor = line.interpolate(trib.get("label_frac", 0.45),
-                                      normalized=True)
-            annotate_leader(ax, (anchor.x, anchor.y), trib["label"], offset,
-                            C_LOCAL, size=9)
+        label_along_line(ax, frame, trib["label"],
+                         trib.get("label_frac", 0.45), C_TRIB)
     if MAINSTEM_LABEL and mainstem_w is not None:
         label_along_line(ax, mainstem_w, MAINSTEM_LABEL, MAINSTEM_LABEL_FRAC,
                          C_MAIN, size=11)
