@@ -111,6 +111,9 @@ def main():
     # and the line does not break where the styling changes.
     extrap = reg[is_ex.shift(-1, fill_value=False) | is_ex]
 
+    # The event pairs are NOT plotted -- this figure is lines only. They are
+    # still read so the run prints the scatter that makes the convergence
+    # point a judgment rather than a fit; see the docstring.
     hist = pd.read_csv(HIST_CSV)
     if "screen_passed" in hist.columns:
         hist = hist[hist["screen_passed"].astype(bool)]
@@ -125,13 +128,6 @@ def main():
     lim = [0, AXIS_MAX_CFS]
     ax.plot(lim, lim, color=C_1TO1, lw=1.6, ls="--", zorder=1,
             label="1:1  (no regulation effect)")
-
-    ax.scatter(hist["unreg_ref"], hist["adjusted_peak"], s=42, color=C_HIST,
-               edgecolor="0.25", lw=0.5, alpha=0.9, zorder=3,
-               label="Adjusted historical peaks (n=%d)" % len(hist))
-    ax.scatter(synth["unreg_peak"], synth["reg_peak"], s=46, marker="^",
-               color=C_SYNTH, edgecolor="0.25", lw=0.5, alpha=0.9, zorder=3,
-               label="Synthetic ensemble members (n=%d)" % len(synth))
 
     ax.plot(real["unreg_expected_cfs"], real["reg_inferred_cfs"],
             color=C_CURVE, lw=2.8, zorder=4, label="Adopted transform")
@@ -179,6 +175,15 @@ def main():
     print("Wrote %s" % PLOT_PNG)
     print("   drawn convergence at %s cfs -- a judgment, one constant, "
           "used nowhere else" % format(int(CONVERGE_AT_CFS), ","))
+    top = synth[synth["unreg_peak"] >= 260000]
+    shave = top["unreg_peak"] - top["reg_peak"]
+    print("   lines only; %d historical and %d synthetic pairs read but not "
+          "plotted" % (len(hist), len(synth)))
+    print("   why it is drawn: %d synthetic members above 260,000 cfs "
+          "unregulated\n   span reductions of %s to %s cfs -- shape and "
+          "starting pool, not magnitude"
+          % (len(top), format(int(shave.min()), ","),
+             format(int(shave.max()), ",")))
 
 
 if __name__ == "__main__":

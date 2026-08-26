@@ -125,6 +125,29 @@ COLORS = ["#1a4f8a", "#4c8c4a", "#d99b30", "#b7410e"]
 # ----------------------------------------------------------------------------
 
 
+# Frequency plots use the standard-normal spacing of probability paper, but
+# neither axis is LABELLED in z -- the reader gets return interval below and
+# annual exceedance probability above, the same pair on the same positions.
+AEP_TICKS = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+
+
+def prob_axis(ax, label_bottom=True):
+    """Return interval on the bottom, AEP percent on top."""
+    zt = stats.norm.ppf(1 - np.array(AEP_TICKS))
+    ax.set_xticks(zt)
+    ax.set_xticklabels([("%g" % (1 / a) if 1 / a >= 2 else "%.2f" % (1 / a))
+                        for a in AEP_TICKS], rotation=45, fontsize=8)
+    if label_bottom:
+        ax.set_xlabel("Return interval (years)")
+    top = ax.twiny()
+    top.set_xlim(ax.get_xlim())
+    top.set_xticks(zt)
+    top.set_xticklabels(["%g" % (a * 100) for a in AEP_TICKS], rotation=45,
+                        fontsize=8)
+    top.set_xlabel("Annual exceedance probability (%)")
+    return top
+
+
 def local_fraction(site_da):
     """Incremental area as a fraction of the gage's own drainage area."""
     return (site_da - GAGE_DA) / GAGE_DA
@@ -236,9 +259,6 @@ def plot(out):
         ax.plot(z, out["%s_cfs" % key], color=color, lw=2.2,
                 label="%s  (%.0f sq mi)" % (name, site_da))
     ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
-    ax.text(stats.norm.ppf(1 - TARGET_AEP), 0.02, " 1,000-yr",
-            transform=ax.get_xaxis_transform(), rotation=90, va="bottom",
-            ha="right", fontsize=8, color="gray")
     ax.set_ylabel("Regulated peak flow (cfs)")
     ax.set_title("Regulated peak flow frequency, Castle Rock gage to the "
                  "Coweeman confluence\nLocal = incremental drainage area x "
@@ -247,12 +267,7 @@ def plot(out):
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper left", fontsize=8.5)
 
-    ticks = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
-    top = ax.twiny()
-    top.set_xlim(ax.get_xlim())
-    top.set_xticks(stats.norm.ppf(1 - np.array(ticks)))
-    top.set_xticklabels(["%g%%" % (a * 100) for a in ticks], rotation=45, fontsize=8)
-    top.set_xlabel("AEP")
+    prob_axis(ax, label_bottom=False)
 
     base = out["castle_rock_gage_cfs"].values
     for (name, _), color in list(zip(LOCATIONS, COLORS))[1:]:
@@ -260,7 +275,10 @@ def plot(out):
         axl.plot(z, 100 * (out["%s_cfs" % key].values - base) / base,
                  color=color, lw=2, label=name)
     axl.set_ylabel("increase over the gage (%)")
-    axl.set_xlabel("Standard normal variate  z = $\\Phi^{-1}$(1 − AEP)")
+    axl.set_xticks(stats.norm.ppf(1 - np.array(AEP_TICKS)))
+    axl.set_xticklabels([("%g" % (1 / a) if 1 / a >= 2 else "%.2f" % (1 / a))
+                         for a in AEP_TICKS], rotation=45, fontsize=8)
+    axl.set_xlabel("Return interval (years)")
     axl.grid(True, alpha=0.3)
     axl.legend(loc="upper right", fontsize=8.5)
 
@@ -287,10 +305,6 @@ def site_plot(out, name, site_da, color):
                 label="Unregulated")
     ax.plot(z, out["%s_cfs" % key], color=color, lw=2.6, label="Regulated")
     ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
-    ax.text(stats.norm.ppf(1 - TARGET_AEP), 0.02, " 1,000-yr",
-            transform=ax.get_xaxis_transform(), rotation=90, va="bottom",
-            ha="right", fontsize=8, color="gray")
-    ax.set_xlabel("Standard normal variate  z = $\\Phi^{-1}$(1 − AEP)")
     ax.set_ylabel("Peak flow (cfs)")
     sub = ("Regulated and unregulated peak flow frequency"
            if site_da == GAGE_DA else
@@ -300,13 +314,7 @@ def site_plot(out, name, site_da, color):
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper left", fontsize=9)
 
-    ticks = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
-    top = ax.twiny()
-    top.set_xlim(ax.get_xlim())
-    top.set_xticks(stats.norm.ppf(1 - np.array(ticks)))
-    top.set_xticklabels(["%g%%" % (a * 100) for a in ticks], rotation=45,
-                        fontsize=8)
-    top.set_xlabel("AEP")
+    prob_axis(ax)
 
     fig.tight_layout()
     path = SITE_PNG % key

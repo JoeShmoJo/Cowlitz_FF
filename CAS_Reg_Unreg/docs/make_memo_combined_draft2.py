@@ -89,6 +89,7 @@ FIG = {
     "freq_arkansas": r"figures_combined/freq_below_arkansas_creek.png",
     "freq_ostrander": r"figures_combined/freq_below_ostrander_creek.png",
     "freq_coweeman": r"figures_combined/freq_below_coweeman_river.png",
+    "convergence": r"figures_combined/transform_convergence.png",
 }
 FIG_WIDTH_IN = 6.5
 
@@ -1122,6 +1123,49 @@ def main():
            "Figure 8-4. Below Ostrander Creek, 2,335 square miles.")
     figure(doc, "freq_coweeman",
            "Figure 8-5. Below the Coweeman River, 2,476 square miles.")
+
+    h2(doc, "8.5 Behavior of the Transform at Extreme Flows")
+    para(doc, "A reservoir cannot remove volume from a flood, only move it "
+              "in time — at the 5-day duration the regulated to unregulated "
+              "ratio already exceeds one (Section 5.2). Riffe Lake holds "
+              "358,116 acre-feet between the winter rule curve at 745.5 "
+              "feet and full pool at 778.5 feet, which is 180,550 cfs-days. "
+              "Once an event's pre-crest inflow fills that, every further "
+              "cubic foot per second passes through and the regulated peak "
+              "equals the unregulated one.")
+    para(doc, "The adopted transform already shows this turning. Its "
+              "maximum reduction is 67,558 cfs near the 0.2 percent event "
+              "and it declines beyond that, because larger events fill the "
+              "pool sooner. That maximum is a check on itself: 180,550 "
+              "cfs-days divided by 67,558 cfs is 2.7 days, a plausible time "
+              "from flood onset to crest in this basin, so the turn in the "
+              "transform and the reservoir's storage volume corroborate one "
+              "another.")
+    figure(doc, "convergence",
+           "Figure 8-6. Regulated against unregulated peak at Castle Rock, "
+           "with the transform drawn converging on the 1:1 line. The "
+           "convergence limb is an ESTIMATE drawn for illustration. It is "
+           "not fitted, is used in no result in this memorandum, and does "
+           "not affect any value in Sections 8.1 through 8.4 or in the "
+           "appendices.")
+    para(doc, "The convergence point is drawn rather than fitted because "
+              "fitting does not survive the data. The 48 synthetic members "
+              "cluster between 265,000 and 280,000 cfs unregulated, and "
+              "their reductions there span 1,869 to 99,478 cfs — the "
+              "December 1933 member passes 99 percent of its inflow while "
+              "the December 2015 member, at almost the same magnitude, is "
+              "still holding back 98,000 cfs. Convergence depends on "
+              "hydrograph shape and starting pool, not on peak magnitude "
+              "alone, so a regression through those points is not "
+              "meaningful: fitting all 48 places the crossing at 931,600 "
+              "cfs and fitting the largest twelve places it at 259,600. The "
+              "value shown, 500,000 cfs, is consistent with the adopted "
+              "transform's own declining reduction, which extrapolates to "
+              "zero near 480,000 to 500,000 cfs. It lies beyond the "
+              "10,000-year unregulated event of 374,643 cfs and therefore "
+              "outside the range of every result presented here. Settling "
+              "it as a number rather than a drawing would require scaling "
+              "additional events through the reservoir model.")
     para(doc, "The confidence band shown at each downstream location is "
               "the Castle Rock regulated band of Section 5.6, carried "
               "forward and translated by that site's local contribution. No "
