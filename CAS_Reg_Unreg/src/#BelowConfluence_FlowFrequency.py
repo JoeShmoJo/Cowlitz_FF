@@ -100,6 +100,8 @@ import matplotlib.pyplot as plt
 REG_CSV = r"../output/regulated_frequency_inferred.csv"
 OUT_CSV = r"../output/below_confluence_frequency.csv"
 PLOT_PNG = r"../output/diagnostics/below_confluence_frequency.png"
+# One figure per site for the memo, keyed by the same names as LOCATIONS.
+SITE_PNG = r"../output/diagnostics/freq_%s.png"
 
 GAGE_DA = 2229.0                 # Cowlitz at the Castle Rock gage, sq mi
 
@@ -139,15 +141,15 @@ def build(reg):
         local = reg["unreg_computed_cfs"].values * frac * LAG_FACTOR
         out["%s_local_cfs" % key] = local
         out["%s_cfs" % key] = reg["reg_inferred_cfs"].values + local
-        # Band: the regulated bound plus the local computed from the
-        # CORRESPONDING unregulated bound, so one hydrologic state drives both
-        # terms rather than pairing a low mainstem with a high tributary.
-        out["%s_lower_cfs" % key] = (reg["reg_lower_95pct_cfs"].values
-                                     + reg["unreg_lower_95pct_cfs"].values
-                                     * frac * LAG_FACTOR)
-        out["%s_upper_cfs" % key] = (reg["reg_upper_95pct_cfs"].values
-                                     + reg["unreg_upper_95pct_cfs"].values
-                                     * frac * LAG_FACTOR)
+        # Band: the Castle Rock regulated band, translated by the local
+        # contribution. The local term carries uncertainty of its own, but it
+        # is a few percent of a quantity whose own 95% band is already wider
+        # than the flow itself -- adding it would not be visible on the plot
+        # and would imply a precision this method does not have. What is
+        # shown is therefore the GAGE's uncertainty carried downstream, and
+        # the memo says so.
+        out["%s_lower_cfs" % key] = reg["reg_lower_95pct_cfs"].values + local
+        out["%s_upper_cfs" % key] = reg["reg_upper_95pct_cfs"].values + local
     return out
 
 
@@ -268,12 +270,83 @@ def plot(out):
     print("\nWrote", PLOT_PNG)
 
 
+def site_plot(out, name, site_da, color):
+    """One site, one figure. Castle Rock also carries the unregulated curve
+    because that is the pair the reader needs there; downstream the
+    unregulated curve is an input to the local term, not a result, so it
+    would only invite the wrong comparison."""
+    key = name.lower().replace(" ", "_")
+    z = stats.norm.ppf(1 - out["AEP"].values)
+    fig, ax = plt.subplots(figsize=(9, 6.4))
+    ax.set_yscale("log")        # before any annotation -- see plot()
+    ax.fill_between(z, out["%s_lower_cfs" % key], out["%s_upper_cfs" % key],
+                    color=color, alpha=0.14,
+                    label="95% confidence band")
+    if site_da == GAGE_DA:
+        ax.plot(z, out["cowlitz_unreg_cfs"], color="#7aa9d0", lw=2, ls="--",
+                label="Unregulated")
+    ax.plot(z, out["%s_cfs" % key], color=color, lw=2.6, label="Regulated")
+    ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
+    ax.text(stats.norm.ppf(1 - TARGET_AEP), 0.02, " 1,000-yr",
+            transform=ax.get_xaxis_transform(), rotation=90, va="bottom",
+            ha="right", fontsize=8, color="gray")
+    ax.set_xlabel("Standard normal variate  z = $\\Phi^{-1}$(1 − AEP)")
+    ax.set_ylabel("Peak flow (cfs)")
+    sub = ("Regulated and unregulated peak flow frequency"
+           if site_da == GAGE_DA else
+           "Regulated peak flow frequency, Castle Rock uncertainty carried "
+           "forward")
+    ax.set_title("%s  (%.0f sq mi)\n%s" % (name, site_da, sub), fontsize=11)
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(loc="upper left", fontsize=9)
+
+    ticks = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+    top = ax.twiny()
+    top.set_xlim(ax.get_xlim())
+    top.set_xticks(stats.norm.ppf(1 - np.array(ticks)))
+    top.set_xticklabels(["%g%%" % (a * 100) for a in ticks], rotation=45,
+                        fontsize=8)
+    top.set_xlabel("AEP")
+
+    fig.tight_layout()
+    path = SITE_PNG % key
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def write_site_tables(out):
+    """One CSV per site: the table that goes in the memo, nothing else."""
+    paths = []
+    for name, _ in LOCATIONS:
+        key = name.lower().replace(" ", "_")
+        frame = pd.DataFrame({
+            "AEP": out["AEP"],
+            "regulated_cfs": out["%s_cfs" % key].round(0),
+            "lower_95pct_cfs": out["%s_lower_cfs" % key].round(0),
+            "upper_95pct_cfs": out["%s_upper_cfs" % key].round(0),
+        })
+        if key == "castle_rock_gage":
+            frame.insert(1, "unregulated_cfs",
+                         out["cowlitz_unreg_cfs"].round(0))
+        else:
+            frame.insert(1, "local_cfs", out["%s_local_cfs" % key].round(0))
+        path = r"../output/freq_table_%s.csv" % key
+        frame.to_csv(path, index=False)
+        paths.append(path)
+    return paths
+
+
 def main():
     reg = pd.read_csv(REG_CSV).sort_values("AEP", ascending=False).reset_index(drop=True)
     out = build(reg)
     out.to_csv(OUT_CSV, index=False)
     report(out)
     plot(out)
+    for (name, site_da), color in zip(LOCATIONS, COLORS):
+        print("Wrote", site_plot(out, name, site_da, color))
+    for path in write_site_tables(out):
+        print("Wrote", path)
     print("Wrote", OUT_CSV)
 
 

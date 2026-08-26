@@ -85,6 +85,10 @@ FIG = {
     "curve_3day": r"figures_combined/unreg_curve_3day.png",
     "curve_5day": r"figures_combined/unreg_curve_5day.png",
     "below_conf": r"figures_combined/below_confluence_frequency.png",
+    "freq_gage": r"figures_combined/freq_castle_rock_gage.png",
+    "freq_arkansas": r"figures_combined/freq_below_arkansas_creek.png",
+    "freq_ostrander": r"figures_combined/freq_below_ostrander_creek.png",
+    "freq_coweeman": r"figures_combined/freq_below_coweeman_river.png",
 }
 FIG_WIDTH_IN = 6.5
 
@@ -308,6 +312,12 @@ def main():
               "The regulated curve, with its uncertainty, supports levee "
               "fragility assessment and floodplain mapping in the lower "
               "Cowlitz valley.")
+    para(doc, "Section 8 carries the regulated curve downstream from the "
+              "gage to three additional locations — below Arkansas Creek, "
+              "below Ostrander Creek, and below the Coweeman River — by "
+              "adding the contribution of the intervening local drainage. "
+              "Those four locations are the deliverable; no analysis below "
+              "the Coweeman confluence is included.")
     para(doc, "Neither curve can be produced by fitting the observed record "
               "directly. Regulated peaks are not a homogeneous sample — "
               "operating rules and starting-pool practice have changed since "
@@ -971,6 +981,13 @@ def main():
               "carried and could not defend.")
 
     h2(doc, "8.2 Local Contribution by Drainage Area")
+    para(doc, "Drainage areas here are taken from the StreamStats "
+              "delineations prepared for this analysis, which give 2,229 "
+              "square miles at the Castle Rock gage. Section 2 cites 2,238 "
+              "square miles from the earlier memoranda. The two differ by "
+              "0.4 percent and the difference is immaterial to a ratio, but "
+              "the delineated value is used throughout this section so that "
+              "every area in it comes from one consistent source.")
     para(doc, "Each site uses the full incremental area between it and the "
               "gage, not the named tributary basin alone. The difference is "
               "ungaged local drainage along both banks, which contributes "
@@ -1087,18 +1104,33 @@ def main():
               "hold back a rare inflow, while the local term grows only with "
               "the flatter unregulated curve.")
     figure(doc, "below_conf",
-           "Figure 8-1. Regulated peak flow frequency from the Castle Rock "
-           "gage to the Coweeman confluence. The local contribution at each "
-           "site is the incremental drainage area scaled off the "
-           "unregulated curve and reduced by the 0.80 timing factor. The "
-           "band is the 95 percent confidence interval below the Coweeman "
-           "confluence, carried from Section 5.6. The lower panel gives "
-           "each site as a percentage increase over the gage.")
-    para(doc, "Confidence limits are carried through by combining each "
-              "regulated bound with the local term computed from the "
-              "corresponding unregulated bound, so that a single hydrologic "
-              "state drives both parts of the sum rather than pairing a low "
-              "mainstem with a high tributary. The resulting band below the "
+           "Figure 8-1. Regulated peak flow frequency at all four "
+           "locations. The local contribution at each site is the "
+           "incremental drainage area scaled off the unregulated curve and "
+           "reduced by the 0.80 timing factor. The lower panel gives each "
+           "site as a percentage increase over the gage.")
+    figure(doc, "freq_gage",
+           "Figure 8-2. Castle Rock gage, 2,229 square miles: the "
+           "unregulated and regulated curves of Sections 4 and 5, with the "
+           "regulated 95 percent confidence band from Section 5.6. This is "
+           "the pair every downstream location is built from — the "
+           "regulated curve sets the base and the unregulated curve drives "
+           "the local contribution.")
+    figure(doc, "freq_arkansas",
+           "Figure 8-3. Below Arkansas Creek, 2,278 square miles.")
+    figure(doc, "freq_ostrander",
+           "Figure 8-4. Below Ostrander Creek, 2,335 square miles.")
+    figure(doc, "freq_coweeman",
+           "Figure 8-5. Below the Coweeman River, 2,476 square miles.")
+    para(doc, "The confidence band shown at each downstream location is "
+              "the Castle Rock regulated band of Section 5.6, carried "
+              "forward and translated by that site's local contribution. No "
+              "additional uncertainty is added for the local term itself. "
+              "That term carries real uncertainty, but it is a few percent "
+              "of a quantity whose own band is already wider than the flow "
+              "it brackets, so adding it would not be visible on these "
+              "figures and would imply a precision this method does not "
+              "have. The band below the "
               "Coweeman confluence spans %s to %s cfs at the "
               "1,000-year event. The choice of timing factor is small "
               % (fmt(tgt["below_coweeman_river_lower_cfs"]),
@@ -1107,25 +1139,6 @@ def main():
               "7.2 percent, about 6 percent of the width of the confidence "
               "band.")
 
-    h2(doc, "8.5 Extension to the Columbia River Confluence")
-    run = para(doc, "[TO BE COMPLETED]").runs[0]
-    run.bold = True
-    run.font.color.rgb = RGBColor(0xC0, 0x39, 0x2D)
-    para(doc, "Carrying the curve below the Coweeman confluence to the "
-              "Columbia River requires a coincident frequency analysis "
-              "against Columbia River stage, which is a different problem "
-              "from the one solved above: the Columbia is not a tributary "
-              "scaling with Cowlitz hydrology but an independent system "
-              "whose stage governs the downstream boundary. That analysis "
-              "will be documented here and will cover the assumed "
-              "dependence between Cowlitz and Columbia flooding, the "
-              "resulting regulated frequency estimates at the locations "
-              "required for levee analysis, and how the Section 5.6 "
-              "uncertainty is carried through that combination.")
-
-    # ============================================================
-    # APPENDICES
-    # ============================================================
     h1(doc, "Appendix A. Assembled Unregulated Record by Water Year")
     para(doc, "Flows are in cubic feet per second. Source abbreviations: "
               "USGS peak, the observed instantaneous annual peak; USGS "
@@ -1202,35 +1215,39 @@ def main():
     caption(doc, "Table E-1. Regulated frequency curve ordinates and "
                 "uncertainty terms.")
 
-    h1(doc, "Appendix F. Regulated Frequency Ordinates from the Castle "
-            "Rock Gage to the Coweeman Confluence")
-    para(doc, "Regulated peak flows at the four locations of Section 8, "
-              "with the local contribution shown separately and the 95 "
-              "percent confidence limits below the Coweeman confluence. "
-              "Local contributions are the incremental drainage area scaled "
-              "off the unregulated curve and reduced by the 0.80 timing "
-              "factor. Flows are in cubic feet per second.")
-    f_rows = []
-    for _, r in conf.iterrows():
-        f_rows.append([
-            "%.4f" % r["AEP"],
-            fmt(r["cowlitz_unreg_cfs"]),
-            fmt(r["castle_rock_gage_cfs"]),
-            fmt(r["below_arkansas_creek_cfs"]),
-            fmt(r["below_ostrander_creek_cfs"]),
-            fmt(r["below_coweeman_river_local_cfs"]),
-            fmt(r["below_coweeman_river_cfs"]),
-            fmt(r["below_coweeman_river_lower_cfs"]),
-            fmt(r["below_coweeman_river_upper_cfs"]),
-        ])
-    table(doc, ["AEP", "Unreg.", "At gage", "< Arkansas", "< Ostrander",
-               "Coweeman local", "< Coweeman", "Lower 95%", "Upper 95%"],
-        f_rows,
-        widths=[880, 1080, 1080, 1080, 1120, 1240, 1120, 1080, 1080],
-        align_right=(0, 1, 2, 3, 4, 5, 6, 7, 8))
-    caption(doc, "Table F-1. Regulated frequency ordinates below the Castle "
-                "Rock gage. The unregulated column is shown because it, not "
-                "the regulated column, drives every local contribution.")
+    h1(doc, "Appendix F. Regulated Frequency Ordinates by Location")
+    para(doc, "Regulated peak flow at each of the four locations of Section "
+              "8, with 95 percent confidence limits. Flows are in cubic "
+              "feet per second. At the gage the unregulated curve is shown "
+              "alongside; downstream, the local contribution is shown, "
+              "being the incremental drainage area scaled off the "
+              "unregulated curve and reduced by the 0.80 timing factor. "
+              "Confidence limits at the three downstream locations are the "
+              "gage's own, translated by the local contribution — see "
+              "Section 8.4.")
+
+    site_tables = [
+        ("Castle Rock gage", 2229, "castle_rock_gage", "Unregulated",
+         "cowlitz_unreg_cfs"),
+        ("Below Arkansas Creek", 2278, "below_arkansas_creek", "Local",
+         "below_arkansas_creek_local_cfs"),
+        ("Below Ostrander Creek", 2335, "below_ostrander_creek", "Local",
+         "below_ostrander_creek_local_cfs"),
+        ("Below Coweeman River", 2476, "below_coweeman_river", "Local",
+         "below_coweeman_river_local_cfs"),
+    ]
+    for n, (label, area, key, second, second_col) in enumerate(site_tables, start=1):
+        rows = []
+        for _, r in conf.iterrows():
+            rows.append(["%.4f" % r["AEP"],
+                         fmt(r[second_col]),
+                         fmt(r["%s_cfs" % key]),
+                         fmt(r["%s_lower_cfs" % key]),
+                         fmt(r["%s_upper_cfs" % key])])
+        table(doc, ["AEP", second, "Regulated", "Lower 95%", "Upper 95%"],
+              rows, widths=[1400, 1800, 1800, 1800, 1800],
+              align_right=(0, 1, 2, 3, 4))
+        caption(doc, "Table F-%d. %s, %s square miles." % (n, label, "{:,}".format(area)))
 
     # ============================================================
     # REFERENCES
