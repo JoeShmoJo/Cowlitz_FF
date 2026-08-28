@@ -85,6 +85,22 @@ flowchart TD
         H5 --> H6["#Unreg_Reg_Curve.py again<br/>with synthetics on the plot"]
     end
 
+    subgraph SH["Stage H — downstream to the Coweeman confluence (CAS_Reg_Unreg)"]
+        I1["#Coweeman_Timing.py<br/>downloads + caches Ecology 26C075,<br/>USGS peaks 14245000"] --> I2[("data/coweeman/*")]
+        I2 --> I3["#Coweeman_Proportion.py"]
+        I2 --> I4["#Coweeman_RegPeak_Timing.py"]
+        I2 --> I5["#Coweeman_LagFactor_Evidence.py<br/>evidence for the 0.80 factor"]
+        I2 --> I6["#Coweeman_HistoricPeakRatio.py<br/>USGS WY1950-1996, no rating ceiling"]
+        I7["MANUAL: StreamStats delineations<br/>+ PRISM grids"] --> I8["#Coweeman_PRISM_PrecipRatio.py<br/>runs locally, needs network"]
+        I5 --> I9["#BelowConfluence_FlowFrequency.py<br/>DA ratio x unreg curve x 0.80"]
+        I6 --> I9
+        I8 --> I9
+        I9 --> I10[("below_confluence_frequency.csv<br/>freq_table_*.csv, freq_*.png")]
+        I10 --> I11["make_memo_draft2_section8.py<br/>Section 8 into a COPY of the edited docx"]
+        J1["#Transform_Convergence_Figure.py<br/>drawn 1:1 convergence, figure only"] --> I11
+        I12["make_confluence_map.py<br/>figure only, own conda env"] --> I11
+    end
+
     A2 --> B1
     A2 --> C1
     C3 --> D1
@@ -99,15 +115,20 @@ flowchart TD
     B6 --> G4
     B9 --> G5
     G3 --> H5
+    C3 --> I3
+    D7 --> I4
+    G6 --> I9
+    H4 --> J1
+    G6 --> J1
 
     classDef ressim fill:#fdebd0,stroke:#b9770e,stroke-width:2px;
     classDef check fill:#d5f5e3,stroke:#1e8449,stroke-width:2px;
     classDef store fill:#eaf2f8,stroke:#2874a6;
     classDef manual fill:#fadbd8,stroke:#943126,stroke-width:2px;
     class B7,D3,E3,F1,H3 ressim;
-    class A0,H2b manual;
+    class A0,H2b,I7 manual;
     class D5,G2 check;
-    class A2,B6,B9,C3,D2,D7,E2,E6,F2,G3,G6,H2 store;
+    class A2,B6,B9,C3,D2,D7,E2,E6,F2,G3,G6,H2,I2,I10 store;
 ```
 
 ---
@@ -145,13 +166,29 @@ flowchart TD
 | 24 | `#Extract_Ensemble_To_Timeseries.py` `SET_NAME="ResSim_Synth"` | CAS_Reg_Unreg | `simulation.dss` + mapping | `ResSim_Synth.dss` | Synthetic years are 1801+; round-trip check is off. |
 | 25 | `#Synthetic_Diagnostics.py` | CAS_Reg_Unreg | `ResSim_Synth.dss`, step 20 | `synthetic_results.csv` | Verify scaled peaks hit their targets. |
 | 26 | `#Unreg_Reg_Curve.py` again | CAS_Reg_Unreg | + synthetics | updated curve | Upper end is unconstrained without them. |
+| 27 | `#Coweeman_Timing.py` | CAS_Reg_Unreg | NWIS, WA Ecology | `data/coweeman/*` | Caches Ecology 26C075 and the USGS peak records. Needs network; everything in Stage H reads the cache afterwards. |
+| 28 | `#Coweeman_Proportion.py`, `#Coweeman_RegPeak_Timing.py`, `#Coweeman_LagFactor_Evidence.py`, `#Coweeman_HistoricPeakRatio.py` | CAS_Reg_Unreg | cache + `ResSim_WCM_RC.dss` | diagnostics CSV/PNG | Evidence for the two Section 8 constants. None of them writes a result the curve reads — they are what justifies the numbers typed into step 30. |
+| 29 | `#Coweeman_PRISM_PrecipRatio.py` | CAS_Reg_Unreg | StreamStats polygons + PRISM grids | `prism_basin_precip_ratio.csv/.png` | Tests the equal-depth assumption the drainage-area ratio rests on. Runs locally only. |
+| 30 | `#BelowConfluence_FlowFrequency.py` | CAS_Reg_Unreg | `regulated_frequency_inferred.csv` | `below_confluence_frequency.csv`, `freq_table_*.csv`, `freq_*.png` | **The Section 8 deliverable.** Four locations, gage to the Coweeman confluence. Drainage areas and the 0.80 lag factor are constants at the top. |
+| 31 | `#Transform_Convergence_Figure.py` | CAS_Reg_Unreg | `regulated_frequency_inferred.csv`, event pairs | `transform_convergence.png` | Figure only. The convergence point is drawn, not fitted, and feeds nothing. |
+| 32 | `make_confluence_map.py` | CAS_Unreg_FF/docs/figures | NLDI / NWIS | `confluence_map.png` | Figure only. Own conda env (`environment.yml`); separate cache from `make_basin_map.py`. |
+| 33 | `make_memo_draft2_section8.py` | CAS_Reg_Unreg/docs | edited `..._DRAFT.docx`, step 30 | `..._DRAFT2.docx` | Copies the hand-edited draft and inserts Section 8 + Appendix F. **Never regenerates** — see the note below. |
 
 Side branches, not in the main chain: `MOS_STOR_RECORD_COUNT.py`,
 `2009_Compare.py`, `PeakRegressionUncertainty.py` (CAS_Unreg_FF QC);
 `#MOS_CDB_INFLOW.py`, `#MOS_Special_Release_MinFloodPool.py`,
 `Critical_Duration_Correlation.py` (superseded by
 `#Critical_Duration_Adjusted.py`), `#Create_Ensembles.py` +
-`#ExtractResSimEnsembleResults.py` (the older Unreg_2009_2025 path).
+`#ExtractResSimEnsembleResults.py` (the older Unreg_2009_2025 path);
+`#Coweeman_Event_Plotly.py` (interactive event viewer, HTML only).
+
+**Superseded coincident-frequency scripts**, kept for the record because they
+are the alternatives Section 8 was compared against, not because anything
+runs them: `#Coweeman_FlowFrequency.py` (a Coweeman curve of its own),
+`#Coincident_PerfectCorrelation.py`, `#Coincident_CorrConditioned.py`,
+`#Coincident_TieredScaling.py`, `#EFLewis_Analog_Check.py`. All of them
+assume the tributary is at its own AEP when the Cowlitz is at its AEP. The
+adopted method does not, so none of them feeds the deliverable.
 
 ---
 
@@ -195,6 +232,28 @@ anything not eligible, so a stale dataset CSV cannot put a screened year back on
 the scatter or the frequency plot. Every omission is listed with its reason in
 `adjusted_peaks_screened_out.csv`; the SSP CSV and the DSS record carry eligible
 years only.
+
+---
+
+## The memo copy that must not be regenerated (step 33)
+
+`make_memo_draft2_section8.py` COPIES `MEMO_CAS_Combined_FlowFrequency_DRAFT.docx`
+and edits the copy. It does not run the generator.
+
+That distinction cost 34 paragraphs once. The first attempt copied
+`make_memo_combined.py` and re-ran it, which rebuilds the document from source
+and therefore discarded every hand edit made to the `.docx` since it was last
+generated — a rewritten Purpose and substantial edits through Sections 2 and 4.
+
+Two consequences:
+
+- **Prose edits belong in `..._DRAFT.docx`**, the hand-edited draft. It is the
+  source of truth for everything outside Section 8.
+- **`..._DRAFT2.docx` is recreated on every run**, so anything hand-edited
+  there is lost. Once DRAFT2 is under review, stop running the script.
+
+`make_memo_combined.py` still exists and still regenerates DRAFT from source.
+Do not run it against a draft that has been edited.
 
 ---
 
@@ -276,3 +335,6 @@ it.
 | Rule curve anchors | steps 10 and 13 (anchors are duplicated in three scripts) |
 | Synthetic targets or shapes | step 22 — **then redo the hand-chop at 22b**, which step 22 has just overwritten |
 | SSP analysis settings | step 6, then step 21 |
+| Regulated curve (step 21 or 26 re-run) | step 30, then 31 and 33 — Section 8 is built on `regulated_frequency_inferred.csv` |
+| Drainage areas or the 0.80 lag factor | step 30, then 33 (constants at the top of `#BelowConfluence_FlowFrequency.py`) |
+| Prose anywhere outside Section 8 | edit `..._DRAFT.docx`, then re-run step 33 |
