@@ -165,9 +165,11 @@ year close. Memo final in CAS_Unreg_FF/docs.
 6. Upload the hand-chopped `ensemble_synthetic.dss` to close the
    provenance gap in RUN_ORDER.md (results are post-chop, the committed
    ensemble is not).
-7. Confluence map: verify the three approximate seed coordinates and the
-   delineated basin area on a machine with NLDI reachable, then tune
-   `label_frac` for the three creek names.
+7. ~~Confluence map seed verification~~ DONE 28 Aug. All three creek
+   seeds resolved to the correct streams and the delineated basin came
+   back 2,495 sq mi against an expected 2,476 (0.8%). Cache is committed
+   under `CAS_Unreg_FF/docs/figures/mapdata_confluence/`, so the map now
+   redraws with no network.
 8. Section 2 of the combined memo cites 2,238 sq mi above Castle Rock;
    Section 8 and the StreamStats delineation use 2,229. Reconciled in
    text, not in the numbers.
