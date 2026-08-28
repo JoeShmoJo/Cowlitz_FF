@@ -103,16 +103,16 @@ PLOT_PNG = r"../output/diagnostics/below_confluence_frequency.png"
 # One figure per site for the memo, keyed by the same names as LOCATIONS.
 SITE_PNG = r"../output/diagnostics/freq_%s.png"
 
-GAGE_DA = 2229.0                 # Cowlitz at the Castle Rock gage, sq mi
+GAGE_DA = 2238.0                 # Cowlitz at the Castle Rock gage, sq mi
 
 # Ordered downstream. Each entry is the TOTAL drainage area at that point;
 # the local term is the difference from GAGE_DA, so the areas do the work and
 # no tributary basin is named twice.
 LOCATIONS = [
-    ("Castle Rock gage",      2229.0),
-    ("Below Arkansas Creek",  2278.0),
-    ("Below Ostrander Creek", 2335.0),
-    ("Below Coweeman River",  2476.0),
+    ("Castle Rock gage",      2238.0),
+    ("below Arkansas Creek",  2278.0),
+    ("below Ostrander Creek", 2335.0),
+    ("below Coweeman River",  2476.0),
 ]
 
 LAG_FACTOR = 0.80                # flat. See WHY LAG_FACTOR = 0.80 above.
@@ -193,7 +193,7 @@ def report(out):
     print("=" * 78)
     head = "%8s %11s" % ("AEP", "CAS unreg")
     for name, _ in LOCATIONS:
-        head += " %14s" % name.replace("Below ", "< ")[:14]
+        head += " %14s" % name.replace("below ", "< ")[:14]
     print(head)
     for _, r in out.iterrows():
         line = "%8.4f %11s" % (r["AEP"], format(int(r["cowlitz_unreg_cfs"]), ","))
@@ -306,11 +306,10 @@ def site_plot(out, name, site_da, color):
     ax.plot(z, out["%s_cfs" % key], color=color, lw=2.6, label="Regulated")
     ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
     ax.set_ylabel("Peak flow (cfs)")
-    sub = ("Regulated and unregulated peak flow frequency"
+    sub = ("Cowlitz at Castle Rock: Regulated and unregulated peak flow frequency"
            if site_da == GAGE_DA else
-           "Regulated peak flow frequency, Castle Rock uncertainty carried "
-           "forward")
-    ax.set_title("%s  (%.0f sq mi)\n%s" % (name, site_da, sub), fontsize=11)
+           "Cowlitz %s regulated peak flow frequency" % name)
+    ax.set_title(sub)
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper left", fontsize=9)
 
