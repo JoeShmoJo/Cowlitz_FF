@@ -128,15 +128,25 @@ COLORS = ["#1a4f8a", "#4c8c4a", "#d99b30", "#b7410e"]
 # Frequency plots use the standard-normal spacing of probability paper, but
 # neither axis is LABELLED in z -- the reader gets return interval below and
 # annual exceedance probability above, the same pair on the same positions.
-AEP_TICKS = [0.99, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+AEP_TICKS = [0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01,
+             0.005, 0.002, 0.001]
+# Fixed to the Section 5 figures so the two sets of curves read the same way
+# -- DQC comment on Figure 8-1.
+AEP_LIMITS = (0.99, 0.001)
+MIN_LABELLED_RETURN_INTERVAL = 2.0
+FLOW_LIMITS = (10000.0, 400000.0)
 
 
 def prob_axis(ax, label_bottom=True):
-    """Return interval on the bottom, AEP percent on top."""
+    """Return interval on the bottom, AEP percent on top.
+
+    Return intervals shorter than two years are left unlabelled -- they are
+    not conventionally shown and they crowd the left end of the axis.
+    """
     zt = stats.norm.ppf(1 - np.array(AEP_TICKS))
-    ax.set_xticks(zt)
-    ax.set_xticklabels([("%g" % (1 / a) if 1 / a >= 2 else "%.2f" % (1 / a))
-                        for a in AEP_TICKS], rotation=45, fontsize=8)
+    ri = [a for a in AEP_TICKS if 1 / a >= MIN_LABELLED_RETURN_INTERVAL]
+    ax.set_xticks(stats.norm.ppf(1 - np.array(ri)))
+    ax.set_xticklabels(["%g" % (1 / a) for a in ri], rotation=45, fontsize=8)
     if label_bottom:
         ax.set_xlabel("Return interval (years)")
     top = ax.twiny()
@@ -241,46 +251,35 @@ def report(out):
 
 
 def plot(out):
+    """Figure 8-1: the four regulated curves, nothing else.
+
+    The uncertainty band and the percentage-increase panel were both dropped
+    at DQC review -- the band is Castle Rock's, carried forward unchanged and
+    already shown in Section 5, and the percentages are in Table 8-3.
+    """
     z = stats.norm.ppf(1 - out["AEP"].values)
-    fig, (ax, axl) = plt.subplots(2, 1, figsize=(10, 10.5), sharex=True,
-                                  gridspec_kw=dict(height_ratios=[2.3, 1]))
+    fig, ax = plt.subplots(figsize=(10, 7.5))
 
     ax.set_yscale("log")   # BEFORE any annotation -- a pre-log get_ylim()
                            # grabs a linear autoscale limit and crushes the
                            # data into a sliver once the scale changes.
-    last = LOCATIONS[-1][0].lower().replace(" ", "_")
-    ax.fill_between(z, out["%s_lower_cfs" % last], out["%s_upper_cfs" % last],
-                    color=COLORS[-1], alpha=0.11,
-                    label="95%% band, %s" % LOCATIONS[-1][0])
-    ax.plot(z, out["cowlitz_unreg_cfs"], color="#9bb8d4", lw=1.3, ls=":",
-            label="Cowlitz unregulated (drives the locals)")
     for (name, site_da), color in zip(LOCATIONS, COLORS):
         key = name.lower().replace(" ", "_")
         ax.plot(z, out["%s_cfs" % key], color=color, lw=2.2,
                 label="%s  (%.0f sq mi)" % (name, site_da))
-    ax.axvline(stats.norm.ppf(1 - TARGET_AEP), color="gray", lw=1, ls=":")
+
+    ax.set_ylim(FLOW_LIMITS)
+    ax.set_xlim(stats.norm.ppf(1 - AEP_LIMITS[0]),
+                stats.norm.ppf(1 - AEP_LIMITS[1]))
     ax.set_ylabel("Regulated peak flow (cfs)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(
+        lambda v, _: format(int(v), ",")))
     ax.set_title("Regulated peak flow frequency, Castle Rock gage to the "
-                 "Coweeman confluence\nLocal = incremental drainage area x "
-                 "unregulated curve x %.2f lag factor" % LAG_FACTOR,
-                 fontsize=11)
+                 "Coweeman confluence", fontsize=11)
     ax.grid(True, which="both", alpha=0.3)
-    ax.legend(loc="upper left", fontsize=8.5)
+    ax.legend(loc="upper left", fontsize=9)
 
-    prob_axis(ax, label_bottom=False)
-
-    base = out["castle_rock_gage_cfs"].values
-    for (name, _), color in list(zip(LOCATIONS, COLORS))[1:]:
-        key = name.lower().replace(" ", "_")
-        axl.plot(z, 100 * (out["%s_cfs" % key].values - base) / base,
-                 color=color, lw=2, label=name)
-    axl.set_ylabel("increase over the gage (%)")
-    axl.set_xticks(stats.norm.ppf(1 - np.array(AEP_TICKS)))
-    axl.set_xticklabels([("%g" % (1 / a) if 1 / a >= 2 else "%.2f" % (1 / a))
-                         for a in AEP_TICKS], rotation=45, fontsize=8)
-    axl.set_xlabel("Return interval (years)")
-    axl.grid(True, alpha=0.3)
-    axl.legend(loc="upper right", fontsize=8.5)
+    prob_axis(ax, label_bottom=True)
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(PLOT_PNG), exist_ok=True)

@@ -82,6 +82,13 @@ FLOOD_STORAGE_ACFT = 358116.0   # Riffe, 745.5 -> 778.5 ft
 AXIS_MAX_CFS = 560000.0
 
 C_1TO1 = "#8a8a8a"
+# DQC: Section 5.4's two figures are merged into this one, so the event pairs
+# that place the transform are drawn again. Set False for a lines-only figure.
+SHOW_EVENT_POINTS = True
+# Transform uncertainty, drawn from the sigma the frequency script wrote.
+SHOW_TRANSFORM_BAND = True
+TRANSFORM_BAND_Z = 1.960        # 95% two-sided, matching Section 5.6
+
 C_CURVE = "#1a4f8a"
 C_DRAWN = "#b7410e"
 C_HIST = "#4c8c4a"
@@ -129,6 +136,27 @@ def main():
     ax.plot(lim, lim, color=C_1TO1, lw=1.6, ls="--", zorder=1,
             label="1:1  (no regulation effect)")
 
+    # The transform's own uncertainty, which Section 5.6 combines with the
+    # frequency sigma. Drawn here so the reader can see where it came from.
+    if SHOW_TRANSFORM_BAND and {"sigma_transform_lo_dex",
+                                "sigma_transform_hi_dex"} <= set(reg.columns):
+        base = reg["reg_inferred_cfs"].values
+        lo = base / 10.0 ** (TRANSFORM_BAND_Z
+                             * reg["sigma_transform_lo_dex"].values)
+        hi = base * 10.0 ** (TRANSFORM_BAND_Z
+                             * reg["sigma_transform_hi_dex"].values)
+        ax.fill_between(reg["unreg_expected_cfs"].values, lo, hi,
+                        color=C_CURVE, alpha=0.13, lw=0, zorder=2,
+                        label="Transform scatter, 95% (2.5-97.5%)")
+
+    if SHOW_EVENT_POINTS:
+        ax.plot(hist["unreg_ref"], hist["adjusted_peak"], ls="none",
+                marker="o", ms=4.6, mfc="none", mec=C_HIST, mew=1.0,
+                zorder=3, label="Observed events, adjusted (n=%d)" % len(hist))
+        ax.plot(synth["unreg_peak"], synth["reg_peak"], ls="none",
+                marker="s", ms=4.6, mfc="none", mec=C_SYNTH, mew=1.0,
+                zorder=3, label="Synthetic members (n=%d)" % len(synth))
+
     ax.plot(real["unreg_expected_cfs"], real["reg_inferred_cfs"],
             color=C_CURVE, lw=2.8, zorder=4, label="Adopted transform")
     ax.plot(extrap["unreg_expected_cfs"], extrap["reg_inferred_cfs"],
@@ -141,7 +169,7 @@ def main():
             mfc="none", mec=C_DRAWN, mew=2.4, zorder=5)
     ax.annotate("convergence\n~%s cfs" % format(int(CONVERGE_AT_CFS), ","),
                 xy=(CONVERGE_AT_CFS, CONVERGE_AT_CFS),
-                xytext=(CONVERGE_AT_CFS - 118000, CONVERGE_AT_CFS + 26000),
+                xytext=(CONVERGE_AT_CFS - 165000, CONVERGE_AT_CFS + 12000),
                 color=C_DRAWN, fontsize=9.5, ha="left",
                 arrowprops=dict(arrowstyle="->", color=C_DRAWN, lw=1.3))
 
@@ -162,9 +190,11 @@ def main():
     ax.set_aspect("equal")
     ax.set_xlabel("Unregulated peak at Castle Rock (cfs)")
     ax.set_ylabel("Regulated peak at Castle Rock (cfs)")
-    ax.set_title("Regulated against unregulated peak, Castle Rock", fontsize=11)
+    ax.set_title("Regulated against unregulated peak at Castle Rock\n"
+             "adopted transform, its scatter, and the drawn convergence "
+             "on 1:1", fontsize=11)
     ax.grid(alpha=0.3)
-    ax.legend(loc="lower right", fontsize=8.5)
+    ax.legend(loc="upper left", fontsize=8.0, framealpha=0.92)
     ax.xaxis.set_major_formatter(lambda v, _: format(int(v / 1000), ",") + "k")
     ax.yaxis.set_major_formatter(lambda v, _: format(int(v / 1000), ",") + "k")
 

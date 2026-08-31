@@ -190,6 +190,10 @@ UNREG_FREQ_CSV = r"../../CAS_Unreg_FF/output/CAS_Unreg_frequency_table.csv"
 # Screening authority. Any water year not marked eligible here is dropped, even
 # if it is present in DATASET_CSV -- that file can be stale.
 ADJUSTED_PEAKS_CSV = r"../output/adjusted_peaks.csv"
+# The screened, SSP-ready adjusted regulated record. Plotted as points on the
+# adopted figure at median plotting positions -- DQC comment on Figure 5-5.
+ADJUSTED_PEAKS_SSP_CSV = r"../output/adjusted_peaks_ssp.csv"
+FINAL_SHOW_ADJUSTED_POINTS = True
 ENFORCE_SCREENING = True
 
 # Historic simulated pairs from the WCM_RC run, written by
@@ -306,14 +310,18 @@ CURVE_2009 = [
 PLOTTING_BASIS = "from_curve"
 
 # SSP-style frequency axis
-AEP_TICKS = [0.999, 0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02,
+AEP_TICKS = [0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02,
              0.01, 0.005, 0.002, 0.001]
-AEP_LIMITS = (0.999, 0.0005)
+AEP_LIMITS = (0.99, 0.001)
+# Return intervals below 2 years are not labelled -- DQC comment on Figure 6-1.
+MIN_LABELLED_RETURN_INTERVAL = 2.0
 FLOW_LIMITS = (10000.0, 400000.0)
 
 # Colours kept in one place so the scatter and the frequency plot agree.
 C_UNREG = "#2c7fb8"
 C_REG = "#c0392b"
+# DQC: the unadjusted WCM_RC pairs are off by default.
+SHOW_WCM_PAIRS = False
 C_WCM = "#7d3c98"          # WCM_RC simulated pairs -- deliberately distinct
 C_SYNTH = "#d68910"        # routed synthetic members
 C_2009 = "#117a65"
@@ -472,7 +480,7 @@ FINAL_SHOW_FORMULA_NOTE = False
 # Frequency axis for THIS figure only. The global AEP_LIMITS starts at 0.999,
 # which leaves a wide empty strip on the left because no curve is plotted
 # beyond 0.99. Kept separate so the diagnostic plots are not moved with it.
-FINAL_AEP_LIMITS = (0.99, 0.0005)
+FINAL_AEP_LIMITS = (0.99, 0.001)
 
 # ----------------------------------------------------------------------------
 
@@ -587,8 +595,8 @@ def transform_label(fit):
         p = fit["power"]
         return ("Power law: reg = %.4g x unreg$^{%.3f}$  (r$^2$=%.3f)"
                 % (p["a"], p["b"], p["r2"]))
-    return ("LOESS centre of mass (span %.2f, r$^2$=%.3f)"
-            % (fit["span"], fit["r2"]))
+    return ("LOESS (locally estimated scatterplot smoothing) center of mass\n"
+            "(span %.2f, r$^2$=%.3f)" % (fit["span"], fit["r2"]))
 
 
 def load_eligible_wys(csv_path):
@@ -773,7 +781,10 @@ def plot_scatter(data, fit, wcm, synth, stem):
 
         lo = [x.min(), y.min()]
         hi = [x.max(), y.max()]
-        if wcm is not None and len(wcm):
+        # The unadjusted WCM_RC pairs were drawn here as purple diamonds. They
+        # are not part of the fit and the DQC review asked for them out, so
+        # they are only plotted if explicitly switched back on.
+        if SHOW_WCM_PAIRS and wcm is not None and len(wcm):
             ax.scatter(wcm["unreg_peak"], wcm["reg_peak"], s=30, marker="D",
                        facecolor="none", edgecolor=C_WCM, lw=0.9, zorder=2,
                        label="Unadjusted%s)"
@@ -836,12 +847,28 @@ def plot_scatter(data, fit, wcm, synth, stem):
 
 
 def probability_axis(ax, ticks, limits):
-    """SSP-style normal-probability axis, AEP decreasing to the right."""
-    z_ticks = stats.norm.ppf(1.0 - np.array(ticks))
+    """SSP-style normal-probability axis, AEP decreasing to the right.
+
+    Return interval on the bottom, annual exceedance probability across the
+    top -- the same arrangement the below-confluence figures use, so the two
+    sets of curves can be read against each other. Return intervals shorter
+    than two years are left unlabelled.
+    """
+    ticks = list(ticks)
     ax.set_xlim(stats.norm.ppf(1.0 - limits[0]), stats.norm.ppf(1.0 - limits[1]))
-    ax.xaxis.set_major_locator(FixedLocator(z_ticks))
-    ax.set_xticklabels(["%g" % (t * 100) for t in ticks])
-    ax.set_xlabel("Annual exceedance probability (%)")
+
+    ri_ticks = [t for t in ticks if 1.0 / t >= MIN_LABELLED_RETURN_INTERVAL]
+    ax.xaxis.set_major_locator(FixedLocator(stats.norm.ppf(1.0 - np.array(ri_ticks))))
+    ax.set_xticklabels(["%g" % (1.0 / t) for t in ri_ticks], rotation=45,
+                       fontsize=8)
+    ax.set_xlabel("Return interval (years)")
+
+    top = ax.twiny()
+    top.set_xlim(ax.get_xlim())
+    top.xaxis.set_major_locator(FixedLocator(stats.norm.ppf(1.0 - np.array(ticks))))
+    top.set_xticklabels(["%g" % (t * 100) for t in ticks], rotation=45,
+                        fontsize=8)
+    top.set_xlabel("Annual exceedance probability (%)")
 
 
 def aep_from_unreg_curve(values, unreg_curve, aep_values):
@@ -1546,6 +1573,25 @@ def write_monte_carlo_report(mc, out_path):
         f.write("\n".join(lines) + "\n")
 
 
+def median_plotting_positions(values):
+    """Median plotting position, the HEC-SSP default: (i - 0.3) / (n + 0.4),
+    with i = 1 for the largest value. Returns (aep, sorted_values)."""
+    v = np.sort(np.asarray(values, dtype=float))[::-1]
+    n = len(v)
+    i = np.arange(1, n + 1)
+    return (i - 0.3) / (n + 0.4), v
+
+
+def load_adjusted_points(path):
+    """The screened adjusted regulated peaks, or None if the file is absent."""
+    if not os.path.exists(path):
+        return None
+    d = pd.read_csv(path)
+    col = "adjusted_peak" if "adjusted_peak" in d.columns else d.columns[-1]
+    v = pd.to_numeric(d[col], errors="coerce").dropna()
+    return v.values if len(v) else None
+
+
 def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
     """THE adopted figure: both curves with the combined uncertainty band.
 
@@ -1571,6 +1617,16 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
         ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
                 table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
                 zorder=4, label=CURVE_2009_LABEL)
+
+    if FINAL_SHOW_ADJUSTED_POINTS:
+        pts = load_adjusted_points(ADJUSTED_PEAKS_SSP_CSV)
+        if pts is not None:
+            aep_pts, v_pts = median_plotting_positions(pts)
+            ax.plot(stats.norm.ppf(1.0 - aep_pts), v_pts, ls="none",
+                    marker="o", ms=4.5, mfc="none", mew=1.1, color=C_REG,
+                    zorder=6,
+                    label="Adjusted regulated peaks (n=%d, median plotting "
+                          "positions)" % len(v_pts))
 
     if FINAL_SHOW_SUPPORT_MARKER:
         supported = unreg_curve <= fit["x_max"]

@@ -56,7 +56,12 @@ from scipy.stats import norm, pearson3
 ###############################################################################
 # CONFIGURATION
 
-REPO_ROOT = r"C:\Projects\Claude"          # <-- set to your local repo path
+# Derived from this file's location, per repo convention -- src/ is two hops
+# below the repo root. Overridable with COWLITZ_REPO_ROOT for an odd layout.
+REPO_ROOT = os.environ.get(
+    "COWLITZ_REPO_ROOT",
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 os.pardir, os.pardir)))
 
 PROJECT_DIR = os.path.join(REPO_ROOT, "CAS_Unreg_FF")
 OUT_DIR = os.path.join(PROJECT_DIR, "output")
@@ -94,11 +99,15 @@ CURVE_P_LIMITS = (0.99, 0.002)      # lines drawn 1.01-yr to 500-yr
 # Per-duration figures (Appendix) -- taller, to hold the confidence band
 Y_LIMITS_DUR = (10_000, 1_000_000)
 
-P_LIMITS = (0.999, 0.001)           # axis extent, exceedance probability
-P_TICKS = [0.999, 0.99, 0.9, 0.5, 0.2, 0.1,
+P_LIMITS = (0.99, 0.001)            # axis extent, exceedance probability
+P_TICKS = [0.99, 0.9, 0.5, 0.2, 0.1,
            0.05, 0.02, 0.01, 0.005, 0.001]
-T_TICKS = [1.001, 1.1, 2, 5, 10, 50, 200, 1000]
-T_LABELS = ["1.0", "1.1", "2", "5", "10", "50", "200", "1000"]
+# Return intervals below 2 years are not shown -- DQC comment on Figure 6-1.
+T_TICKS = [2, 5, 10, 50, 200, 1000]
+T_LABELS = ["2", "5", "10", "50", "200", "1000"]
+
+# Observed events on the adopted-curves figure -- DQC comment.
+SHOW_SUMMARY_POINTS = True
 
 CURVE_POINTS = 400
 FIG_SIZE = (9.0, 7.0)
@@ -246,9 +255,9 @@ def lp3_flows(mean_log, std_log, skew, probs):
 
 def draw_axes(ax, y_limits, y_ticks=None):
     ax.set_xlim(prob_to_x(P_LIMITS[0]), prob_to_x(P_LIMITS[1]))
-    ax.set_xticks(prob_to_x(P_TICKS))
-    ax.set_xticklabels([("%g" % p) for p in P_TICKS], fontsize=8)
-    ax.set_xlabel("Probability", fontsize=10)
+    ax.set_xticks(prob_to_x([1.0 / v for v in T_TICKS]))
+    ax.set_xticklabels(T_LABELS, fontsize=8)
+    ax.set_xlabel("Return interval (years)", fontsize=10)
 
     ax.set_yscale("log")
     ax.set_ylim(*y_limits)
@@ -265,9 +274,9 @@ def draw_axes(ax, y_limits, y_ticks=None):
 
     top = ax.twiny()
     top.set_xlim(ax.get_xlim())
-    top.set_xticks(prob_to_x([1.0 / v for v in T_TICKS]))
-    top.set_xticklabels(T_LABELS, fontsize=8)
-    top.set_xlabel("Return Period (years)", fontsize=10)
+    top.set_xticks(prob_to_x(P_TICKS))
+    top.set_xticklabels([("%g" % (p * 100)) for p in P_TICKS], fontsize=8)
+    top.set_xlabel("Annual exceedance probability (%)", fontsize=10)
     return top
 
 
@@ -317,6 +326,19 @@ def make_summary_plot(data, include_2009, out_png, title):
                 lp3_flows(s["_mean"], s["_std"], s["_skew"], probs),
                 color=color, linewidth=1.7, zorder=4,
                 label=f"{label} 2026" if include_2009 else label)
+
+    if SHOW_SUMMARY_POINTS and not include_2009:
+        for label in SSP_ANALYSES:
+            if label not in data:
+                continue
+            pp = data[label]["plotpos"]
+            if pp is None or pp.empty:
+                continue
+            ax.plot(prob_to_x(pp["pct_chance"] / 100.0), pp["flow"],
+                    linestyle="none", marker="o", markersize=3.0,
+                    markerfacecolor="none", markeredgecolor=COLORS[label],
+                    markeredgewidth=0.7, zorder=6,
+                    label="%s observed" % label)
 
     ax.set_title(title, fontsize=11, pad=26)
     ax.legend(loc="upper left", fontsize=7.5,
@@ -445,7 +467,32 @@ def build_appendix_table(data):
     table = pd.concat(out, ignore_index=True).sort_values(
         ["DurationDays", "AEP"], kind="stable")
     path = os.path.join(OUT_DIR, "CAS_Unreg_frequency_table.csv")
-    table.to_csv(path, index=False)
+
+    # GUARD. The SSP reports carried in the repo do not all reach the rare
+    # tail -- the Peak sensitivity analysis stops at 0.2% exceedance, while
+    # the committed table runs to 0.01%, because it was written from a fuller
+    # SSP run on the analyst's machine. Overwriting the committed table from a
+    # short report silently truncates the regulated curve, Section 8 and every
+    # appendix downstream, and nothing further along notices. Refuse instead.
+    short = []
+    if os.path.exists(path):
+        existing = pd.read_csv(path)
+        for dur, grp in existing.groupby("Duration"):
+            new_n = int((table["Duration"] == dur).sum())
+            if new_n < len(grp):
+                short.append((dur, len(grp), new_n))
+
+    if short:
+        print("\n!! NOT OVERWRITING %s" % path)
+        for dur, was, now in short:
+            print("     %-6s would go from %d ordinates to %d"
+                  % (dur, was, now))
+        print("   The SSP report for that duration does not reach as far into")
+        print("   the tail as the committed table does. Re-run the SSP")
+        print("   analysis out to the required AEP, or leave the table alone.")
+        print("   Figures above were still written; the table is unchanged.\n")
+    else:
+        table.to_csv(path, index=False)
     print(f"Wrote {len(table)} rows -> {path}")
     return table
 
