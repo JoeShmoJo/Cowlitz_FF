@@ -152,7 +152,14 @@ SIM_OFFSET_SEARCH = 4
 # the exact trap described at the top of this file. With PLOTS_ONLY the DSS is
 # never opened, and the mapping is read back from MAPPING_CSV instead of being
 # rebuilt.
-PLOTS_ONLY = False
+PLOTS_ONLY = True
+
+# DQC: the 12-panel figure is not legible at memo size. Two summary figures
+# are drawn alongside it -- every source storm overlaid unscaled, and the full
+# scaling family for one representative member. The 12-panel set moves to an
+# appendix at full page size.
+PLOT_SUMMARY_FIGURES = True
+FEATURED_EVENT = "Feb1996"      # falls back to the first enabled event
 
 # --- source events: (label, peak date, shape 5day/peak, note) ---------------
 # Window is centred on the peak; WINDOW_BEFORE/AFTER days on each side.
@@ -1011,6 +1018,72 @@ def detect_sim_hour_offset(events, mapping, mos, cas):
     return offset
 
 
+def plot_events_overlay(events, stem):
+    """Every source storm on one pair of axes, unscaled.
+
+    This is the figure that answers "did you look at a range of shapes?" --
+    the observed hydrographs, no scaling, aligned on their own peak.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    for ev in events:
+        v = ev["total"].values
+        hours = (np.arange(len(v)) - float(np.argmax(v))) / 24.0
+        ax.plot(hours, v, lw=1.4, label="%s" % ev["label"])
+    ax.axvline(0.0, color="0.5", lw=0.9, ls=":")
+    ax.set_xlabel("Days from the observed peak")
+    ax.set_ylabel("Unregulated flow (cfs)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(
+        lambda v, _: format(int(v), ",")))
+    ax.set_title("The %d observed source storms, unscaled\n"
+                 "Mossyrock inflow + Castle Rock local, aligned on each "
+                 "storm's own peak" % len(events), fontsize=11)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, ncol=2)
+    fig.tight_layout()
+    fig.savefig("%s_events_overlay.png" % stem, dpi=150)
+    print("Wrote %s_events_overlay.png" % stem)
+
+
+def plot_event_single(events, mapping, stem, label=None):
+    """One source storm and the whole family scaled from it."""
+    pick = None
+    if label:
+        pick = next((e for e in events if e["label"] == label), None)
+    if pick is None:
+        pick = events[0]
+    ev = pick
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    hours = np.arange(len(ev["total"])) / 24.0
+    for _, row in mapping[mapping["event"] == ev["label"]].iterrows():
+        scaled, _ = (scale_volume_matched(ev["total"].values, ev["index"],
+                                          row["target_unreg_peak_cfs"],
+                                          row["target_unreg_5day_cfs"])
+                     if row["scaling_method"] == "volume_matched"
+                     else scale_linear_taper(ev["total"].values, ev["index"],
+                                             row["target_unreg_peak_cfs"]))
+        ax.plot(hours, scaled, lw=1.6,
+                label="%s  (strain %.2f)" % (row["target"], row["shape_strain"]))
+    ax.plot(hours, ev["total"].values, color="k", lw=2.2,
+            label="observed x1.00")
+    peak_day = float(np.argmax(ev["total"].values)) / 24.0
+    ax.axvspan(peak_day - VOLUME_HALF_WIDTH_DAYS,
+               peak_day + VOLUME_HALF_WIDTH_DAYS,
+               color="#2c7fb8", alpha=0.12, zorder=0,
+               label="+/- %.1f day volume window" % VOLUME_HALF_WIDTH_DAYS)
+    ax.set_xlabel("Days into the member window")
+    ax.set_ylabel("Unregulated flow (cfs)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(
+        lambda v, _: format(int(v), ",")))
+    ax.set_title("Scaling one source storm: %s   %s\n"
+                 "each member is scaled to its own target peak and 5-day "
+                 "volume" % (ev["label"], ev["note"]), fontsize=11)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig("%s_event_single.png" % stem, dpi=150)
+    print("Wrote %s_event_single.png  (source event %s)" % (stem, ev["label"]))
+
+
 def plot_events_asrun(events, mapping, stem, mos, cas, offset_hours=0):
     """The same panels as plot_events, drawn from the simulation's own inflows.
 
@@ -1433,6 +1506,9 @@ def main():
                   % (100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).min(),
                      100 * (alt["scaled_unreg_5day_cfs"] / alt["target_unreg_5day_cfs"]).max()))
     plot_events(events, mapping, PLOT_STEM)
+    if PLOT_SUMMARY_FIGURES:
+        plot_events_overlay(events, PLOT_STEM)
+        plot_event_single(events, mapping, PLOT_STEM, FEATURED_EVENT)
     plot_pools(events, bases, highest_pick, PLOT_STEM)
 
     # --- the same panels, drawn from what ResSim actually read ---------------
