@@ -87,7 +87,7 @@ C_1TO1 = "#8a8a8a"
 SHOW_EVENT_POINTS = True
 # Transform uncertainty, drawn from the sigma the frequency script wrote.
 SHOW_TRANSFORM_BAND = True
-TRANSFORM_BAND_Z = 1.960        # 95% two-sided, matching Section 5.6
+TRANSFORM_BAND_Z = 1.645        # 90% two-sided (5%/95%), matching Section 5.6
 
 C_CURVE = "#1a4f8a"
 C_DRAWN = "#b7410e"
@@ -147,7 +147,7 @@ def main():
                              * reg["sigma_transform_hi_dex"].values)
         ax.fill_between(reg["unreg_expected_cfs"].values, lo, hi,
                         color=C_CURVE, alpha=0.13, lw=0, zorder=2,
-                        label="Transform scatter, 95% (2.5-97.5%)")
+                        label="Transform scatter, 5%-95%")
 
     if SHOW_EVENT_POINTS:
         ax.plot(hist["unreg_ref"], hist["adjusted_peak"], ls="none",

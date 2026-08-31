@@ -87,6 +87,8 @@ OUTPUT
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+import re
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -116,6 +118,10 @@ LOCATIONS = [
 ]
 
 LAG_FACTOR = 0.80                # flat. See WHY LAG_FACTOR = 0.80 above.
+
+# Set in main() from whatever confidence level the input carries, so every
+# label and column name here follows #Unreg_Reg_Curve.py automatically.
+BAND_LEVEL = "90"
 
 TARGET_AEP = 0.001
 LAG_SENSITIVITY = (0.41, 0.60, 0.80, 1.00)
@@ -158,6 +164,26 @@ def prob_axis(ax, label_bottom=True):
     return top
 
 
+def band_columns(reg):
+    """Find the regulated confidence-limit columns and the level they carry.
+
+    #Unreg_Reg_Curve.py names these from its own UNCERTAINTY_CONF_LEVEL, so
+    they are reg_lower_90pct_cfs / reg_upper_90pct_cfs at a 90% two-sided
+    band and _95pct_ at a 95% one. Hardcoding one of them means a change
+    upstream either crashes here or, if a stale file is lying around, goes
+    unnoticed. Fail loudly instead.
+    """
+    pat = re.compile(r"^reg_lower_(\d+)pct_cfs$")
+    levels = sorted({m.group(1) for c in reg.columns for m in [pat.match(c)] if m})
+    if len(levels) != 1:
+        raise SystemExit(
+            "Cannot identify the regulated confidence band in %s.\n"
+            "  Expected exactly one reg_lower_<level>pct_cfs column, found: %s"
+            % (REG_CSV, levels or "none"))
+    lvl = levels[0]
+    return "reg_lower_%spct_cfs" % lvl, "reg_upper_%spct_cfs" % lvl, lvl
+
+
 def local_fraction(site_da):
     """Incremental area as a fraction of the gage's own drainage area."""
     return (site_da - GAGE_DA) / GAGE_DA
@@ -181,8 +207,9 @@ def build(reg):
         # and would imply a precision this method does not have. What is
         # shown is therefore the GAGE's uncertainty carried downstream, and
         # the memo says so.
-        out["%s_lower_cfs" % key] = reg["reg_lower_95pct_cfs"].values + local
-        out["%s_upper_cfs" % key] = reg["reg_upper_95pct_cfs"].values + local
+        lo_col, hi_col, _ = band_columns(reg)
+        out["%s_lower_cfs" % key] = reg[lo_col].values + local
+        out["%s_upper_cfs" % key] = reg[hi_col].values + local
     return out
 
 
@@ -219,7 +246,7 @@ def report(out):
     print("   Castle Rock unregulated %11s cfs   (drives every local term)"
           % format(int(row["cowlitz_unreg_cfs"]), ","))
     print("%-24s %12s %11s %11s   %s"
-          % ("site", "local cfs", "TOTAL", "over gage", "95% band"))
+          % ("site", "local cfs", "TOTAL", "over gage", "%s%% band" % BAND_LEVEL))
     base = row["castle_rock_gage_cfs"]
     for name, _ in LOCATIONS:
         key = name.lower().replace(" ", "_")
@@ -243,10 +270,10 @@ def report(out):
         print("   lag %.2f -> local %8s   total %11s  (%+.1f%% vs adopted)%s"
               % (trial, format(int(row["cowlitz_unreg_cfs"] * frac * trial), ","),
                  format(int(total), ","), 100 * (total - adopted) / adopted, mark))
+    span = 100 * (row["cowlitz_unreg_cfs"] * frac * (1.00 - 0.41)) / adopted
     print("\n   the whole 0.41-1.00 range spans %.1f%% of the adopted total, "
-          "against\n   a 95%% band %s cfs wide (%.0f%% of it)."
-          % (100 * (row["cowlitz_unreg_cfs"] * frac * (1.00 - 0.41)) / adopted,
-             format(int(band), ","),
+          "against\n   a %s%% band %s cfs wide (%.0f%% of it)."
+          % (span, BAND_LEVEL, format(int(band), ","),
              100 * (row["cowlitz_unreg_cfs"] * frac * (1.00 - 0.41)) / band))
 
 
@@ -298,7 +325,7 @@ def site_plot(out, name, site_da, color):
     ax.set_yscale("log")        # before any annotation -- see plot()
     ax.fill_between(z, out["%s_lower_cfs" % key], out["%s_upper_cfs" % key],
                     color=color, alpha=0.14,
-                    label="95% confidence band")
+                    label="%s%% confidence band" % BAND_LEVEL)
     if site_da == GAGE_DA:
         ax.plot(z, out["cowlitz_unreg_cfs"], color="#7aa9d0", lw=2, ls="--",
                 label="Unregulated")
@@ -329,8 +356,8 @@ def write_site_tables(out):
         frame = pd.DataFrame({
             "AEP": out["AEP"],
             "regulated_cfs": out["%s_cfs" % key].round(0),
-            "lower_95pct_cfs": out["%s_lower_cfs" % key].round(0),
-            "upper_95pct_cfs": out["%s_upper_cfs" % key].round(0),
+            "lower_%spct_cfs" % BAND_LEVEL: out["%s_lower_cfs" % key].round(0),
+            "upper_%spct_cfs" % BAND_LEVEL: out["%s_upper_cfs" % key].round(0),
         })
         if key == "castle_rock_gage":
             frame.insert(1, "unregulated_cfs",
@@ -345,6 +372,11 @@ def write_site_tables(out):
 
 def main():
     reg = pd.read_csv(REG_CSV).sort_values("AEP", ascending=False).reset_index(drop=True)
+    global BAND_LEVEL
+    BAND_LEVEL = band_columns(reg)[2]
+    print("Confidence band read from %s: %s%% two-sided (%s%%/%s%%)"
+          % (REG_CSV, BAND_LEVEL, (100 - int(BAND_LEVEL)) // 2,
+             100 - (100 - int(BAND_LEVEL)) // 2))
     out = build(reg)
     out.to_csv(OUT_CSV, index=False)
     report(out)

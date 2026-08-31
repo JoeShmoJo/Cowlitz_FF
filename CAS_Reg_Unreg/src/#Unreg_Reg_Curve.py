@@ -349,11 +349,17 @@ FREQ_LIMIT_BASE_COL = "Value"
 FREQ_VARIANCE_COL = "VarianceLog"
 FREQ_SIGMA_CHECK_TOL = 0.15
 
-# What the FINAL combined band spans. 0.95 (97.5%/2.5%) per the reviewer's
-# formula and EM 1110-2-1619 Sec 4-4.c(1): "the range created by the mean plus
-# and minus two standard deviations spans 95% of the probability" -- the EM's
-# own rounded z=2 convention for a 95% two-sided band; this script uses the
-# exact z=1.960 (norm.ppf(0.975)) rather than the rounded 2.
+# What the FINAL combined band spans. 0.90 two-sided -> 5% in each tail, so the
+# bounds ARE the 5th and 95th percentiles and can be labelled that way. This
+# matches HEC-SSP's own reporting convention and the DQC review, which asked
+# for both bounds named from the same reference point.
+#
+# It was 0.95 (z=1.960, 2.5%/97.5%) up to Sep 2026, on EM 1110-2-1619 Sec
+# 4-4.c(1) ("mean plus and minus two standard deviations spans 95% of the
+# probability"). That is still a defensible level; the band was changed to 90%
+# so the reported limits agree with the 5%/95% labels rather than the labels
+# being adjusted to fit a 95% band. Everything below is driven off this one
+# constant -- do not relabel a column without changing it here.
 #
 # This is the ONLY confidence level that matters for the combination itself.
 # Each SOURCE below (frequency, transform) is first reduced to its own proper
@@ -363,7 +369,7 @@ FREQ_SIGMA_CHECK_TOL = 0.15
 # own levels" against each other -- that would only be valid if every source
 # happened to share the same z, and 90% (SSP's native reporting) and whatever
 # level the transform scatter is estimated at are not guaranteed to match.
-UNCERTAINTY_CONF_LEVEL = 0.95
+UNCERTAINTY_CONF_LEVEL = 0.90
 #   "prediction" : full scatter about the transform -- the next flood of this
 #                  size could have any observed shape. The design question.
 #   "mean"       : scatter / sqrt(n), the uncertainty of the fitted line only.
@@ -1193,8 +1199,8 @@ def combine_uncertainty(freq, fit, reg_curve):
         Upper = RegBest + sqrt((Unreg_hi - Unreg_best)^2 + (Transform_hi - Transform_best)^2)
         Lower = RegBest - sqrt((Unreg_best - Unreg_lo)^2 + (Transform_best - Transform_lo)^2)
 
-    at UNCERTAINTY_CONF_LEVEL (0.95 two-sided -> 97.5%/2.5%, per the reviewer's
-    own example), with each side's sigma kept separate (EM 1110-2-1619 sec
+    at UNCERTAINTY_CONF_LEVEL (0.90 two-sided -> 5%/95%), with each side's
+    sigma kept separate (EM 1110-2-1619 sec
     4-4.c(1)/4-6a: upper half and lower half both treated as Normal, each with
     its own standard deviation, rather than assuming one symmetric sigma).
 
