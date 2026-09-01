@@ -82,6 +82,14 @@ CONVERGE_AT_CFS = 325000.0    # THE DRAWN ESTIMATE. See the docstring.
 # estimate a genuine alternative to the curve's own extrapolation, which is
 # what the reader needs to see.
 LIMB_FROM_LAST_SUPPORTED = True
+# Split solid from dashed at the true edge of the fitted data rather than at
+# the nearest curve ordinate below it. The AEP ordinates thin out badly in the
+# tail, stepping from 255,074 to 285,568 cfs between the 1,000 and 2,000 year,
+# and the support edge falls inside that step. Switching styles at the ordinate
+# drew 24,000 cfs of supported curve as though it were extrapolated, with the
+# largest synthetic members sitting underneath it. Interpolating a point at the
+# edge puts the change exactly where the data stops.
+SPLIT_AT_SUPPORT_EDGE = True
 TAPER_POWER = 1.6             # shape of the drawn limb only; 1 is a straight
                               # run-in, higher lands on 1:1 more gently.
 
@@ -134,6 +142,20 @@ def main():
     hist = hist[["unreg_ref", "adjusted_peak"]].dropna()
     synth = pd.read_csv(SYNTH_CSV)[["unreg_peak", "reg_peak"]].dropna()
 
+    # The edge of the fitted data, which is the largest unregulated peak among
+    # the pairs the transform was fitted to.
+    support_max = float(max(hist["unreg_ref"].max(), synth["unreg_peak"].max()))
+
+    if SPLIT_AT_SUPPORT_EDGE and len(real):
+        uu = reg["unreg_expected_cfs"].values
+        rr = reg["reg_inferred_cfs"].values
+        reg_at_edge = float(np.interp(support_max, uu, rr))
+        real = pd.concat([
+            real[real["unreg_expected_cfs"] <= support_max],
+            pd.DataFrame({"unreg_expected_cfs": [support_max],
+                          "reg_inferred_cfs": [reg_at_edge]}),
+        ], ignore_index=True)
+
     if LIMB_FROM_LAST_SUPPORTED and len(real):
         u_last = float(real["unreg_expected_cfs"].iloc[-1])
         reg_last = float(real["reg_inferred_cfs"].iloc[-1])
@@ -174,15 +196,16 @@ def main():
                 zorder=3, label="Synthetic members (n=%d)" % len(synth))
 
     ax.plot(real["unreg_expected_cfs"], real["reg_inferred_cfs"],
-            color=C_CURVE, lw=2.8, zorder=4, label="Adopted transform")
+            color=C_CURVE, lw=3.0, zorder=4,
+            label="Adopted transform, fitted to %s cfs" % format(int(support_max), ","))
     # A single extrapolated line, drawn to converge on 1:1 at CONVERGE_AT_CFS.
     # The tabulated extrapolated ordinates are NOT drawn as a second line
     # beside it. They sit up to 5 percent below this one at the 2,000 year, so
     # showing both put two nearly parallel lines in the same place and invited
     # the reader to take the gap between them as meaningful. It is not. Both
     # are extrapolations past the last supported point.
-    ax.plot(u_draw, reg_draw, color=C_CURVE, lw=2.8, ls=(0, (6, 2)), zorder=4,
-            label="Adopted transform, extrapolated to 1:1")
+    ax.plot(u_draw, reg_draw, color=C_CURVE, lw=2.0, ls=(0, (2.5, 2.5)),
+            zorder=4, label="Extrapolated beyond the fitted data")
 
     ax.plot([CONVERGE_AT_CFS], [CONVERGE_AT_CFS], marker="o", ms=11,
             mfc="none", mec=C_DRAWN, mew=2.2, zorder=5)
@@ -213,7 +236,8 @@ def main():
              "adopted transform, its scatter, and the drawn convergence "
              "on 1:1", fontsize=11)
     ax.grid(alpha=0.3)
-    ax.legend(loc="upper left", fontsize=8.0, framealpha=0.92)
+    ax.legend(loc="upper left", fontsize=8.0, framealpha=0.92,
+          handlelength=3.2)
     ax.xaxis.set_major_formatter(lambda v, _: format(int(v / 1000), ",") + "k")
     ax.yaxis.set_major_formatter(lambda v, _: format(int(v / 1000), ",") + "k")
 
