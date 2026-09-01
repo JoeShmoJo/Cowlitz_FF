@@ -68,8 +68,20 @@ SAME_STORM_DAYS = 5        # beyond this the two annual maxima are different sto
 ECOLOGY_TAIL_RATIO = 0.0590
 ECOLOGY_ALL_RATIO = 0.0629
 
+# The PRISM basin precipitation ratio, drawn as the second panel. It is the
+# independent support for the area ratio, because it tests the equal depth
+# assumption the area ratio rests on rather than restating the flow record.
+PRISM_CSV = r"../output/diagnostics/prism_basin_precip_ratio.csv"
+
+# Bin edges for the median ratio by event size, in 1000 cfs. The whole argument
+# for a plain area ratio is that the ratio falls toward it as events grow, and
+# raw scatter alone does not show that.
+SIZE_BINS_KCFS = [0, 50, 75, 100, 250]
+
 C_SAME = "#1a4f8a"
 C_DIFF = "#c0c0c0"
+C_DA = "#b7410e"
+C_PRISM = "#4c8c4a"
 
 # ----------------------------------------------------------------------------
 
@@ -254,37 +266,87 @@ def report(table):
 
 
 def plot(table):
+    """Two independent lines of evidence for a plain drainage area ratio.
+
+    Left, the flow ratio against event size, same storm pairs only. Different
+    storm pairs are dropped rather than greyed out, because the ratio of two
+    peaks weeks apart is not a coincident quantity and putting it on the same
+    axes invites it to be read as one. Right, the PRISM basin precipitation
+    ratio, which tests the equal depth assumption directly.
+    """
     da = COW_GAGE_DA / CAS_DA
-    same = table[table["same_storm"]]
-    diff = table[~table["same_storm"]]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.6))
+    same = table[table["same_storm"]].copy()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.8))
 
-    ax1.scatter(diff["cas_unreg_peak_cfs"] / 1000, diff["ratio_peak"], s=44,
-                color=C_DIFF, edgecolor="0.4", lw=0.5, label="different storm (excluded)")
-    ax1.scatter(same["cas_unreg_peak_cfs"] / 1000, same["ratio_peak"], s=52,
-                color=C_SAME, edgecolor="0.2", lw=0.6, label="same storm", zorder=3)
-    ax1.axhline(da, color="#b7410e", ls="--", lw=1.8,
-                label="drainage-area ratio %.4f" % da)
-    ax1.axhline(same["ratio_peak"].median(), color=C_SAME, ls=":", lw=1.8,
-                label="same-storm median %.4f" % same["ratio_peak"].median())
-    ax1.axhline(ECOLOGY_ALL_RATIO, color="#4c8c4a", ls="-.", lw=1.5,
-                label="Ecology-era all events %.4f" % ECOLOGY_ALL_RATIO)
+    x = same["cas_unreg_peak_cfs"] / 1000.0
+    ax1.scatter(x, same["ratio_peak"], s=52, color=C_SAME, edgecolor="0.2",
+                lw=0.6, zorder=3, label="Coincident annual peaks (n=%d)" % len(same))
+    ax1.axhline(da, color=C_DA, ls="--", lw=2.0,
+                label="Drainage area ratio %.4f" % da)
+
+    # Median and interquartile spread by event size. This is the trend the
+    # area ratio rests on, and it is invisible in the raw scatter.
+    cx, cy, lo, hi = [], [], [], []
+    for a, b in zip(SIZE_BINS_KCFS[:-1], SIZE_BINS_KCFS[1:]):
+        grp = same[(x >= a) & (x < b)]
+        if len(grp) < 3:
+            continue
+        cx.append(grp["cas_unreg_peak_cfs"].median() / 1000.0)
+        cy.append(grp["ratio_peak"].median())
+        lo.append(grp["ratio_peak"].quantile(0.25))
+        hi.append(grp["ratio_peak"].quantile(0.75))
+    if cx:
+        ax1.errorbar(cx, cy, yerr=[np.array(cy) - np.array(lo),
+                                   np.array(hi) - np.array(cy)],
+                     color="#c0392b", lw=2.2, marker="s", ms=7, capsize=5,
+                     zorder=4, label="Median by event size, bars are the "
+                                     "interquartile range")
+
+    # The three largest events carry the most weight, so name them. Labels are
+    # staggered because the two largest after 1996 sit almost on top of each
+    # other, and a label near the area ratio line has to clear it.
+    big = same.nlargest(3, "cas_unreg_peak_cfs").reset_index(drop=True)
+    offsets = [(10, 12), (-12, 26), (10, -30)]
+    for k, r in big.iterrows():
+        dx, dy = offsets[k % len(offsets)]
+        ax1.annotate("WY%d  %.3f" % (r["wy"], r["ratio_peak"]),
+                     xy=(r["cas_unreg_peak_cfs"] / 1000.0, r["ratio_peak"]),
+                     xytext=(dx, dy), textcoords="offset points",
+                     fontsize=8.5, color="0.25",
+                     ha="right" if dx < 0 else "left",
+                     arrowprops=dict(arrowstyle="-", color="0.55", lw=0.8))
+
     ax1.set_xlabel("Castle Rock unregulated annual peak (1000 cfs)")
-    ax1.set_ylabel("Coweeman peak / CAS unreg peak")
-    ax1.set_title("Annual peak ratio vs event size\nUSGS 14245000, WY%d-WY%d"
-                  % (table.wy.min(), table.wy.max()))
+    ax1.set_ylabel("Coweeman peak / Castle Rock unregulated peak")
+    ax1.set_title("Coweeman annual peak against mainstem event size\n"
+                  "USGS 14245000, coincident annual peaks only, WY%d to WY%d"
+                  % (same.wy.min(), same.wy.max()), fontsize=10.5)
+    ax1.set_ylim(0, max(0.16, same["ratio_peak"].max() * 1.08))
     ax1.grid(alpha=0.3)
-    ax1.legend(fontsize=8)
+    ax1.legend(fontsize=8, loc="upper right")
 
-    ax2.bar(same["wy"], same["ratio_peak"], color=C_SAME, label="same storm")
-    ax2.bar(diff["wy"], diff["ratio_peak"], color=C_DIFF, label="different storm")
-    ax2.axhline(da, color="#b7410e", ls="--", lw=1.8)
-    ax2.axhline(same["ratio_peak"].median(), color=C_SAME, ls=":", lw=1.8)
-    ax2.set_xlabel("water year")
-    ax2.set_ylabel("Coweeman peak / CAS unreg peak")
-    ax2.set_title("By water year\ndashed = drainage-area ratio, dotted = same-storm median")
-    ax2.grid(alpha=0.3, axis="y")
-    ax2.legend(fontsize=8)
+    # --- PRISM ---------------------------------------------------------------
+    if os.path.exists(PRISM_CSV):
+        pr = pd.read_csv(PRISM_CSV)
+        v = pd.to_numeric(pr["ratio"], errors="coerce").dropna()
+        ax2.hist(v, bins=18, color=C_PRISM, alpha=0.75, edgecolor="0.3", lw=0.6)
+        ax2.axvline(1.0, color="0.35", ls="-", lw=1.6,
+                    label="Equal depth over both basins")
+        ax2.axvline(v.median(), color=C_DA, ls="--", lw=2.0,
+                    label="Median %.3f" % v.median())
+        ax2.set_xlabel("Coweeman basin precipitation / Castle Rock basin "
+                       "precipitation")
+        ax2.set_ylabel("water years")
+        ax2.set_title("PRISM annual precipitation over the two basins\n"
+                      "WY%d to WY%d, n=%d"
+                      % (int(pr.year.min()), int(pr.year.max()), len(v)),
+                      fontsize=10.5)
+        ax2.grid(alpha=0.3, axis="y")
+        ax2.legend(fontsize=8)
+    else:
+        ax2.text(0.5, 0.5, "PRISM ratio not available\n%s" % PRISM_CSV,
+                 ha="center", va="center", transform=ax2.transAxes, fontsize=9)
+        ax2.set_axis_off()
 
     fig.tight_layout()
     fig.savefig(PLOT_PNG, dpi=150)
