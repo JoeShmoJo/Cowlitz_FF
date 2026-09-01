@@ -194,6 +194,28 @@ ADJUSTED_PEAKS_CSV = r"../output/adjusted_peaks.csv"
 # adopted figure at median plotting positions -- DQC comment on Figure 5-5.
 ADJUSTED_PEAKS_SSP_CSV = r"../output/adjusted_peaks_ssp.csv"
 FINAL_SHOW_ADJUSTED_POINTS = True
+# The full unregulated record, used ONLY to place the adjusted regulated peaks
+# on the frequency axis.
+#
+# WHY NOT JUST RANK THE 41 ADJUSTED PEAKS
+#     Ranking them among themselves assigns the largest of 41 an AEP of
+#     (1-0.3)/(41+0.4) = 0.0169, a 59 year event. But those 41 years are a
+#     screened subset of the regulated era, not a 41 year record, and the curve
+#     they are being compared against was fitted to 95 water years. Treating
+#     them as a complete record makes every event look far more common than it
+#     is and slides the whole cloud left, where the curve is lower. Every point
+#     then sits above the line. Measured: median observed/curve 1.128 with 40
+#     of 41 points above it.
+#
+#     Each adjusted peak is instead placed at the plotting position its own
+#     water year holds in the FULL unregulated record. That is the AEP the
+#     storm actually had, and it is the same basis the regulated curve is built
+#     on, since each regulated ordinate inherits its AEP from the unregulated
+#     curve. On that basis the median ratio is 1.028 and the points split 22
+#     above and 19 below, which is scatter rather than bias.
+FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
+FULL_UNREG_WY_COL = "WY"
+FULL_UNREG_PEAK_COL = "Peak"
 ENFORCE_SCREENING = True
 
 # Historic simulated pairs from the WCM_RC run, written by
@@ -1589,13 +1611,43 @@ def median_plotting_positions(values):
 
 
 def load_adjusted_points(path):
-    """The screened adjusted regulated peaks, or None if the file is absent."""
+    """The screened adjusted regulated peaks with the AEP of each water year.
+
+    Returns (aep, flow) with the AEP taken from where that water year's
+    UNREGULATED peak ranks in the full record, not from ranking the adjusted
+    peaks among themselves. See FULL_UNREG_RECORD_CSV for why.
+    """
     if not os.path.exists(path):
-        return None
+        return None, None
     d = pd.read_csv(path)
     col = "adjusted_peak" if "adjusted_peak" in d.columns else d.columns[-1]
-    v = pd.to_numeric(d[col], errors="coerce").dropna()
-    return v.values if len(v) else None
+    d = d[["WY", col]].dropna()
+    if not len(d):
+        return None, None
+
+    if not os.path.exists(FULL_UNREG_RECORD_CSV):
+        print("   WARNING %s is missing, so the adjusted peaks are not plotted."
+              % FULL_UNREG_RECORD_CSV)
+        return None, None
+
+    full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+        [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+    full = full.sort_values(FULL_UNREG_PEAK_COL, ascending=False).reset_index(drop=True)
+    n = len(full)
+    full["aep"] = (full.index + 1 - 0.3) / (n + 0.4)
+
+    m = d.merge(full[[FULL_UNREG_WY_COL, "aep"]],
+                left_on="WY", right_on=FULL_UNREG_WY_COL, how="left")
+    missing = int(m["aep"].isna().sum())
+    if missing:
+        print("   NOTE %d adjusted year(s) are not in the %d year unregulated "
+              "record and are not plotted." % (missing, n))
+    m = m.dropna(subset=["aep"])
+    if not len(m):
+        return None, None
+    print("   adjusted peaks placed at plotting positions from the %d year "
+          "unregulated record" % n)
+    return m["aep"].values, m[col].values.astype(float)
 
 
 def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
@@ -1625,14 +1677,13 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
                 zorder=4, label=CURVE_2009_LABEL)
 
     if FINAL_SHOW_ADJUSTED_POINTS:
-        pts = load_adjusted_points(ADJUSTED_PEAKS_SSP_CSV)
-        if pts is not None:
-            aep_pts, v_pts = median_plotting_positions(pts)
+        aep_pts, v_pts = load_adjusted_points(ADJUSTED_PEAKS_SSP_CSV)
+        if aep_pts is not None:
             ax.plot(stats.norm.ppf(1.0 - aep_pts), v_pts, ls="none",
                     marker="o", ms=4.5, mfc="none", mew=1.1, color=C_REG,
                     zorder=6,
-                    label="Adjusted regulated peaks (n=%d, median plotting "
-                          "positions)" % len(v_pts))
+                    label="Adjusted regulated peaks (n=%d, at the AEP of each "
+                          "water year)" % len(v_pts))
 
     if FINAL_SHOW_SUPPORT_MARKER:
         supported = unreg_curve <= fit["x_max"]

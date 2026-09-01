@@ -74,12 +74,19 @@ HIST_CSV = r"../output/adjusted_peaks.csv"
 SYNTH_CSV = r"../output/diagnostics/ResSim_Synth_reg_vs_unreg_wy.csv"
 PLOT_PNG = r"../output/diagnostics/transform_convergence.png"
 
-CONVERGE_AT_CFS = 500000.0    # THE DRAWN ESTIMATE. See the docstring.
+CONVERGE_AT_CFS = 350000.0    # THE DRAWN ESTIMATE. See the docstring.
+# Draw the limb from the last SUPPORTED ordinate rather than the last ordinate
+# of all. The adopted transform is clipped at the 1:1 line, so its final
+# extrapolated ordinate already sits on 1:1 and a limb starting there would
+# have nothing to draw. Starting from the last supported point makes the drawn
+# estimate a genuine alternative to the curve's own extrapolation, which is
+# what the reader needs to see.
+LIMB_FROM_LAST_SUPPORTED = True
 TAPER_POWER = 1.6             # shape of the drawn limb only; 1 is a straight
                               # run-in, higher lands on 1:1 more gently.
 
 FLOOD_STORAGE_ACFT = 358116.0   # Riffe, 745.5 -> 778.5 ft
-AXIS_MAX_CFS = 560000.0
+AXIS_MAX_CFS = 430000.0
 
 C_1TO1 = "#8a8a8a"
 # DQC: Section 5.4's two figures are merged into this one, so the event pairs
@@ -127,8 +134,17 @@ def main():
     hist = hist[["unreg_ref", "adjusted_peak"]].dropna()
     synth = pd.read_csv(SYNTH_CSV)[["unreg_peak", "reg_peak"]].dropna()
 
-    u_last = float(reg["unreg_expected_cfs"].iloc[-1])
-    reg_last = float(reg["reg_inferred_cfs"].iloc[-1])
+    if LIMB_FROM_LAST_SUPPORTED and len(real):
+        u_last = float(real["unreg_expected_cfs"].iloc[-1])
+        reg_last = float(real["reg_inferred_cfs"].iloc[-1])
+    else:
+        u_last = float(reg["unreg_expected_cfs"].iloc[-1])
+        reg_last = float(reg["reg_inferred_cfs"].iloc[-1])
+    if CONVERGE_AT_CFS <= u_last:
+        raise SystemExit(
+            "CONVERGE_AT_CFS (%s) is at or below the last supported ordinate "
+            "(%s).\n  The limb would run backwards. Raise it."
+            % (format(int(CONVERGE_AT_CFS), ","), format(int(u_last), ",")))
     u_draw, reg_draw = drawn_limb(u_last, reg_last, CONVERGE_AT_CFS)
 
     fig, ax = plt.subplots(figsize=(9.5, 8.6))
@@ -163,13 +179,13 @@ def main():
             color=C_CURVE, lw=2.8, ls=(0, (6, 2)), zorder=4,
             label="Adopted transform, extrapolated")
     ax.plot(u_draw, reg_draw, color=C_DRAWN, lw=2.4, ls=(0, (2, 2)), zorder=4,
-            label="Drawn convergence estimated from storage")
+            label="Drawn convergence, straight from the last supported point")
 
     ax.plot([CONVERGE_AT_CFS], [CONVERGE_AT_CFS], marker="o", ms=11,
             mfc="none", mec=C_DRAWN, mew=2.4, zorder=5)
     ax.annotate("convergence\n~%s cfs" % format(int(CONVERGE_AT_CFS), ","),
                 xy=(CONVERGE_AT_CFS, CONVERGE_AT_CFS),
-                xytext=(CONVERGE_AT_CFS - 165000, CONVERGE_AT_CFS + 12000),
+                xytext=(CONVERGE_AT_CFS + 18000, CONVERGE_AT_CFS - 88000),
                 color=C_DRAWN, fontsize=9.5, ha="left",
                 arrowprops=dict(arrowstyle="->", color=C_DRAWN, lw=1.3))
 

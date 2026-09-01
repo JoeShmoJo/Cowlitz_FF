@@ -191,13 +191,20 @@ def local_fraction(site_da):
 
 def build(reg):
     out = pd.DataFrame({"AEP": reg["AEP"]})
-    out["cowlitz_unreg_cfs"] = reg["unreg_computed_cfs"]
+    # The EXPECTED probability curve is the adopted unregulated result, and it
+    # is what Section 5 and Appendix E report. Appendix F used to carry the
+    # computed curve here, which is why the two appendices disagreed in their
+    # unregulated column and why the local contribution came out about 10
+    # percent light in the tail. Both now read the same curve. The computed
+    # curve is still carried alongside it for reference.
+    out["cowlitz_unreg_cfs"] = reg["unreg_expected_cfs"]
+    out["cowlitz_unreg_computed_cfs"] = reg["unreg_computed_cfs"]
     out["cowlitz_reg_cfs"] = reg["reg_inferred_cfs"]
 
     for name, site_da in LOCATIONS:
         key = name.lower().replace(" ", "_")
         frac = local_fraction(site_da)
-        local = reg["unreg_computed_cfs"].values * frac * LAG_FACTOR
+        local = reg["unreg_expected_cfs"].values * frac * LAG_FACTOR
         out["%s_local_cfs" % key] = local
         out["%s_cfs" % key] = reg["reg_inferred_cfs"].values + local
         # Band: the Castle Rock regulated band, translated by the local
