@@ -216,6 +216,10 @@ FINAL_SHOW_ADJUSTED_POINTS = True
 FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
 FULL_UNREG_WY_COL = "WY"
 FULL_UNREG_PEAK_COL = "Peak"
+# Plot the unregulated record on the adopted figure as well, in the unregulated
+# colour, at the same plotting positions. Both records then sit on the figure
+# on a common basis.
+FINAL_SHOW_UNREG_POINTS = True
 ENFORCE_SCREENING = True
 
 # Historic simulated pairs from the WCM_RC run, written by
@@ -1610,6 +1614,18 @@ def median_plotting_positions(values):
     return (i - 0.3) / (n + 0.4), v
 
 
+def load_full_unreg_points():
+    """The full unregulated record at its own plotting positions."""
+    if not os.path.exists(FULL_UNREG_RECORD_CSV):
+        return None, None
+    full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+        [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+    v = np.sort(full[FULL_UNREG_PEAK_COL].values.astype(float))[::-1]
+    n = len(v)
+    aep = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
+    return aep, v
+
+
 def load_adjusted_points(path):
     """The screened adjusted regulated peaks with the AEP of each water year.
 
@@ -1675,6 +1691,13 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
         ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
                 table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
                 zorder=4, label=CURVE_2009_LABEL)
+
+    if FINAL_SHOW_UNREG_POINTS:
+        aep_u, v_u = load_full_unreg_points()
+        if aep_u is not None:
+            ax.plot(stats.norm.ppf(1.0 - aep_u), v_u, ls="none", marker="o",
+                    ms=4.0, mfc="none", mew=1.0, color=C_UNREG, zorder=6,
+                    label="Unregulated record (n=%d)" % len(v_u))
 
     if FINAL_SHOW_ADJUSTED_POINTS:
         aep_pts, v_pts = load_adjusted_points(ADJUSTED_PEAKS_SSP_CSV)

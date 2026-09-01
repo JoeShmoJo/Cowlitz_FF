@@ -74,7 +74,7 @@ HIST_CSV = r"../output/adjusted_peaks.csv"
 SYNTH_CSV = r"../output/diagnostics/ResSim_Synth_reg_vs_unreg_wy.csv"
 PLOT_PNG = r"../output/diagnostics/transform_convergence.png"
 
-CONVERGE_AT_CFS = 350000.0    # THE DRAWN ESTIMATE. See the docstring.
+CONVERGE_AT_CFS = 325000.0    # THE DRAWN ESTIMATE. See the docstring.
 # Draw the limb from the last SUPPORTED ordinate rather than the last ordinate
 # of all. The adopted transform is clipped at the 1:1 line, so its final
 # extrapolated ordinate already sits on 1:1 and a limb starting there would
@@ -86,7 +86,7 @@ TAPER_POWER = 1.6             # shape of the drawn limb only; 1 is a straight
                               # run-in, higher lands on 1:1 more gently.
 
 FLOOD_STORAGE_ACFT = 358116.0   # Riffe, 745.5 -> 778.5 ft
-AXIS_MAX_CFS = 430000.0
+AXIS_MAX_CFS = 350000.0
 
 C_1TO1 = "#8a8a8a"
 # DQC: Section 5.4's two figures are merged into this one, so the event pairs
@@ -175,18 +175,21 @@ def main():
 
     ax.plot(real["unreg_expected_cfs"], real["reg_inferred_cfs"],
             color=C_CURVE, lw=2.8, zorder=4, label="Adopted transform")
-    ax.plot(extrap["unreg_expected_cfs"], extrap["reg_inferred_cfs"],
-            color=C_CURVE, lw=2.8, ls=(0, (6, 2)), zorder=4,
-            label="Adopted transform, extrapolated")
-    ax.plot(u_draw, reg_draw, color=C_DRAWN, lw=2.4, ls=(0, (2, 2)), zorder=4,
-            label="Drawn convergence, straight from the last supported point")
+    # A single extrapolated line, drawn to converge on 1:1 at CONVERGE_AT_CFS.
+    # The tabulated extrapolated ordinates are NOT drawn as a second line
+    # beside it. They sit up to 5 percent below this one at the 2,000 year, so
+    # showing both put two nearly parallel lines in the same place and invited
+    # the reader to take the gap between them as meaningful. It is not. Both
+    # are extrapolations past the last supported point.
+    ax.plot(u_draw, reg_draw, color=C_CURVE, lw=2.8, ls=(0, (6, 2)), zorder=4,
+            label="Adopted transform, extrapolated to 1:1")
 
     ax.plot([CONVERGE_AT_CFS], [CONVERGE_AT_CFS], marker="o", ms=11,
-            mfc="none", mec=C_DRAWN, mew=2.4, zorder=5)
+            mfc="none", mec=C_DRAWN, mew=2.2, zorder=5)
     ax.annotate("convergence\n~%s cfs" % format(int(CONVERGE_AT_CFS), ","),
                 xy=(CONVERGE_AT_CFS, CONVERGE_AT_CFS),
-                xytext=(CONVERGE_AT_CFS + 18000, CONVERGE_AT_CFS - 88000),
-                color=C_DRAWN, fontsize=9.5, ha="left",
+                xytext=(CONVERGE_AT_CFS - 12000, CONVERGE_AT_CFS - 178000),
+                color=C_DRAWN, fontsize=9.5, ha="right",
                 arrowprops=dict(arrowstyle="->", color=C_DRAWN, lw=1.3))
 
     # note = ("Riffe usable flood storage %s ac-ft = %s cfs-days\n"
