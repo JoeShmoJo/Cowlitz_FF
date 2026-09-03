@@ -334,25 +334,32 @@ It carries sixteen ordinates down to 0.01 percent, and its four deepest rows
 match the four rows in the frequency table exactly, computed value and both
 confidence limits.
 
-**The two analyses are the same fit.** At all twelve ordinates they share, the
-computed curve and both confidence limits agree to a tenth of a cfs. Both
-report the same moments, mean 4.778, standard deviation 0.202, station skew
--0.158, adopted skew -0.135, 95 systematic events. Both show water years 1969
-through 1973 as censored in the EMA representation. The only difference between
-them is the output range that was asked for when the report was written.
+**The two analyses are the same analysis.** A full line by line diff of the two
+reports comes to 46 lines, and it contains no difference in the fit at all. The
+EMA representation is identical, all 96 rows. The moments, skews, event counts,
+plotting positions and Grubbs-Beck results are identical. The adopted report
+even says so in its own header, `Description: Copy of CAS_2026_p`. Both censor
+water years 1969 through 1973.
 
-So the numbers are sound and always were. What the table does is mix two
-reports, taking twelve ordinates from the adopted analysis and four from its
-twin, with the truncation guard holding the join together. Nothing downstream
-is wrong, but no single committed report reproduces the table, and Figure C-1
-carries the adopted analysis name in its title while the ordinates past the 500
-year in Appendix B and Appendix E came from the other one.
+What differs is one SSP setting. `CAS_2026_p` has **Use non-standard
+frequencies** enabled with an explicit list running from 99 down to 0.01
+percent. The adopted analysis does not, so it fell back to the default list
+that stops at 0.2 percent. That single option is why one report has sixteen
+ordinates and the other twelve.
 
 **Two ways to close it.**
 
-The clean one is to re-run `CAS_2026_p_Sensor_1969_1973` in HEC-SSP with the
-output range extended to 0.01 percent and commit the report over the existing
-one. Everything then comes from the analysis the memo names.
+The clean one takes a minute in SSP and re-fits nothing. Open
+`CAS_2026_p_Sensor_1969_1973`, tick **Use non-standard frequencies**, enter the
+same sixteen values `CAS_2026_p` uses, Compute, and commit the report over the
+existing one. Everything then comes from the analysis the memo names.
+
+One number to watch when you do. The two reports also disagree on Equivalent
+Record Length, Cohn et al 100.657 against 103.704 and Margo 102.530 against
+107.318, and the frequency list is the only setting that differs between them.
+So extending the range looks likely to move it. Table 4-4 currently publishes
+100.7 for the peak. Check what the re-run reports and update the table if it
+changes.
 
 The quick one is to point `SSP_ANALYSES["Peak"]` in
 `Frequency_Curves_And_Table.py` at `CAS_2026_p`, which is a one line change and
