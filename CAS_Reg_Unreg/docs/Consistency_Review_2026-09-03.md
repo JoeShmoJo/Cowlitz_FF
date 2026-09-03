@@ -323,20 +323,43 @@ Those four rows carry real weight in the memo:
     Appendix B   the four deepest Peak rows
     Appendix E   every ordinate rarer than the 500 year, all four locations
 
-**They are almost certainly correct.** The computed values reproduce to the
-digit from the current fitted moments, mean 4.777824, standard deviation
-0.201989, adopted skew -0.134983. Their confidence limits sit smoothly on the
-same curve as the reported ones, with the reconstruction error running -6.1
-percent at 0.2 percent chance, which IS in the report, and -6.9 percent at 0.1
-percent, which is not. Nothing about them looks like a different or superseded
-analysis. They came from the same analysis run with a wider output range, and
-that report was never committed.
+**Correction, after the report was tracked down.** I wrote above that the
+report those four rows came from was never committed. That was wrong. They come
+from `CAS_2026_p`, which has been in the repo the whole time, one folder over
+from the adopted analysis:
 
-So this is a reproducibility problem, not a numbers problem. The fix is to
-re-run the adopted Peak analysis in HEC-SSP with the output range extended to
-0.01 percent and commit the .rpt. After that the guard stops being load
-bearing, Figure C-1 matches the other three, and Appendix B is reproducible
-end to end.
+    CAS_Unreg_FF/ssp/2026_Restudy/Bulletin17Results/CAS_2026_p/CAS_2026_p.rpt
+
+It carries sixteen ordinates down to 0.01 percent, and its four deepest rows
+match the four rows in the frequency table exactly, computed value and both
+confidence limits.
+
+**The two analyses are the same fit.** At all twelve ordinates they share, the
+computed curve and both confidence limits agree to a tenth of a cfs. Both
+report the same moments, mean 4.778, standard deviation 0.202, station skew
+-0.158, adopted skew -0.135, 95 systematic events. Both show water years 1969
+through 1973 as censored in the EMA representation. The only difference between
+them is the output range that was asked for when the report was written.
+
+So the numbers are sound and always were. What the table does is mix two
+reports, taking twelve ordinates from the adopted analysis and four from its
+twin, with the truncation guard holding the join together. Nothing downstream
+is wrong, but no single committed report reproduces the table, and Figure C-1
+carries the adopted analysis name in its title while the ordinates past the 500
+year in Appendix B and Appendix E came from the other one.
+
+**Two ways to close it.**
+
+The clean one is to re-run `CAS_2026_p_Sensor_1969_1973` in HEC-SSP with the
+output range extended to 0.01 percent and commit the report over the existing
+one. Everything then comes from the analysis the memo names.
+
+The quick one is to point `SSP_ANALYSES["Peak"]` in
+`Frequency_Curves_And_Table.py` at `CAS_2026_p`, which is a one line change and
+needs no SSP. It is defensible because the two analyses are provably the same
+fit, but it changes the analysis name printed in the Appendix C figure titles,
+so Section 4.8 would have to name `CAS_2026_p` as the adopted peak analysis
+instead.
 
 Until then, be aware that the memo publishes four Peak ordinates that the
 committed SSP output does not produce, and that the figure printed beside them
