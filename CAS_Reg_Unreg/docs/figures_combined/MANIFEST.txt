@@ -6,7 +6,7 @@ Figure 4-1   Fig_4-1__peakdiff_storage_regression.png
               md5 92bfa405a8e3261df0fd164d2fd95ada  written 2026-08-14 16:36
 Figure 4-2   Fig_4-2__CAS_Unreg_2026_frequency.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_2026_frequency.png
-              md5 b95f0b30aff881e0ccba23546e44617e  written 2026-09-03 23:23
+              md5 b95f0b30aff881e0ccba23546e44617e  written 2026-09-03 23:46
 Figure 5-1   (supplied by hand)  ResSim flood validation 1996 supplied by hand
 Figure 5-2   (supplied by hand)  ResSim flood validation 2009 supplied by hand
 Figure 5-3   (supplied by hand)  ResSim flood validation 2015 supplied by hand
@@ -27,7 +27,7 @@ Figure 5-8   Fig_5-8__unreg_reg_final_uncertainty.png
               md5 7f2d00fb464d0d451a72475dd2cddbfe  written 2026-09-03 22:58
 Figure 6-1   Fig_6-1__CAS_Unreg_2009_vs_2026.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_2009_vs_2026.png
-              md5 491cd06ab902e715114df55f424adf8e  written 2026-09-03 23:23
+              md5 491cd06ab902e715114df55f424adf8e  written 2026-09-03 23:46
 Figure 6-2   Fig_6-2__unreg_reg_final_curves.png
               from ../output/diagnostics/unreg_reg_final_curves.png
               md5 776e3b1df57c3deb727611d39ab67676  written 2026-09-03 22:58
@@ -39,13 +39,13 @@ Figure 7-2   Fig_7-2__below_confluence_frequency.png
               md5 b3916a114d52d9f8c8e0235243997ee9  written 2026-09-03 22:59
 Figure C-1   Fig_C-1__CAS_Unreg_freq_Peak.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_freq_Peak.png
-              md5 a174922ae501b7c650b428258aad8c53  written 2026-09-03 23:23
+              md5 f0b696dfe17f4ad087a04f08002118e6  written 2026-09-03 23:46
 Figure C-2   Fig_C-2__CAS_Unreg_freq_1-Day.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_freq_1-Day.png
-              md5 1e734ac49fe8c678f00de66e2ebc804c  written 2026-09-03 23:23
+              md5 1e734ac49fe8c678f00de66e2ebc804c  written 2026-09-03 23:46
 Figure C-3   Fig_C-3__CAS_Unreg_freq_3-Day.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_freq_3-Day.png
-              md5 a4234df5f14a39bc03c262e3fc839e11  written 2026-09-03 23:23
+              md5 a4234df5f14a39bc03c262e3fc839e11  written 2026-09-03 23:46
 Figure C-4   Fig_C-4__CAS_Unreg_freq_5-Day.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_freq_5-Day.png
               md5 97b77b8006885e5ae33334b9acdf228a  written 2026-09-03 23:23

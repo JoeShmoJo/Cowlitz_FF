@@ -372,19 +372,24 @@ Until then, be aware that the memo publishes four Peak ordinates that the
 committed SSP output does not produce, and that the figure printed beside them
 visibly stops short of them.
 
-**Resolution, 3 September 2026.** No re-run. The analysis was already computed
-and the sixteen ordinates in the table are the real output of it, verified
-against `CAS_2026_p.rpt` row by row on the computed value and both confidence
-limits. Nothing in the memo is wrong and nothing changes.
+**Resolved, 3 September 2026. Fixed, not just documented.**
+`Frequency_Curves_And_Table.py` now fills the ordinates the adopted report does
+not carry from its twin, declared in `EXTEND_CURVE_FROM`, after checking that
+every shared ordinate agrees. A disagreement is fatal rather than silent,
+because the day someone re-fits one analysis and not the other is the day this
+stops being safe.
 
-What stays open is only reproducibility. Someone rebuilding the frequency table
-from the report the memo names will get twelve ordinates and the truncation
-guard will stop the table shrinking, printing
+The Peak curve now builds all sixteen ordinates from committed reports:
 
-    Peak   would go from 16 ordinates to 12
+    Peak: 4 ordinate(s) beyond 0.2% taken from CAS_2026_p, 12 shared ordinates agree
 
-That message is the intended signal, not a fault. It is explained here, and the
-missing four ordinates are one folder away in `CAS_2026_p`. Whoever picks this
-up next can close it in a minute by enabling non-standard frequencies on the
-adopted analysis, or leave it, since the numbers are settled either way.
+No published number moved. `CAS_Unreg_frequency_table.csv` and
+`CAS_Unreg_distribution_parameters.csv` are byte identical to what the memo
+already carried, so Table 4-4 still reports an equivalent record length of
+100.7 and Appendix B is unchanged. The truncation guard no longer fires, since
+the table is now built rather than preserved. Figure C-1 carries its expected
+curve and both confidence limits across the full axis like the other three, and
+is re-embedded in the memo.
 
+No SSP re-run was needed. The analysis had already been computed with the full
+frequency list, under the other name.

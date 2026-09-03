@@ -109,6 +109,12 @@ T_LABELS = ["2", "5", "10", "50", "200", "1000"]
 # Observed events on the adopted-curves figure -- DQC comment.
 SHOW_SUMMARY_POINTS = True
 
+# Ordinates the adopted report does not carry are taken from a twin analysis.
+# See extend_curve() for why this is safe and what is checked before it is done.
+# Set to {} to plot and tabulate only what each adopted report itself contains.
+EXTEND_CURVE_FROM = {"Peak": "CAS_2026_p"}
+EXTEND_TOLERANCE_FRAC = 0.0005
+
 CURVE_POINTS = 400
 FIG_SIZE = (9.0, 7.0)
 DPI = 200
@@ -216,13 +222,66 @@ def parse_plotting_positions(txt):
     return pd.DataFrame(rows, columns=cols)
 
 
+def extend_curve(label, curve):
+    """Fill in ordinates the adopted report does not carry.
+
+    The adopted peak analysis was computed without "Use non-standard
+    frequencies", so SSP wrote only the default twelve ordinates and the report
+    stops at the 500 year. Its twin CAS_2026_p is the same analysis with that
+    option enabled -- the report header of the adopted one literally reads
+    "Description: Copy of CAS_2026_p" -- and it carries all sixteen.
+
+    The two are the same fit. Identical EMA representation across all 96 rows,
+    identical moments, skews, event counts, plotting positions and Grubbs-Beck
+    results. The only differences in a full diff of the two reports are the
+    frequency list, the file names and the reported equivalent record length.
+
+    So the missing ordinates are taken from the twin rather than left out. The
+    overlapping ordinates are checked first and a disagreement is fatal, because
+    the day someone re-fits one analysis and not the other is the day this stops
+    being safe.
+    """
+    donor_stem = EXTEND_CURVE_FROM.get(label)
+    if not donor_stem:
+        return curve
+    path = os.path.join(SSP_DIR, donor_stem, donor_stem + ".rpt")
+    if not os.path.exists(path):
+        print(f"  {label}: no donor report at {path}, curve left as reported")
+        return curve
+    with open(path, "r", errors="replace") as fh:
+        donor = parse_frequency_curve(fh.read())
+    if donor.empty:
+        return curve
+
+    have = set(curve["pct_chance"].round(6))
+    both = donor[donor["pct_chance"].round(6).isin(have)]
+    for _, d in both.iterrows():
+        c = curve[np.isclose(curve["pct_chance"], d["pct_chance"])].iloc[0]
+        for col in ("computed", "expected", "conf_05", "conf_95"):
+            if abs(d[col] - c[col]) > abs(c[col]) * EXTEND_TOLERANCE_FRAC:
+                raise SystemExit(
+                    f"{label}: {donor_stem} disagrees with the adopted analysis "
+                    f"at {d['pct_chance']}% on {col}, {d[col]:,.1f} against "
+                    f"{c[col]:,.1f}. They are no longer the same fit, so the "
+                    f"curve cannot be extended from it. Re-run the adopted "
+                    f"analysis with non-standard frequencies instead.")
+
+    add = donor[~donor["pct_chance"].round(6).isin(have)]
+    if add.empty:
+        return curve
+    print(f"  {label}: {len(add)} ordinate(s) beyond {curve['pct_chance'].min()}% "
+          f"taken from {donor_stem}, {len(both)} shared ordinates agree")
+    out = pd.concat([curve, add], ignore_index=True)
+    return out.sort_values("pct_chance", ascending=False).reset_index(drop=True)
+
+
 def load_all():
     data = {}
     for label in SSP_ANALYSES:
         txt = read_report(label)
         if not txt:
             continue
-        data[label] = {"curve": parse_frequency_curve(txt),
+        data[label] = {"curve": extend_curve(label, parse_frequency_curve(txt)),
                        "stats": parse_statistics(txt),
                        "plotpos": parse_plotting_positions(txt)}
         s = data[label]["stats"]

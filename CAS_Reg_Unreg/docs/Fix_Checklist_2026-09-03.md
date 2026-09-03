@@ -9,8 +9,8 @@
 >
 > **Closed out.** The memo verifies against every source CSV and every figure
 > reports CURRENT or BY HAND except Figure 4-1, which you chose to leave. The
-> Peak SSP ordinate question in section F of the review is documented rather
-> than fixed, by decision, since the numbers were never in doubt.
+> Peak SSP ordinate question in section F of the review is fixed. The curve is
+> built from committed reports and Figure C-1 spans the full axis.
 
 Ordered so nothing has to be done twice. Findings are in
 `Consistency_Review_2026-09-03.md`.
