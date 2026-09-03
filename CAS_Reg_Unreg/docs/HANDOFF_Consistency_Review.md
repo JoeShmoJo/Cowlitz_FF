@@ -259,3 +259,23 @@ print(u.groupby('Peak_Source').Peak.agg(['count','median','max']))
 - Anything that touches pydsstools must work on the author's Windows build too.
   Prefer `getattr` with fallbacks over a direct API call. `CLAUDE.md` lists the
   three API differences that have each already cost a round trip.
+
+---
+
+## Addendum, 3 September 2026: figure provenance is now checkable
+
+Section 3 above described the staging folder as the largest consistency hazard
+in the package and gave a hand made table of which staged figure was embedded
+in the docx. That table is superseded. Run this instead:
+
+    cd CAS_Reg_Unreg/docs
+    python3 "#Figure_Check.py"
+
+`figure_manifest.csv` maps every memo figure to the script output that produces
+it. The script stages each one into `figures_combined/` under a name that
+carries the figure number, `Fig_5-8__unreg_reg_final_uncertainty.png`, and then
+reports every figure embedded in the .docx as CURRENT, DIFFERS or NO ORIGIN
+against the live output. It does not edit the document.
+
+A completed review of both 3 September documents is in
+`Consistency_Review_2026-09-03.md`.
