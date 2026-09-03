@@ -354,12 +354,29 @@ The clean one takes a minute in SSP and re-fits nothing. Open
 same sixteen values `CAS_2026_p` uses, Compute, and commit the report over the
 existing one. Everything then comes from the analysis the memo names.
 
-One number to watch when you do. The two reports also disagree on Equivalent
-Record Length, Cohn et al 100.657 against 103.704 and Margo 102.530 against
-107.318, and the frequency list is the only setting that differs between them.
-So extending the range looks likely to move it. Table 4-4 currently publishes
-100.7 for the peak. Check what the re-run reports and update the table if it
-changes.
+**On the equivalent record length, which I flagged and should not have.** The
+two reports disagree on it, Cohn et al 100.657 against 103.704 and Margo
+102.530 against 107.318, and I said to watch Table 4-4 in case it needed
+updating. Having checked properly, it does not, and changing it would introduce
+an error rather than fix one.
+
+Three reasons. It is not used in any calculation anywhere in the repo. It is
+parsed once, printed in the figure stats box and in Table 4-4, and nothing
+reads it again. The confidence limits do not come from it, they come from the
+variance of the log, which is identical between the two analyses at every
+shared ordinate, and that is exactly why the two curves agree to a tenth of a
+cfs while their equivalent record lengths differ. Cohn and Margo are summaries
+computed over whatever range the report was written for, so the difference is a
+consequence of the frequency list rather than of the fit.
+
+And the two numbers are not even the same statistic. Table 4-4 publishes the
+**Cohn et al (1997)** value from the **adopted** analysis, which is what the
+script parses. The 107.318 that HEC-SSP shows in the Bulletin 17 editor is the
+**Margo** value from the **twin**. Swapping one for the other would change both
+the definition and the source in a single edit.
+
+Table 4-4 is correct at 100.7 and Section 4.8's range of 100 to 112 years is
+correct with it. Leave both alone.
 
 The quick one is to point `SSP_ANALYSES["Peak"]` in
 `Frequency_Curves_And_Table.py` at `CAS_2026_p`, which is a one line change and
