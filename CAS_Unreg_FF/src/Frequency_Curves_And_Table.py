@@ -376,11 +376,16 @@ def make_duration_plot(data, label, out_png):
         ax.plot(px, curve["expected"].values[order], color="#0000c0",
                 linewidth=1.2, linestyle=":", zorder=4,
                 label="Expected probability curve")
-        ax.plot(px, curve["conf_05"].values[order], color="#008000",
-                linewidth=1.0, linestyle="--", dashes=(6, 3), zorder=3,
-                label="5% confidence limit")
+        # HEC-SSP numbers a confidence limit by the exceedance probability OF
+        # THE LIMIT, so its conf_05 is the UPPER flow and conf_95 the lower.
+        # The memo labels by percentile of flow instead, matching Table 5-3 and
+        # Appendix E, so the labels are the other way round here. Get this wrong
+        # and Appendix B and Appendix C contradict each other on the same page.
         ax.plot(px, curve["conf_95"].values[order], color="#008000",
                 linewidth=1.0, linestyle="--", dashes=(2, 2), zorder=3,
+                label="5% confidence limit")
+        ax.plot(px, curve["conf_05"].values[order], color="#008000",
+                linewidth=1.0, linestyle="--", dashes=(6, 3), zorder=3,
                 label="95% confidence limit")
 
     if not pp.empty:
