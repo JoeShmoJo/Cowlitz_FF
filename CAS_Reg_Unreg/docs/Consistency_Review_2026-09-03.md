@@ -291,3 +291,53 @@ step is method bias it propagates into every result in the memo. This is not a
 finding, it is a question worth an answer before the next review.
 
 # Response: Ignore it
+
+---
+
+## F. Found later: the adopted Peak SSP report stops at the 500 year
+
+Raised by the question "why do the uncertainty bounds and expected line on
+Figure C-1 not extend to the 1000 year".
+
+They stop because that is where HEC-SSP stops. The adopted Peak analysis,
+`CAS_2026_p_Sensor_1969_1973`, tabulates twelve ordinates ending at 0.2 percent
+chance exceedance. The computed curve keeps going because it is drawn
+analytically from the fitted LP3 moments and can be evaluated anywhere. The
+expected probability curve and the confidence limits are plotted only where
+SSP tabulates them, so they end at the 500 year.
+
+The other three duration reports carry sixteen ordinates down to 0.01 percent,
+so Figures C-2, C-3 and C-4 reach the right edge and C-1 does not.
+
+**The consequence is larger than the figure.** Four Peak rows in
+`CAS_Unreg_frequency_table.csv`, at AEP 0.001, 0.0005, 0.0002 and 0.0001, are
+not in the committed report at all. They survive only because
+`Frequency_Curves_And_Table.py` carries a truncation guard that refuses to
+shrink the table. Run the script and it says so:
+
+    Peak   would go from 16 ordinates to 12
+
+Those four rows carry real weight in the memo:
+
+    Table 5-3    the 1000 year row, unregulated 255,074 cfs
+    Appendix B   the four deepest Peak rows
+    Appendix E   every ordinate rarer than the 500 year, all four locations
+
+**They are almost certainly correct.** The computed values reproduce to the
+digit from the current fitted moments, mean 4.777824, standard deviation
+0.201989, adopted skew -0.134983. Their confidence limits sit smoothly on the
+same curve as the reported ones, with the reconstruction error running -6.1
+percent at 0.2 percent chance, which IS in the report, and -6.9 percent at 0.1
+percent, which is not. Nothing about them looks like a different or superseded
+analysis. They came from the same analysis run with a wider output range, and
+that report was never committed.
+
+So this is a reproducibility problem, not a numbers problem. The fix is to
+re-run the adopted Peak analysis in HEC-SSP with the output range extended to
+0.01 percent and commit the .rpt. After that the guard stops being load
+bearing, Figure C-1 matches the other three, and Appendix B is reproducible
+end to end.
+
+Until then, be aware that the memo publishes four Peak ordinates that the
+committed SSP output does not produce, and that the figure printed beside them
+visibly stops short of them.
