@@ -242,9 +242,12 @@ def stage(rows):
         print("  %s %-11s %-52s  (source written %s)"
               % (flag, r["figure"], name, mtime(r["source"])))
     with open(os.path.join(STAGE_DIR, "MANIFEST.txt"), "w") as f:
-        f.write("Staged by #Figure_Check.py on %s\n"
-                "Do not hand edit anything named Fig_*. Re-run this script "
-                "instead.\n\n" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        # No wall clock stamp here on purpose. This file is tracked, and a
+        # generation time would rewrite it on every run, so a routine check
+        # would dirty the tree and the diff would never mean anything. The
+        # source paths, md5s and source mtimes below already say what changed.
+        f.write("Staged by #Figure_Check.py. Do not hand edit anything named "
+                "Fig_*. Re-run this script instead.\n\n")
         for r in rows:
             if r["source"] in ("", "-"):
                 f.write("%-11s  (supplied by hand)  %s\n" % (r["figure"], r["note"]))

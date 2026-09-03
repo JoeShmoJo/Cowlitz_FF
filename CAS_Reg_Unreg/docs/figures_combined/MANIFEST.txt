@@ -1,5 +1,4 @@
-Staged by #Figure_Check.py on 2026-09-03 23:14
-Do not hand edit anything named Fig_*. Re-run this script instead.
+Staged by #Figure_Check.py. Do not hand edit anything named Fig_*. Re-run this script instead.
 
 Figure 2-1   (supplied by hand)  basin map supplied by hand
 Figure 4-1   Fig_4-1__peakdiff_storage_regression.png
