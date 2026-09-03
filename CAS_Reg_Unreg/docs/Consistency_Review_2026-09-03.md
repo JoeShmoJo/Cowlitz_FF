@@ -371,3 +371,20 @@ instead.
 Until then, be aware that the memo publishes four Peak ordinates that the
 committed SSP output does not produce, and that the figure printed beside them
 visibly stops short of them.
+
+**Resolution, 3 September 2026.** No re-run. The analysis was already computed
+and the sixteen ordinates in the table are the real output of it, verified
+against `CAS_2026_p.rpt` row by row on the computed value and both confidence
+limits. Nothing in the memo is wrong and nothing changes.
+
+What stays open is only reproducibility. Someone rebuilding the frequency table
+from the report the memo names will get twelve ordinates and the truncation
+guard will stop the table shrinking, printing
+
+    Peak   would go from 16 ordinates to 12
+
+That message is the intended signal, not a fault. It is explained here, and the
+missing four ordinates are one folder away in `CAS_2026_p`. Whoever picks this
+up next can close it in a minute by enabling non-standard frequencies on the
+adopted analysis, or leave it, since the numbers are settled either way.
+

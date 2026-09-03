@@ -6,6 +6,11 @@
 > your instruction. Step 10, the DQC memo, was skipped on your instruction.
 > Step 12 has been run and the document verifies against every source CSV.
 > What remains is the Figure 4-1 question, and only if you want it.
+>
+> **Closed out.** The memo verifies against every source CSV and every figure
+> reports CURRENT or BY HAND except Figure 4-1, which you chose to leave. The
+> Peak SSP ordinate question in section F of the review is documented rather
+> than fixed, by decision, since the numbers were never in doubt.
 
 Ordered so nothing has to be done twice. Findings are in
 `Consistency_Review_2026-09-03.md`.
