@@ -162,21 +162,31 @@ In rough order of how likely it is to find something real.
 
 ## 5. Things already settled. Do not relitigate.
 
-- **Figure 5-8 plotting positions.** Revisited on 3 Sep 2026 at the author's
-  request and now settled the other way. The DQC reviewer asked for the adjusted
-  regulated peaks to be ranked at plotting positions, the convention, and that
-  is adopted: `ADJUSTED_PP_BASIS = "assessed_span"` ranks the 41 usable values
-  over the 51 assessed years. Ranked that way the cloud sits above the
-  regulated curve (median observed over curve 1.05, 33 of 41 above), which is
-  the sample window, not the transform: WY1974 to WY2024 holds nine of the ten
-  largest unregulated years in the 95 year record. The figure carries the
-  control alongside, `FINAL_UNREG_POINTS_BASIS = "assessed_window"`, which
-  ranks the same window's unregulated peaks among themselves. They sit further
-  above the unregulated curve (1.16, 43 of 51 above) than the regulated points
-  sit above theirs. `src/#Fig58_Window_Ranked_Check.py` is the standalone
-  comparison and `DQC_Review_Findings_2026-09-03.md` section 1 has the
-  argument. The own year placement (`"unreg_record"`) is kept as a diagnostic
-  only. The regulated frequency table did not change.
+- **Figure 5-8 plotting positions.** Settled on 3 Sep 2026 after two
+  false starts. The DQC reviewer asked for the adjusted regulated peaks to be
+  ranked so they increase continuously. Adopted:
+  `ADJUSTED_PP_BASIS = "ranked_unreg_positions"` in `#Unreg_Reg_Curve.py`. The
+  41 usable peaks are sorted largest first and given, in the same order, the
+  plotting positions their own water years hold in the 95 year unregulated
+  record. Monotone, on the curve's own probability axis, and centred on the
+  curve (median observed over curve 0.99, 17 of 41 above). No value changes.
+  The unregulated record stays as HEC-SSP draws it, all 95 years ranked once
+  (`FINAL_UNREG_POINTS_BASIS = "full"`). Two things NOT to do again: ranking
+  the regulated peaks inside the 51 year window puts the cloud above the curve
+  (1.05, 33 of 41 above) because WY1974 to WY2024 holds nine of the ten largest
+  unregulated years; and ranking the window's unregulated peaks alongside as a
+  control makes the unregulated curve look like a poor fit to its own data,
+  which invites a question the memo does not need. Both are kept only as
+  diagnostics: `src/#Fig58_Placement_Options.py` draws all three placements.
+  The memo carries one explanation paragraph before the figure that the author
+  may delete, so nothing else references it.
+- **Figure 5-7 lower band edge.** Beyond the edge of the fitted data
+  (279,538 cfs) the lower edge of the transform scatter band closes its gap to
+  the 1:1 line at the same average rate the drawn limb closes its own, and
+  lands on 1:1 at about 393,000 cfs, off the plot. `LOWER_BAND_CLOSES_ON_1TO1`
+  in `#Transform_Convergence_Figure.py`. The earlier parallel hold past the
+  325,000 cfs convergence left a dogleg that read as the band widening.
+  Figure only, no table changes.
 - **The synthetic ensemble is hand edited after it is built.** See `CLAUDE.md`.
   `#Create_Synthetic_Ensembles.py` has `PLOTS_ONLY = True` deliberately. Do not
   set it to False. Running it in write mode destroys the author's hand chop of the

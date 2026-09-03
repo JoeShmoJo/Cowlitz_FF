@@ -66,7 +66,14 @@ curve is wrong. The regulated cloud is in fact the better behaved of the two.
 `output/diagnostics/fig58_window_ranked_check.png`. It reads only published
 CSVs and does not touch Figure 5-8.
 
-**Recommendation.** Give the reviewer the ranked plot, because that is the
+**Superseded later the same day.** The window ranked unregulated control
+recommended below made the unregulated curve look like a poor fit and was
+withdrawn. Adopted instead: the adjusted peaks are ranked and given the 95 year
+plotting positions of their own water years, which is monotone and centred on
+the curve (0.99, 17 of 41 above). See `HANDOFF_Consistency_Review.md` section 5
+and `src/#Fig58_Placement_Options.py`.
+
+**Original recommendation, kept for the record.** Give the reviewer the ranked plot, because that is the
 convention, and make the window effect visible on the same figure so that the
 ranked cloud stops looking like a contradiction:
 

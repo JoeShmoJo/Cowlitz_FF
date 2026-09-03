@@ -92,6 +92,15 @@ LIMB_FROM_LAST_SUPPORTED = True
 SPLIT_AT_SUPPORT_EDGE = True
 TAPER_POWER = 1.6             # shape of the drawn limb only; 1 is a straight
                               # run-in, higher lands on 1:1 more gently.
+# The lower edge of the scatter band beyond the fitted data. The band is a log
+# sigma about the curve, so past the data it keeps flaring away from 1:1 even
+# though the curve it sits under is closing on 1:1. Holding it parallel (the
+# previous fix) left a dogleg that read as the band widening at the end. Now,
+# from the edge of the fitted data outward, the lower edge closes its gap to
+# 1:1 at the same average rate the drawn limb closes its own gap. It reaches
+# 1:1 later than the curve does, beyond the plot, because it starts further
+# away. One rule, no second constant. The script prints where it lands.
+LOWER_BAND_CLOSES_ON_1TO1 = True
 
 FLOOD_STORAGE_ACFT = 358116.0   # Riffe, 745.5 -> 778.5 ft
 AXIS_MAX_CFS = 350000.0
@@ -189,20 +198,30 @@ def main():
         # from, so the upper edge of the band cannot cross the 1:1 line.
         hi = np.minimum(hi, u)
 
-        # Past the convergence the lower edge is held parallel to 1:1 rather
-        # than allowed to keep flaring away from it. The band is drawn from a
-        # log sigma about a curve that is itself converging, which sends the
-        # lower edge diverging downward exactly where the physical argument
-        # says the two curves are closing. The reservoir has filled by then and
-        # is passing inflow, so the spread should stop widening. It very likely
-        # closes on 1:1 as well, and holding it parallel is the conservative
-        # version of that, since it keeps the band open rather than pinching it
-        # shut on an assumption.
-        if CONVERGE_AT_CFS > u.min():
-            lo_at_conv = float(np.interp(CONVERGE_AT_CFS, u, lo))
-            offset = CONVERGE_AT_CFS - lo_at_conv
-            beyond = u > CONVERGE_AT_CFS
-            lo = np.where(beyond, u - offset, lo)
+        if LOWER_BAND_CLOSES_ON_1TO1 and u.min() < support_max < u.max():
+            # Put a vertex exactly at the edge of the fitted data so the
+            # change of behaviour happens where the data stops.
+            u_edge = float(support_max)
+            lo_edge = float(np.interp(u_edge, u, lo))
+            hi_edge = float(np.interp(u_edge, u, hi))
+            reg_edge = float(np.interp(u_edge, u, base))
+            u = np.append(u, u_edge)
+            lo = np.append(lo, lo_edge)
+            hi = np.append(hi, hi_edge)
+            o = np.argsort(u)
+            u, lo, hi = u[o], lo[o], hi[o]
+            gap_lo_edge = u_edge - lo_edge
+            gap_curve_edge = u_edge - reg_edge
+            rate = gap_curve_edge / (CONVERGE_AT_CFS - u_edge)
+            lower_lands_at = u_edge + gap_lo_edge / rate
+            beyond = u > u_edge
+            gap = np.maximum(gap_lo_edge - rate * (u - u_edge), 0.0)
+            lo = np.where(beyond, u - gap, lo)
+            print("   lower band edge: gap to 1:1 is %s cfs at the data edge "
+                  "(%s cfs), closing at the limb's rate of %.2f, so it lands "
+                  "on 1:1 at about %s cfs"
+                  % (format(int(gap_lo_edge), ","), format(int(u_edge), ","),
+                     rate, format(int(lower_lands_at), ",")))
 
         ax.fill_between(u, lo, hi, color=C_CURVE, alpha=0.13, lw=0, zorder=2,
                         label="Transform scatter, 5%-95%")

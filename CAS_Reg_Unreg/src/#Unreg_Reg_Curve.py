@@ -198,49 +198,46 @@ FINAL_SHOW_ADJUSTED_POINTS = True
 # the frequency axis.
 #
 # HOW THE ADJUSTED REGULATED PEAKS ARE PLACED ON THE FREQUENCY AXIS
-#     The DQC reviewer asked for these points to be ranked and given plotting
-#     positions, the same treatment the unregulated record gets. That is the
-#     convention and it is adopted: "assessed_span" ranks the usable values
-#     over the 51 assessed water years, WY1974 to WY2024, with the ten
-#     screened years unranked.
+#     The DQC reviewer asked for these points to be ranked so they increase
+#     continuously, instead of each sitting at its own water year's AEP. That
+#     is the convention and it is adopted. The only question is which record
+#     length the plotting positions come from.
 #
-#     Ranked that way the cloud sits above the regulated curve (median
-#     observed over curve about 1.05, 33 of 41 above). That is NOT the
-#     transform. The regulated record is a flood rich slice of the 95 year
-#     unregulated record: nine of the ten largest unregulated years fall
-#     inside WY1974 to WY2024, and the window's median unregulated peak is
-#     72,455 cfs against 61,703 cfs for the full record. Anything ranked
-#     inside that window plots above a curve fitted to the full record.
+#     "ranked_unreg_positions" (adopted). The regulated curve has no
+#     probability axis of its own: every ordinate is transform(unreg(p)), so
+#     it inherits the 95 year unregulated record's axis. The 41 usable water
+#     years hold 41 known plotting positions in that record. The adjusted
+#     peaks are sorted largest first and given those positions in the same
+#     order. Nothing is fitted and no value changes; the largest regulated
+#     peak takes the position of the largest unregulated year among the 41,
+#     and so on down. Median observed over curve about 0.99, 17 of 41 above.
 #
-#     So the figure carries the control alongside: FINAL_UNREG_POINTS_BASIS =
-#     "assessed_window" ranks the WY1974 to WY2024 UNREGULATED peaks among
-#     themselves too. They sit further above the unregulated curve (median
-#     about 1.16, 43 of 51 above) than the regulated points sit above theirs,
-#     which is what shows the offset is the sample window.
-#     src/#Fig58_Window_Ranked_Check.py is the standalone version of that
-#     comparison and docs/DQC_Review_Findings_2026-09-03.md has the numbers.
+#     "assessed_span". Ranked among themselves over the 51 assessed water
+#     years, WY1974 to WY2024. The literal reading of the request. The cloud
+#     sits above the curve (about 1.05, 33 of 41 above) because that window
+#     is a flood rich slice of the record: nine of the ten largest unregulated
+#     years fall inside it, and its median unregulated peak is 72,455 cfs
+#     against 61,703 cfs for the full record. Anything ranked inside the
+#     window plots above a curve fitted to the full record, the unregulated
+#     peaks of the same years included (about 1.16, 43 of 51 above). Kept as
+#     a diagnostic; src/#Fig58_Placement_Options.py draws the comparison.
 #
-#     The other bases are kept for diagnostics:
-#       "unreg_record"  Each adjusted peak at the plotting position its OWN
-#                       water year holds in the full 95 year unregulated
-#                       record. Shows the transform scatter at each AEP,
-#                       centred on the curve (median about 1.03, 22 of 41
-#                       above), but it is not a frequency plot and it needs a
-#                       paragraph of explanation the ranked plot does not.
-#       "usable_count"  Ranked among themselves over the 41 usable values.
-#                       Treats the screened years as years that never
-#                       happened and hands the largest value a 59 year return
-#                       interval inside a 51 year window. Not recommended.
+#     "unreg_record". Each peak at its own water year's position, paired by
+#     year. Centred (about 1.03) but not monotone. The version the reviewer
+#     objected to. Diagnostic only.
+#
+#     "usable_count". Ranked over the 41 usable values alone. Hands the
+#     largest value a 59 year return interval inside a 51 year window. Not
+#     recommended.
 #
 #     CAVEAT worth carrying forward. The window effect is confounded with a
 #     method change. WY1927 to WY1968 are observed USGS pre regulation peaks
-#     with a median of 53,850 cfs, while WY1974 on are reconstructed, either
-#     dS2day_regression or hourly_holdout, with a median of 72,455 cfs. There
-#     are no overlap years, so the two methods cannot be compared directly.
-#     The step may be a real climate signal, a reconstruction bias, or both.
-#     It does not change the plotting position conclusion, because the curve
-#     and the control are built from the same record.
-ADJUSTED_PP_BASIS = "assessed_span"
+#     with a median of 53,850 cfs, while WY1974 on are reconstructed, with a
+#     median of 72,455 cfs. There are no overlap years, so the two cannot be
+#     compared directly. The step may be climate, reconstruction bias, or
+#     both. It does not change the plotting position choice, because the
+#     curve and the points are placed from the same record.
+ADJUSTED_PP_BASIS = "ranked_unreg_positions"
 ADJUSTED_PEAKS_ALL_CSV = r"../output/adjusted_peaks.csv"
 
 FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
@@ -249,12 +246,14 @@ FULL_UNREG_PEAK_COL = "Peak"
 # Plot the unregulated record on the adopted figure as well, in the unregulated
 # colour, at the same plotting positions. Both records then sit on the figure
 # on a common basis.
+#   "full"             the whole 95 year record ranked among itself, as
+#                      HEC-SSP draws it (adopted)
 #   "assessed_window"  the WY1974 to WY2024 unregulated peaks ranked among
-#                      themselves, the same window and the same ranking the
-#                      adjusted regulated peaks get (adopted, see above)
-#   "full"             the whole 95 year record ranked among itself
+#                      themselves. Diagnostic only: it makes the unregulated
+#                      curve look like a poor fit to its own data, which is
+#                      the window effect and not the curve.
 FINAL_SHOW_UNREG_POINTS = True
-FINAL_UNREG_POINTS_BASIS = "assessed_window"
+FINAL_UNREG_POINTS_BASIS = "full"
 ENFORCE_SCREENING = True
 
 # Historic simulated pairs from the WCM_RC run, written by
@@ -1695,11 +1694,11 @@ def load_adjusted_points(path):
     if not len(d):
         return None, None
 
-    if ADJUSTED_PP_BASIS == "unreg_record":
+    if ADJUSTED_PP_BASIS in ("unreg_record", "ranked_unreg_positions"):
         if not os.path.exists(FULL_UNREG_RECORD_CSV) or "WY" not in d.columns:
             raise SystemExit(
-                "ADJUSTED_PP_BASIS = 'unreg_record' needs %s and a WY column "
-                "in %s" % (FULL_UNREG_RECORD_CSV, path))
+                "ADJUSTED_PP_BASIS = '%s' needs %s and a WY column "
+                "in %s" % (ADJUSTED_PP_BASIS, FULL_UNREG_RECORD_CSV, path))
         full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
             [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
         full = full.sort_values(FULL_UNREG_PEAK_COL, ascending=False)
@@ -1715,6 +1714,14 @@ def load_adjusted_points(path):
                 "record %s, so they cannot be placed: %s"
                 % (missing, FULL_UNREG_RECORD_CSV,
                    list(m.loc[m["aep"].isna(), "WY"].astype(int))))
+        if ADJUSTED_PP_BASIS == "ranked_unreg_positions":
+            # Sorted peaks paired with the sorted positions of the same water
+            # years: monotone, on the curve's own axis, no value changed.
+            print("   adjusted peaks: %d values ranked, at the plotting "
+                  "positions their water years hold in the %d year "
+                  "unregulated record" % (len(m), n))
+            return (np.sort(m["aep"].values),
+                    np.sort(m[col].values.astype(float))[::-1])
         print("   adjusted peaks: %d values placed at the plotting position "
               "each water year holds in the %d year unregulated record"
               % (len(m), n))
@@ -1784,6 +1791,8 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
                     label=("Adjusted regulated peaks, WY1974 to WY2024 ranked "
                            "(n=%d of 51)" % len(v_pts)
                            if ADJUSTED_PP_BASIS == "assessed_span"
+                           else "Adjusted regulated peaks, ranked (n=%d)" % len(v_pts)
+                           if ADJUSTED_PP_BASIS == "ranked_unreg_positions"
                            else "Adjusted regulated peaks (n=%d)" % len(v_pts)))
 
     if FINAL_SHOW_SUPPORT_MARKER:
