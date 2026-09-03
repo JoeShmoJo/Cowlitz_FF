@@ -194,46 +194,73 @@ ADJUSTED_PEAKS_CSV = r"../output/adjusted_peaks.csv"
 # adopted figure at median plotting positions -- DQC comment on Figure 5-5.
 ADJUSTED_PEAKS_SSP_CSV = r"../output/adjusted_peaks_ssp.csv"
 FINAL_SHOW_ADJUSTED_POINTS = True
-# The full unregulated record, used ONLY to place the adjusted regulated peaks
-# on the frequency axis.
+# The full unregulated record, used to place the adjusted regulated peaks on
+# the frequency axis.
 #
-# WHY NOT JUST RANK THE 41 ADJUSTED PEAKS
-#     Ranking them among themselves assigns the largest of 41 an AEP of
-#     (1-0.3)/(41+0.4) = 0.0169, a 59 year event. But those 41 years are a
-#     screened subset of the regulated era, not a 41 year record, and the curve
-#     they are being compared against was fitted to 95 water years. Treating
-#     them as a complete record makes every event look far more common than it
-#     is and slides the whole cloud left, where the curve is lower. Every point
-#     then sits above the line. Measured: median observed/curve 1.128 with 40
-#     of 41 points above it.
-#
-#     Each adjusted peak is instead placed at the plotting position its own
-#     water year holds in the FULL unregulated record. That is the AEP the
-#     storm actually had, and it is the same basis the regulated curve is built
-#     on, since each regulated ordinate inherits its AEP from the unregulated
-#     curve. On that basis the median ratio is 1.028 and the points split 22
-#     above and 19 below, which is scatter rather than bias.
 # HOW THE ADJUSTED REGULATED PEAKS ARE PLACED ON THE FREQUENCY AXIS
-#     They are ranked among themselves and given median plotting positions, the
-#     same treatment the unregulated record gets, so the two clouds are built
-#     the same way and each rises monotonically.
+#     The DQC reviewer asked for these points to be ranked and given plotting
+#     positions, the same treatment the unregulated record gets. That is the
+#     normal convention and it is the right instinct, but ranking this
+#     particular record among itself is wrong here, for three reasons that are
+#     all measurable in the data.
 #
-#     The record length is NOT the number of usable values. Fifty one water
-#     years were assessed, 1974 through 2024, and ten were screened out. Those
-#     ten are missing data, not years that never happened, so n is the assessed
-#     span and the screened years simply go unranked. Using n = 41 instead
-#     would treat the record as a complete 41 year sample and assign the
-#     largest value a 59 year return interval when it sits in a 51 year window.
+#     ONE. The regulated curve has no probability axis of its own. Every
+#     regulated ordinate is transform(unreg_expected(p)), so the AEP printed
+#     under it is the AEP of the UNREGULATED event. A self ranked regulated
+#     observation carries an AEP estimated from the regulated sample, which is
+#     a different axis. The two are only being drawn on the same figure.
 #
-#     For reference, measured as the median of observed over the curve at the
-#     plotted position:
-#         n = 41, the count of usable values      1.128, 40 of 41 above
-#         n = 51, the assessed span (adopted)     1.046, 32 of 41 above
-#         each year at its place in the 95 year
-#         unregulated record                      1.028, 22 of 41 above
-#     The last is the least biased but it does not rank, so the cloud is not
-#     monotone and it reads oddly beside the unregulated points.
-ADJUSTED_PP_USE_ASSESSED_SPAN = True
+#     TWO. The 51 assessed water years are a flood rich slice of the 95 year
+#     record, not a representative one. Of the ten largest unregulated years,
+#     nine fall inside WY1974 to WY2024, where a representative slice would
+#     hold five or six. Of the largest twenty, seventeen fall inside it against
+#     an expectation of eleven. Ranking inside that window therefore gives every
+#     event more competitors than it truly has, inflates its AEP, and slides the
+#     whole cloud left onto a lower part of the curve. WY1996 is rank 1 of 95
+#     at an AEP of 0.0073, a 136 year event, but rank 1 of 51 puts it at 0.0136,
+#     a 73 year event.
+#
+#     THREE. The screening is size biased, so the 41 survivors are not a random
+#     41 of the 51 either. Two of the ten largest adjusted values were removed,
+#     WY1980 at rank 4 and WY1974 at rank 9, both under reg_over_unreg, a screen
+#     that can only fire on a large event.
+#
+#     ADJUSTED_PP_BASIS therefore selects how the points are placed:
+#
+#       "unreg_record"  (adopted) Each adjusted peak sits at the plotting
+#                       position its OWN water year holds in the full 95 year
+#                       unregulated record. That is the exceedance probability
+#                       the storm actually had, and it is the same basis each
+#                       regulated ordinate inherits, so point and curve are on
+#                       one axis. The cloud does not rise monotonically, and
+#                       that is the point: the vertical spread at a given AEP
+#                       IS the transform scatter, which is what the band is
+#                       drawn to cover.
+#       "assessed_span" Ranked among themselves over the 51 year assessed
+#                       record, WY1974 to WY2024.
+#       "usable_count"  Ranked among themselves over the 41 usable values.
+#
+#     Measured as the median of observed over the curve at the plotted position,
+#     and as the share of points the adopted 90 percent band contains:
+#         basis            median   above line   inside band
+#         usable_count      1.146      40 of 41     37 of 41
+#         assessed_span     1.058      33 of 41     37 of 41
+#         unreg_record      1.034      22 of 41     40 of 41
+#     Only the last is centred on the curve. The other two are one sided, which
+#     is the signature of a plotting position artifact rather than of scatter.
+#
+#     CAVEAT worth carrying forward. Reason TWO is confounded. The unregulated
+#     record changes estimation method at exactly the same place it changes
+#     level: WY1927 to WY1968 are observed USGS pre regulation peaks with a
+#     median of 53,850 cfs, while WY1974 to WY2026 are reconstructed, either
+#     dS2day_regression or hourly_holdout, with a median of 72,455 cfs. There
+#     are no overlap years, since regulation began in 1968 and the record has a
+#     gap from WY1969 to WY1973, so the two methods cannot be compared directly.
+#     The step may be a real climate signal, a reconstruction bias, or both.
+#     Whichever it is, it does not change the plotting position conclusion,
+#     because the adopted basis places each point using the same record the
+#     curve was fitted to.
+ADJUSTED_PP_BASIS = "unreg_record"
 ADJUSTED_PEAKS_ALL_CSV = r"../output/adjusted_peaks.csv"
 
 FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
@@ -1650,22 +1677,49 @@ def load_full_unreg_points():
 
 
 def load_adjusted_points(path):
-    """The screened adjusted regulated peaks at median plotting positions.
+    """The screened adjusted regulated peaks placed on the frequency axis.
 
-    Ranked among themselves, like the unregulated record, but over the assessed
-    record length rather than the count of usable values. See
-    ADJUSTED_PP_USE_ASSESSED_SPAN for why.
+    See ADJUSTED_PP_BASIS for why the adopted basis is not a self ranking.
+    Returns (aep, values) with the two arrays already paired element by
+    element, so the caller must not sort either one.
     """
     if not os.path.exists(path):
         return None, None
     d = pd.read_csv(path)
     col = "adjusted_peak" if "adjusted_peak" in d.columns else d.columns[-1]
-    v = pd.to_numeric(d[col], errors="coerce").dropna().values.astype(float)
-    if not len(v):
+    d = d[pd.to_numeric(d[col], errors="coerce").notna()].copy()
+    d[col] = pd.to_numeric(d[col], errors="coerce")
+    if not len(d):
         return None, None
 
+    if ADJUSTED_PP_BASIS == "unreg_record":
+        if not os.path.exists(FULL_UNREG_RECORD_CSV) or "WY" not in d.columns:
+            raise SystemExit(
+                "ADJUSTED_PP_BASIS = 'unreg_record' needs %s and a WY column "
+                "in %s" % (FULL_UNREG_RECORD_CSV, path))
+        full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+            [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+        full = full.sort_values(FULL_UNREG_PEAK_COL, ascending=False)
+        full = full.reset_index(drop=True)
+        n = len(full)
+        full["aep"] = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
+        m = d.merge(full[[FULL_UNREG_WY_COL, "aep"]],
+                    left_on="WY", right_on=FULL_UNREG_WY_COL, how="left")
+        missing = m["aep"].isna().sum()
+        if missing:
+            raise SystemExit(
+                "%d adjusted water years are absent from the unregulated "
+                "record %s, so they cannot be placed: %s"
+                % (missing, FULL_UNREG_RECORD_CSV,
+                   list(m.loc[m["aep"].isna(), "WY"].astype(int))))
+        print("   adjusted peaks: %d values placed at the plotting position "
+              "each water year holds in the %d year unregulated record"
+              % (len(m), n))
+        return m["aep"].values, m[col].values
+
+    v = np.sort(d[col].values.astype(float))[::-1]
     n = len(v)
-    if ADJUSTED_PP_USE_ASSESSED_SPAN and os.path.exists(ADJUSTED_PEAKS_ALL_CSV):
+    if ADJUSTED_PP_BASIS == "assessed_span" and os.path.exists(ADJUSTED_PEAKS_ALL_CSV):
         allwy = pd.read_csv(ADJUSTED_PEAKS_ALL_CSV)["WY"].dropna().astype(int)
         span = int(allwy.max() - allwy.min() + 1)
         if span >= len(v):
@@ -1675,8 +1729,6 @@ def load_adjusted_points(path):
                   % (len(v), n, allwy.min(), allwy.max()))
     if n == len(v):
         print("   adjusted peaks: %d values ranked among themselves" % n)
-
-    v = np.sort(v)[::-1]
     aep = (np.arange(1, len(v) + 1) - 0.3) / (n + 0.4)
     return aep, v
 
