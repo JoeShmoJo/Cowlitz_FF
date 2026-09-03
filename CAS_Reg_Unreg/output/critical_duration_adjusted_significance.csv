@@ -1,0 +1,5 @@
+duration,r2,vs_best,r_with_best,p_value,distinguishable
+Peak (1-hr),0.89943,(best),1.00000,,
+1-Day,0.88417,Peak (1-hr),0.99694,0.04709,yes
+3-Day,0.84119,Peak (1-hr),0.97644,0.00763,yes
+5-Day,0.79608,Peak (1-hr),0.95041,0.00130,yes

@@ -47,6 +47,8 @@ Either flip the Appendix B column order, or head those two columns
 "Upper confidence limit" and "Lower confidence limit" and say once that HEC-SSP
 numbers them by exceedance probability.
 
+Response: Switch the column headers in Appendix B. Remove the word limit, so jsut 5% and 95%.
+
 ### A2. Section 5.7 describes a method the equations and the code do not use
 
 The prose says:
@@ -76,6 +78,8 @@ The equations are right and the sentence is wrong, so this is a prose fix, not a
 recomputation. It matters because that sentence is the one a reviewer would use
 to reproduce the band.
 
+Response:  If the equation is correct I think I can leave it and remove the description and let the equations do the talking. 
+
 ### A3. The Lower5 equation adds where it should subtract
 
     Upper95 = RegBest + sqrt((Unreg95 - UnregBest)^2 + (Reg95 - RegBest)^2)
@@ -86,6 +90,8 @@ superscripts, so the reviewer's comment on that is resolved. But the second one
 carries a plus. As written the lower limit is above the best estimate. The code
 is `reg_lower = reg_curve - delta_lo`, so the sign should be a minus. The
 numbers in the tables are correct, only the printed equation is wrong.
+
+Response: Change the sign to a minus.
 
 ### A4. Table 5-2 and Figure 5-4 were never re-run after the screening was tightened
 
@@ -117,6 +123,7 @@ still ranks first and the numbers improve slightly:
 So the adopted duration is safe. Re-run `#Critical_Duration_Adjusted.py` and
 refresh Table 5-2, Figure 5-4, and the n in the caption.
 
+I re-ran te script. I'm not getting the same stats as you put in here. Check that, and update teh memo.
 ---
 
 ## B. Should fix
@@ -143,17 +150,23 @@ different size, and `figures_combined/regression_2day.png` is a hand renamed
 copy of something else. The memo figure is right and unreproducible, which is
 the worse half of this problem.
 
+Response: This stuff doesn't matter I don't think. If the figures with the truncated x axis are in teh folder, add replace them. If not, just leave what's there. If it's not wrong, it's not worth chancing introducing an error.
+
 ### B2. The Figure 5-5 caption no longer describes the figure
 
 Caption: "The twelve observed source storms, unscaled and aligned on each
 storm's own peak." The figure now plots days into the member window, 0 to 30,
 with no peak alignment. Drop the last clause.
 
+Response: Drop the last clause.
+
 ### B3. The title inside Figure 5-5 contradicts its caption
 
 The image is titled "Synthetic source storms, unscaled". These are the observed
 hydrographs the synthetics are built from, which is what the caption below
 correctly says. Change the title in `#Create_Synthetic_Ensembles.py`.
+
+Response: Synthetic source storms are the source storms used to build synthetics. If this is confusing, rename to "Source storms, unscaled"
 
 ### B4. Table 7-2 does not match the current timing output
 
@@ -163,6 +176,8 @@ correctly says. Change the title in `#Create_Synthetic_Ensembles.py`.
 Two events have left the record since the table was built. Section 7.3 also
 says 78 events in the text. The adopted 0.80 factor is unaffected, since the
 all-events median is 0.79 either way.
+
+Response: fix.
 
 ### B5 to B8. The DQC memo
 
@@ -180,6 +195,7 @@ all-events median is 0.79 either way.
   detail request and the uncertainty band clipping. Both were acted on. For a
   final they need the reviewer's close out.
 
+Response: Ignore
 ---
 
 ## C. Editorial
@@ -187,18 +203,38 @@ all-events median is 0.79 either way.
 - The filenames read `2026_03_09` while both documents are dated 3 September
   2026, which is `09/03/2026` in the memo header. Anyone sorting by filename
   will read them as 9 March.
+  
+  Response: I will fix
+  
 - Four semicolons remain in body prose, in Section 4.8, the Figure 5-6 caption,
   the Appendix A note and the Appendix E note. One em dash is used as
   punctuation in Section 5, "flood risk management—it is also operated".
+  
+  Response: Leave it
+  
 - Section 5.1: "shown in table 5-1 ." Lowercase table, and a space before the
   period.
+  
+  # Response: Fix it
+  
 - Section 5.1: "but some it is likely the project would increase releases" is
   garbled.
+  
+  # Response: Remove "some"
+  
 - Section 5.1: "lead to reasonable validation" should be "led".
+  # Response: Fix it
+	
 - Section 4.7: "Ten values across nine water years were raised ," has a space
   before the comma.
+  
+  # Response: Fix it
+  
 - Section 5.2 mixes number styles in three consecutive sentences: "Thirty-six",
   "Ten", then "5 years received no adjustment, 4 where".
+  
+  # Response: Leave it
+  
 
 ---
 
@@ -253,3 +289,5 @@ shifted in the mid 1970s. It may be the reconstruction running high. The
 frequency curve is fitted across the join either way, so if any part of the
 step is method bias it propagates into every result in the memo. This is not a
 finding, it is a question worth an answer before the next review.
+
+# Response: Ignore it
