@@ -1061,16 +1061,14 @@ def plot_event_single(events, mapping, stem, label=None):
                      if row["scaling_method"] == "volume_matched"
                      else scale_linear_taper(ev["total"].values, ev["index"],
                                              row["target_unreg_peak_cfs"]))
-        ax.plot(hours, scaled, lw=1.6,
-                label="%s  (strain %.2f)" % (row["target"], row["shape_strain"]))
-    ax.plot(hours, ev["total"].values, color="k", lw=2.2,
-            label="observed x1.00")
+        ax.plot(hours, scaled, lw=1.6, label="%s" % row["target"])
+    ax.plot(hours, ev["total"].values, color="k", lw=2.2, label="observed")
     peak_day = float(np.argmax(ev["total"].values)) / 24.0
     ax.axvspan(peak_day - VOLUME_HALF_WIDTH_DAYS,
                peak_day + VOLUME_HALF_WIDTH_DAYS,
                color="#2c7fb8", alpha=0.12, zorder=0,
                label="+/- %.1f day volume window" % VOLUME_HALF_WIDTH_DAYS)
-    ax.set_xlabel("Days into the member window")
+    ax.set_xlabel("Days")
     ax.set_ylabel("Unregulated flow (cfs)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(
         lambda v, _: format(int(v), ",")))

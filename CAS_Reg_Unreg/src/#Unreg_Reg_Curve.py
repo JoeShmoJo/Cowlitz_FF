@@ -213,6 +213,29 @@ FINAL_SHOW_ADJUSTED_POINTS = True
 #     on, since each regulated ordinate inherits its AEP from the unregulated
 #     curve. On that basis the median ratio is 1.028 and the points split 22
 #     above and 19 below, which is scatter rather than bias.
+# HOW THE ADJUSTED REGULATED PEAKS ARE PLACED ON THE FREQUENCY AXIS
+#     They are ranked among themselves and given median plotting positions, the
+#     same treatment the unregulated record gets, so the two clouds are built
+#     the same way and each rises monotonically.
+#
+#     The record length is NOT the number of usable values. Fifty one water
+#     years were assessed, 1974 through 2024, and ten were screened out. Those
+#     ten are missing data, not years that never happened, so n is the assessed
+#     span and the screened years simply go unranked. Using n = 41 instead
+#     would treat the record as a complete 41 year sample and assign the
+#     largest value a 59 year return interval when it sits in a 51 year window.
+#
+#     For reference, measured as the median of observed over the curve at the
+#     plotted position:
+#         n = 41, the count of usable values      1.128, 40 of 41 above
+#         n = 51, the assessed span (adopted)     1.046, 32 of 41 above
+#         each year at its place in the 95 year
+#         unregulated record                      1.028, 22 of 41 above
+#     The last is the least biased but it does not rank, so the cloud is not
+#     monotone and it reads oddly beside the unregulated points.
+ADJUSTED_PP_USE_ASSESSED_SPAN = True
+ADJUSTED_PEAKS_ALL_CSV = r"../output/adjusted_peaks.csv"
+
 FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
 FULL_UNREG_WY_COL = "WY"
 FULL_UNREG_PEAK_COL = "Peak"
@@ -1627,43 +1650,35 @@ def load_full_unreg_points():
 
 
 def load_adjusted_points(path):
-    """The screened adjusted regulated peaks with the AEP of each water year.
+    """The screened adjusted regulated peaks at median plotting positions.
 
-    Returns (aep, flow) with the AEP taken from where that water year's
-    UNREGULATED peak ranks in the full record, not from ranking the adjusted
-    peaks among themselves. See FULL_UNREG_RECORD_CSV for why.
+    Ranked among themselves, like the unregulated record, but over the assessed
+    record length rather than the count of usable values. See
+    ADJUSTED_PP_USE_ASSESSED_SPAN for why.
     """
     if not os.path.exists(path):
         return None, None
     d = pd.read_csv(path)
     col = "adjusted_peak" if "adjusted_peak" in d.columns else d.columns[-1]
-    d = d[["WY", col]].dropna()
-    if not len(d):
+    v = pd.to_numeric(d[col], errors="coerce").dropna().values.astype(float)
+    if not len(v):
         return None, None
 
-    if not os.path.exists(FULL_UNREG_RECORD_CSV):
-        print("   WARNING %s is missing, so the adjusted peaks are not plotted."
-              % FULL_UNREG_RECORD_CSV)
-        return None, None
+    n = len(v)
+    if ADJUSTED_PP_USE_ASSESSED_SPAN and os.path.exists(ADJUSTED_PEAKS_ALL_CSV):
+        allwy = pd.read_csv(ADJUSTED_PEAKS_ALL_CSV)["WY"].dropna().astype(int)
+        span = int(allwy.max() - allwy.min() + 1)
+        if span >= len(v):
+            n = span
+            print("   adjusted peaks: %d usable values ranked over the %d year "
+                  "assessed record, WY%d to WY%d"
+                  % (len(v), n, allwy.min(), allwy.max()))
+    if n == len(v):
+        print("   adjusted peaks: %d values ranked among themselves" % n)
 
-    full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
-        [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
-    full = full.sort_values(FULL_UNREG_PEAK_COL, ascending=False).reset_index(drop=True)
-    n = len(full)
-    full["aep"] = (full.index + 1 - 0.3) / (n + 0.4)
-
-    m = d.merge(full[[FULL_UNREG_WY_COL, "aep"]],
-                left_on="WY", right_on=FULL_UNREG_WY_COL, how="left")
-    missing = int(m["aep"].isna().sum())
-    if missing:
-        print("   NOTE %d adjusted year(s) are not in the %d year unregulated "
-              "record and are not plotted." % (missing, n))
-    m = m.dropna(subset=["aep"])
-    if not len(m):
-        return None, None
-    print("   adjusted peaks placed at plotting positions from the %d year "
-          "unregulated record" % n)
-    return m["aep"].values, m[col].values.astype(float)
+    v = np.sort(v)[::-1]
+    aep = (np.arange(1, len(v) + 1) - 0.3) / (n + 0.4)
+    return aep, v
 
 
 def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
@@ -1705,8 +1720,7 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
             ax.plot(stats.norm.ppf(1.0 - aep_pts), v_pts, ls="none",
                     marker="o", ms=4.5, mfc="none", mew=1.1, color=C_REG,
                     zorder=6,
-                    label="Adjusted regulated peaks (n=%d, at the AEP of each "
-                          "water year)" % len(v_pts))
+                    label="Adjusted regulated peaks (n=%d)" % len(v_pts))
 
     if FINAL_SHOW_SUPPORT_MARKER:
         supported = unreg_curve <= fit["x_max"]

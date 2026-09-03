@@ -178,13 +178,33 @@ def main():
     # frequency sigma. Drawn here so the reader can see where it came from.
     if SHOW_TRANSFORM_BAND and {"sigma_transform_lo_dex",
                                 "sigma_transform_hi_dex"} <= set(reg.columns):
-        base = reg["reg_inferred_cfs"].values
+        u = reg["unreg_expected_cfs"].values.astype(float)
+        base = reg["reg_inferred_cfs"].values.astype(float)
         lo = base / 10.0 ** (TRANSFORM_BAND_Z
                              * reg["sigma_transform_lo_dex"].values)
         hi = base * 10.0 ** (TRANSFORM_BAND_Z
                              * reg["sigma_transform_hi_dex"].values)
-        ax.fill_between(reg["unreg_expected_cfs"].values, lo, hi,
-                        color=C_CURVE, alpha=0.13, lw=0, zorder=2,
+
+        # A regulated peak cannot exceed the unregulated peak it was routed
+        # from, so the upper edge of the band cannot cross the 1:1 line.
+        hi = np.minimum(hi, u)
+
+        # Past the convergence the lower edge is held parallel to 1:1 rather
+        # than allowed to keep flaring away from it. The band is drawn from a
+        # log sigma about a curve that is itself converging, which sends the
+        # lower edge diverging downward exactly where the physical argument
+        # says the two curves are closing. The reservoir has filled by then and
+        # is passing inflow, so the spread should stop widening. It very likely
+        # closes on 1:1 as well, and holding it parallel is the conservative
+        # version of that, since it keeps the band open rather than pinching it
+        # shut on an assumption.
+        if CONVERGE_AT_CFS > u.min():
+            lo_at_conv = float(np.interp(CONVERGE_AT_CFS, u, lo))
+            offset = CONVERGE_AT_CFS - lo_at_conv
+            beyond = u > CONVERGE_AT_CFS
+            lo = np.where(beyond, u - offset, lo)
+
+        ax.fill_between(u, lo, hi, color=C_CURVE, alpha=0.13, lw=0, zorder=2,
                         label="Transform scatter, 5%-95%")
 
     if SHOW_EVENT_POINTS:
