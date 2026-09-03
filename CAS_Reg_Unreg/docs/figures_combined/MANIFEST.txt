@@ -1,4 +1,4 @@
-Staged by #Figure_Check.py on 2026-09-03 21:43
+Staged by #Figure_Check.py on 2026-09-03 23:05
 Do not hand edit anything named Fig_*. Re-run this script instead.
 
 Figure 2-1   (supplied by hand)  basin map supplied by hand
@@ -13,31 +13,31 @@ Figure 5-2   (supplied by hand)  ResSim flood validation 2009 supplied by hand
 Figure 5-3   (supplied by hand)  ResSim flood validation 2015 supplied by hand
 Figure 5-4   Fig_5-4__critical_duration_adjusted_scatter.png
               from ../output/diagnostics/critical_duration_adjusted_scatter.png
-              md5 e06da190db0da8978fbd37175547fbae  written 2026-08-14 16:36
+              md5 3a8ef8fa497ff9ee6ec38bdc0227dcc9  written 2026-09-03 22:57
 Figure 5-5   Fig_5-5__ensemble_synthetic_events_overlay.png
               from ../output/diagnostics/ensemble_synthetic_events_overlay.png
-              md5 0841f6ca1bed3cfd85668b3b4b54cf50  written 2026-09-03 21:29
+              md5 c88c1e87557bcc983ebc2514568f2473  written 2026-09-03 23:00
 Figure 5-6   Fig_5-6__ensemble_synthetic_event_single.png
               from ../output/diagnostics/ensemble_synthetic_event_single.png
-              md5 a7fc427d7508fca003f16c72a72b64de  written 2026-09-03 21:29
+              md5 a7fc427d7508fca003f16c72a72b64de  written 2026-09-03 23:05
 Figure 5-7   Fig_5-7__transform_convergence.png
               from ../output/diagnostics/transform_convergence.png
-              md5 45cea8d549df9b4229ed36a3bd4c04f3  written 2026-09-03 21:29
+              md5 e62dc87859598c0b99a3551a95ac2b4b  written 2026-09-03 22:59
 Figure 5-8   Fig_5-8__unreg_reg_final_uncertainty.png
               from ../output/diagnostics/unreg_reg_final_uncertainty.png
-              md5 23ea5a9982740828519ef9676bcdf36f  written 2026-09-03 19:58
+              md5 7f2d00fb464d0d451a72475dd2cddbfe  written 2026-09-03 22:58
 Figure 6-1   Fig_6-1__CAS_Unreg_2009_vs_2026.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_2009_vs_2026.png
               md5 491cd06ab902e715114df55f424adf8e  written 2026-08-31 21:56
 Figure 6-2   Fig_6-2__unreg_reg_final_curves.png
               from ../output/diagnostics/unreg_reg_final_curves.png
-              md5 8f73420beabfb30da1e26893b62b603d  written 2026-09-03 17:15
+              md5 776e3b1df57c3deb727611d39ab67676  written 2026-09-03 22:58
 Figure 7-1   Fig_7-1__coweeman_historic_peak_ratio.png
               from ../output/diagnostics/coweeman_historic_peak_ratio.png
               md5 a0896d8d4b6d0345ee9bb2b4a3eb2ea3  written 2026-09-01 21:31
 Figure 7-2   Fig_7-2__below_confluence_frequency.png
               from ../output/diagnostics/below_confluence_frequency.png
-              md5 a6683b860728bad5583cc99000ce75ae  written 2026-09-01 02:53
+              md5 b3916a114d52d9f8c8e0235243997ee9  written 2026-09-03 22:59
 Figure C-1   Fig_C-1__CAS_Unreg_freq_Peak.png
               from ../../CAS_Unreg_FF/output/CAS_Unreg_freq_Peak.png
               md5 ff8554ce115e0f1e58d00630e7d22dc3  written 2026-08-31 21:56

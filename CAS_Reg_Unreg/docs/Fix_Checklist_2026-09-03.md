@@ -1,5 +1,12 @@
 # Fix checklist for the 3 September documents
 
+> **Status, 3 September 2026.** Steps 1, 2, 3, 4, 5, 6, 7, 9 and most of 11 are
+> done, in
+> `MEMO_CAS_Combined_FlowFrequency_2026_09_03.docx`. Step 8 was left alone on
+> your instruction. Step 10, the DQC memo, was skipped on your instruction.
+> Step 12 has been run and the document verifies against every source CSV.
+> What remains is the Figure 4-1 question, and only if you want it.
+
 Ordered so nothing has to be done twice. Findings are in
 `Consistency_Review_2026-09-03.md`.
 

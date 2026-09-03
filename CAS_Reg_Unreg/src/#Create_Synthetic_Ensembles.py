@@ -1038,9 +1038,8 @@ def plot_events_overlay(events, stem):
     ax.set_ylabel("Unregulated flow (cfs)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(
         lambda v, _: format(int(v), ",")))
-    ax.set_title("The %d observed source storms, unscaled\n"
-                 "Mossyrock inflow + Castle Rock local"
-                 % len(events), fontsize=11)
+    ax.set_title("Source storms, unscaled\n"
+                 "Mossyrock inflow + Castle Rock local", fontsize=11)
     ax.grid(alpha=0.3)
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()

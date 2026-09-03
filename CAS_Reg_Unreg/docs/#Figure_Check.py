@@ -67,7 +67,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 MODE = "both"
 
-DOCX = "MEMO_CAS_Combined_FlowFrequency_2026_03_09.docx"
+DOCX = "MEMO_CAS_Combined_FlowFrequency_2026_09_03.docx"
 MANIFEST = "figure_manifest.csv"
 STAGE_DIR = "figures_combined"
 
