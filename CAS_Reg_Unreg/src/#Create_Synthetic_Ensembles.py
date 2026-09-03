@@ -1022,21 +1022,25 @@ def plot_events_overlay(events, stem):
     """Every source storm on one pair of axes, unscaled.
 
     This is the figure that answers "did you look at a range of shapes?" --
-    the observed hydrographs, no scaling, aligned on their own peak.
+    the observed hydrographs, no scaling.
+
+    The x axis is days into the member window, not days from each storm's own
+    peak. The two are nearly the same picture here, because every window was
+    cut to put its peak in the same place, so the storms stay comparable
+    without the negative axis that peak alignment forces.
     """
     fig, ax = plt.subplots(figsize=(10, 6.5))
     for ev in events:
         v = ev["total"].values
-        hours = (np.arange(len(v)) - float(np.argmax(v))) / 24.0
+        hours = np.arange(len(v)) / 24.0
         ax.plot(hours, v, lw=1.4, label="%s" % ev["label"])
-    ax.axvline(0.0, color="0.5", lw=0.9, ls=":")
-    ax.set_xlabel("Days from the observed peak")
+    ax.set_xlabel("Days")
     ax.set_ylabel("Unregulated flow (cfs)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(
         lambda v, _: format(int(v), ",")))
     ax.set_title("The %d observed source storms, unscaled\n"
-                 "Mossyrock inflow + Castle Rock local, aligned on each "
-                 "storm's own peak" % len(events), fontsize=11)
+                 "Mossyrock inflow + Castle Rock local"
+                 % len(events), fontsize=11)
     ax.grid(alpha=0.3)
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
