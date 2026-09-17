@@ -74,6 +74,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from shapely.geometry import Point
 
+
+
 # ----------------------------------------------------------------------------
 # USER SETTINGS
 # ----------------------------------------------------------------------------
@@ -85,9 +87,12 @@ FIGSIZE = (12.0, 8.0)
 # --- basemap -----------------------------------------------------------------
 BASEMAP = "WorldTopoMap"
 IMAGERY_LABEL_OVERLAY = True
-ESRI_REFERENCE_URL = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
-                      "Reference/World_Boundaries_and_Places/MapServer/"
-                      "tile/{z}/{y}/{x}")
+
+ESRI_REFERENCE_URL = (
+    "https://server.arcgisonline.com/ArcGIS/rest/services/"
+    "Reference/World_Boundaries_and_Places_Alternate/MapServer/"
+    "tile/{z}/{y}/{x}"
+)
 ZOOM = 10
 BASEMAP_ALPHA = 1.0
 
@@ -118,9 +123,9 @@ LOCAL_TRIBUTARIES = [
      "label_offset": (28, -15),
      "label_rotation": 0},
 
-    {"label": "Arkansas Creek", "seed": {"point": (46.2430, -122.8880)},
+    {"label": "Arkansas Creek", "seed": {"point": (46.2658, -122.9168)},
      "up_km": 40, "down_km": 12, "label_frac": 0.50,
-     "label_offset": (45, 0),
+     "label_offset": (-30, 0),
      "label_rotation": 0},
 ]
 
@@ -129,7 +134,7 @@ BASIN_EXPECT_SQ_MI = 2480.0
 
 # --- gages -------------------------------------------------------------------
 GAGES = [
-    ("14243000", "Castle Rock", "USGS 14243000", (-10, 0)),
+    ("14243000", "Castle Rock", "USGS 14243000", (10, 0)),
     ("14238000", "Mayfield outflow gage", "USGS 14238000", (-30, 34)),
     ("14245000", "Coweeman R nr Kelso", "USGS 14245000", (26, -20)),
 ]
