@@ -346,6 +346,30 @@ SHOW_POWER_LAW_REFERENCE = False
 
 # --- 2009 study adopted regulated frequency curve ----------------------------
 # AEP in percent, discharge in cfs. The external check on the upper end.
+# --- the 2009 study curve ----------------------------------------------------
+# "table" is the digitized CURVE_2009 list below, which is what this script has
+# always used. "fda" reads the HEC-FDA export instead, which carries the study's
+# own uncertainty alongside the curve.
+#
+# The two do NOT agree. See CAS_Reg_Unreg/data/fda_2009/ for the export and the
+# comparison. They match at the 0.05 and 0.01 percent AEPs and diverge in
+# between, by -49% at the 1.01 year and +23% near the 50 year, and 12 of the 21
+# shared ordinates put the digitized value outside the FDA 95 percent band.
+# Whichever is adopted, the uncertainty band can only be drawn around the FDA
+# curve, because it is the FDA curve those bounds belong to.
+CURVE_2009_SOURCE = "fda"
+CURVE_2009_FDA_CSV = r"../data/fda_2009/curve_2009_regulated_fda.csv"
+
+# FDA reports its bounds at 2.5 and 97.5 percent, a 95 percent interval. The
+# memo is 90 percent everywhere else, so leaving them native puts two different
+# interval widths on one figure, which is the confusion the DQC review asked to
+# have removed. The bounds are log-symmetric about the curve to within 0.003
+# dex, so rescaling is exact rather than an approximation.
+#   "match_memo"  rescale to UNCERTAINTY_CONF_LEVEL, each side on its own sigma
+#   "native"      draw FDA's 2.5 and 97.5 percent as reported
+#   "off"         no 2009 band
+CURVE_2009_BAND = "match_memo"
+
 CURVE_2009_LABEL = "2009 study, regulated"
 CURVE_2009 = [
     (99.0, 21700.0), (95.0, 28100.0), (90.0, 32400.0), (80.0, 38800.0),
@@ -376,6 +400,11 @@ AEP_LIMITS = (0.99, 0.001)
 # Return intervals below 2 years are not labelled -- DQC comment on Figure 6-1.
 MIN_LABELLED_RETURN_INTERVAL = 2.0
 FLOW_LIMITS = (10000.0, 400000.0)
+
+# Figure 6-2 carries two uncertainty bands once the 2009 study's own band is
+# drawn, and the unregulated line is not what that figure is comparing, so it
+# is off by default. Set True to put it back.
+FINAL_CURVES_SHOW_UNREG = False
 
 # Colours kept in one place so the scatter and the frequency plot agree.
 C_UNREG = "#2c7fb8"
@@ -705,9 +734,46 @@ def load_wcm_points(csv_path):
 
 
 def curve_2009_frame():
-    """The 2009 adopted regulated curve as AEP (fraction) and cfs."""
-    table = pd.DataFrame(CURVE_2009, columns=["AEP_pct", "cfs"])
-    table["AEP"] = table["AEP_pct"] / 100.0
+    """The 2009 adopted regulated curve as AEP (fraction) and cfs.
+
+    Carries lo/hi columns as well when the source is the HEC-FDA export and a
+    band is asked for. See CURVE_2009_SOURCE.
+    """
+    if CURVE_2009_SOURCE == "fda":
+        if not os.path.exists(CURVE_2009_FDA_CSV):
+            raise SystemExit(
+                "CURVE_2009_SOURCE = 'fda' but %s is missing. Set it to "
+                "'table' to fall back on the digitized curve."
+                % CURVE_2009_FDA_CSV)
+        fda = pd.read_csv(CURVE_2009_FDA_CSV, comment="#")
+        table = pd.DataFrame({"AEP": fda["aep"].values,
+                              "cfs": fda["cfs"].values})
+        table["AEP_pct"] = table["AEP"] * 100.0
+        if CURVE_2009_BAND != "off":
+            lo, hi = fda["lo_2p5"].values, fda["hi_97p5"].values
+            if CURVE_2009_BAND == "native":
+                table["lo"], table["hi"] = lo, hi
+                table.attrs["band_pct"] = 95
+            else:
+                # Each side keeps its own sigma, so the reported asymmetry
+                # survives the rescale instead of being averaged away.
+                z_fda = stats.norm.ppf(0.975)
+                z_ours = stats.norm.ppf(0.5 + UNCERTAINTY_CONF_LEVEL / 2.0)
+                sig_lo = np.log10(table["cfs"] / lo) / z_fda
+                sig_hi = np.log10(hi / table["cfs"]) / z_fda
+                table["lo"] = table["cfs"] * 10.0 ** (-z_ours * sig_lo)
+                table["hi"] = table["cfs"] * 10.0 ** (z_ours * sig_hi)
+                table.attrs["band_pct"] = int(
+                    round(100 * UNCERTAINTY_CONF_LEVEL))
+        print("2009      : %d ordinates from %s%s"
+              % (len(table), os.path.basename(CURVE_2009_FDA_CSV),
+                 "" if CURVE_2009_BAND == "off"
+                 else ", band at %d%%" % table.attrs["band_pct"]))
+    else:
+        table = pd.DataFrame(CURVE_2009, columns=["AEP_pct", "cfs"])
+        table["AEP"] = table["AEP_pct"] / 100.0
+        print("2009      : %d ordinates from the digitized CURVE_2009 table, "
+              "no band available" % len(table))
     return table.sort_values("AEP", ascending=False).reset_index(drop=True)
 
 
@@ -1875,16 +1941,28 @@ def plot_final_curves(freq, fit, reg_curve, unc, table_2009, stem):
     unreg_curve = freq[FREQ_VALUE_COL].values
     pct = int(round(100 * UNCERTAINTY_CONF_LEVEL))
 
-    ax.plot(z, unreg_curve, color=C_UNREG, lw=2.6, zorder=4,
-            label="Unregulated")
+    if FINAL_CURVES_SHOW_UNREG:
+        ax.plot(z, unreg_curve, color=C_UNREG, lw=2.6, zorder=4,
+                label="Unregulated")
     ax.plot(z, reg_curve, color=C_REG, lw=2.6, zorder=4, label="Regulated")
     ax.fill_between(z, unc["reg_lower"], unc["reg_upper"], color=C_REG,
                     alpha=0.17, zorder=1,
                     label="Regulated, %d%% (frequency + transform)" % pct)
     if table_2009 is not None and len(table_2009):
-        ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
-                table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
-                zorder=3, label=CURVE_2009_LABEL)
+        z09 = stats.norm.ppf(1.0 - table_2009["AEP"].values)
+        # Band first, so the 2009 line draws on top of its own ribbon.
+        if "lo" in table_2009.columns:
+            band_pct = table_2009.attrs.get("band_pct", pct)
+            ax.fill_between(z09, table_2009["lo"].values,
+                            table_2009["hi"].values, color=C_2009,
+                            alpha=0.13, lw=0, zorder=2,
+                            label="2009 study, %d%%" % band_pct)
+            ax.plot(z09, table_2009["lo"].values, color=C_2009, lw=0.9,
+                    ls=":", zorder=3)
+            ax.plot(z09, table_2009["hi"].values, color=C_2009, lw=0.9,
+                    ls=":", zorder=3)
+        ax.plot(z09, table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
+                zorder=4, label=CURVE_2009_LABEL)
 
     ax.set_yscale("log")
     ax.set_ylim(FLOW_LIMITS)
@@ -1894,7 +1972,9 @@ def plot_final_curves(freq, fit, reg_curve, unc, table_2009, stem):
     ax.grid(which="major", alpha=0.45, lw=0.8)
     ax.grid(which="minor", alpha=0.2, lw=0.5)
     ax.set_ylabel("Peak flow (cfs)")
-    ax.set_title("Castle Rock peak flow frequency, regulated and unregulated",
+    ax.set_title("Castle Rock peak flow frequency, regulated and unregulated"
+                 if FINAL_CURVES_SHOW_UNREG else
+                 "Castle Rock regulated peak flow frequency, 2026 against 2009",
                  fontsize=12)
     ax.legend(loc="upper left", fontsize=9.5, framealpha=0.92)
     fig.tight_layout()
@@ -2341,8 +2421,13 @@ def main():
               % (at_2009["reg_vs_2009_pct"].median(),
                  at_2009["reg_vs_2009_pct"].min(),
                  at_2009["reg_vs_2009_pct"].max()))
-        print("   The 2009 curve turns sharply upward above the 0.2% AEP "
-              "(156,000 -> 390,000 cfs).")
+        tail = table_2009[table_2009["AEP"] <= 0.002].sort_values("AEP",
+                                                                  ascending=False)
+        if len(tail) >= 2:
+            print("   The 2009 curve turns sharply upward above the 0.2%% AEP "
+                  "(%s -> %s cfs)."
+                  % (format(int(round(tail["cfs"].iloc[0])), ","),
+                     format(int(round(tail["cfs"].iloc[-1])), ",")))
         print("   Any comparison out there is between two extrapolations, not "
               "between two records.")
 
