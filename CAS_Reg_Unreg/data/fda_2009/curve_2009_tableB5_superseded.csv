@@ -1,0 +1,39 @@
+# SUPERSEDED. Kept for the record only. Nothing reads this file.
+#
+# Table B-5 of the 2009 Cowlitz Hydrology Restudy, "Cowlitz River at Castle
+# Rock peak regulated discharge-frequency curve", transcribed exactly. This was
+# the hardcoded CURVE_2009 list in #Unreg_Reg_Curve.py until 17 Sep 2026.
+#
+# Replaced by fda_2009_castle_rock_gage.csv on the author's instruction, because
+# the HEC-FDA function is the correct curve and is the only one carrying the
+# study's uncertainty. The two differ by -49% at the 1.01 year and +23% near
+# the 50 year and agree only at the 0.05 and 0.01 percent AEPs.
+#
+# Worth knowing if this is ever revisited: Table B-5 tracks the ADJUSTED, flood
+# risk management only regulated record, mean absolute error 11.2 percent,
+# while the FDA curve tracks the OBSERVED record, 6.3 percent, which still
+# carries the incidental reservoir drafting the adjustment in Section 5.2
+# exists to remove. Against the adjusted record the FDA curve is 27.1 percent.
+aep,cfs
+0.99,21700
+0.95,28100
+0.90,32400
+0.80,38800
+0.70,44400
+0.60,49800
+0.50,55500
+0.40,59500
+0.30,64100
+0.20,70000
+0.10,74000
+0.05,79000
+0.04,81200
+0.02,88000
+0.01,97000
+0.007,104000
+0.005,110000
+0.002,156000
+0.001,240000
+0.0008,270000
+0.0005,300000
+0.0001,390000

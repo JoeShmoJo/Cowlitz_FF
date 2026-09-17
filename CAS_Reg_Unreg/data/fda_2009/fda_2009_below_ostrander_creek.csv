@@ -1,0 +1,40 @@
+# 2009 Cowlitz Hydrology Restudy regulated peak discharge-frequency curve with
+# uncertainty, as entered in HEC-FDA 2.0.2.
+#
+# Location: Cowlitz River at Castle Rock, below Ostrander Creek
+# Source:   HEC-FDA 2.0.2 "Cowlitz" study, Frequency Functions, Graphical,
+#           "Hydrology 3 (2010)", equivalent record length 90 years.
+#           Transcribed from the Tabular Results grid.
+#
+# The confidence columns are FDA's own labels and are a 95 percent two-sided
+# interval. The memo is 90 percent everywhere else, so they are rescaled before
+# plotting rather than drawn as reported. See CURVE_2009_BAND.
+#
+# aep       exceedance probability as a fraction
+# cfs       the adopted curve ordinate
+# lo_2p5    FDA "2.5% Confidence"
+# hi_97p5   FDA "97.5% Confidence"
+aep,cfs,lo_2p5,hi_97p5
+0.9999,10400,7651.5751,14135.6517
+0.9900,11700,8608.0219,15902.6082
+0.9500,19000,13727.0865,26298.3700
+0.9000,25200,19617.9724,32370.3177
+0.8000,33400,28581.0027,39031.5207
+0.7000,38100,33961.9111,42742.2943
+0.6000,42800,38129.5137,48042.5745
+0.5000,48000,42974.9102,53612.6774
+0.4000,53200,47403.5757,59705.2006
+0.3000,60500,53668.9992,68200.4520
+0.2000,68800,60751.3283,77915.0042
+0.1000,83400,70712.5401,98363.8828
+0.0500,99900,82329.7268,121220.0063
+0.0400,104100,89395.9154,121222.6526
+0.0200,112600,98818.3994,128303.6365
+0.0100,118200,99564.9572,140322.8645
+0.0070,122400,103102.7984,145308.9561
+0.0050,129700,109251.9032,153975.2582
+0.0020,166500,140250.1301,197662.9182
+0.0010,197000,165941.5954,233871.4408
+0.0008,217100,182872.6922,257733.4507
+0.0005,307500,259020.5106,365053.1373
+0.0001,398800,335926.4378,473441.2720
