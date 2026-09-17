@@ -58,7 +58,14 @@ DSS_PATH = r"../output/ResSim_WCM_RC.dss"
 UNREG_PATHNAME = "//CastleRock_NWS/Flow-UNREG//1Hour/ResSim_WCM_RC/"
 
 OUT_CSV = r"../output/diagnostics/coweeman_historic_peak_ratio.csv"
+# Two separate figures rather than one two-panel plot. They are two
+# independent lines of evidence, they get cited in different places, and a
+# panel that has to share a caption with an unrelated panel reads badly at
+# memo width. The flow ratio keeps the original file name so existing
+# references to it still resolve.
 PLOT_PNG = r"../output/diagnostics/coweeman_historic_peak_ratio.png"
+PLOT_PNG_PRISM = r"../output/diagnostics/coweeman_prism_precip_ratio.png"
+FIG_SIZE = (7.6, 5.8)
 
 COW_GAGE_DA = 119.0        # USGS 14245000, sq mi
 CAS_DA = 2238.0            # Cowlitz above Castle Rock, sq mi
@@ -265,18 +272,16 @@ def report(table):
                  r["days_apart"], "yes" if r["same_storm"] else "no", r["ratio_peak"]))
 
 
-def plot(table):
-    """Two independent lines of evidence for a plain drainage area ratio.
+def plot_ratio(table):
+    """The flow ratio against event size, same storm pairs only.
 
-    Left, the flow ratio against event size, same storm pairs only. Different
-    storm pairs are dropped rather than greyed out, because the ratio of two
-    peaks weeks apart is not a coincident quantity and putting it on the same
-    axes invites it to be read as one. Right, the PRISM basin precipitation
-    ratio, which tests the equal depth assumption directly.
+    Different storm pairs are dropped rather than greyed out, because the ratio
+    of two peaks weeks apart is not a coincident quantity and putting it on the
+    same axes invites it to be read as one.
     """
     da = COW_GAGE_DA / CAS_DA
     same = table[table["same_storm"]].copy()
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.8))
+    fig, ax1 = plt.subplots(figsize=FIG_SIZE)
 
     # --- Coweeman / Castle Rock peak ratio ----------------------------------
     x = same["cas_unreg_peak_cfs"] / 1000.0
@@ -302,11 +307,19 @@ def plot(table):
     )
 
     # The three largest events carry the most weight, so name them.
+    #
+    # The label side is chosen from where the point sits rather than fixed,
+    # because the largest event is by definition near the right edge and a
+    # hardcoded rightward offset ran its label off the axis as soon as this
+    # stopped being half of a double width figure.
     big = same.nlargest(3, "cas_unreg_peak_cfs").reset_index(drop=True)
-    offsets = [(10, 12), (-12, 26), (10, -30)]
+    stagger = [12, 26, -30]
+    x_hi = max(x.max() * 1.10, 160.0)
+    ax1.set_xlim(0, x_hi)
 
     for k, r in big.iterrows():
-        dx, dy = offsets[k % len(offsets)]
+        dy = stagger[k % len(stagger)]
+        dx = -12 if r["cas_unreg_peak_cfs"] / 1000.0 > 0.72 * x_hi else 10
 
         ax1.annotate(
             "WY%d  %.3f" % (r["wy"], r["ratio_peak"]),
@@ -344,74 +357,80 @@ def plot(table):
     ax1.grid(alpha=0.3)
     ax1.legend(fontsize=8, loc="upper right")
 
-    # --- PRISM ---------------------------------------------------------------
-    if os.path.exists(PRISM_CSV):
-        pr = pd.read_csv(PRISM_CSV)
-        v = pd.to_numeric(pr["ratio"], errors="coerce").dropna()
-
-        # Light-blue histogram
-        ax2.hist(
-            v,
-            bins=18,
-            color="lightblue",
-            alpha=0.75,
-            edgecolor="0.3",
-            lw=0.6,
-        )
-
-        # Equal-precipitation-depth reference
-        ax2.axvline(
-            1.0,
-            color="0.35",
-            ls="-",
-            lw=1.6,
-            label="Equal depth over both basins",
-        )
-
-        # Median precipitation ratio
-        ax2.axvline(
-            v.median(),
-            color=C_DA,
-            ls="--",
-            lw=2.0,
-            label="Median %.3f" % v.median(),
-        )
-
-        ax2.set_xlabel(
-            "Coweeman basin precipitation / Castle Rock basin "
-            "precipitation"
-        )
-        ax2.set_ylabel("water years")
-
-        ax2.set_title(
-            "PRISM annual precipitation over the two basins\n"
-            "WY%d to WY%d, n=%d"
-            % (
-                int(pr.year.min()),
-                int(pr.year.max()),
-                len(v),
-            ),
-            fontsize=10.5,
-        )
-
-        ax2.grid(alpha=0.3, axis="y")
-        ax2.legend(fontsize=8)
-
-    else:
-        ax2.text(
-            0.5,
-            0.5,
-            "PRISM ratio not available\n%s" % PRISM_CSV,
-            ha="center",
-            va="center",
-            transform=ax2.transAxes,
-            fontsize=9,
-        )
-        ax2.set_axis_off()
-
     fig.tight_layout()
     fig.savefig(PLOT_PNG, dpi=150)
+    plt.close(fig)
     print("\nWrote", PLOT_PNG)
+
+
+def plot_prism():
+    """The PRISM basin precipitation ratio.
+
+    The independent support for the area ratio, because it tests the equal
+    depth assumption the area ratio rests on rather than restating the flow
+    record.
+    """
+    if not os.path.exists(PRISM_CSV):
+        print("Skipped", PLOT_PNG_PRISM, "-- no", PRISM_CSV)
+        return
+
+    fig, ax2 = plt.subplots(figsize=FIG_SIZE)
+
+    pr = pd.read_csv(PRISM_CSV)
+    v = pd.to_numeric(pr["ratio"], errors="coerce").dropna()
+
+    # Light-blue histogram
+    ax2.hist(
+        v,
+        bins=18,
+        color="lightblue",
+        alpha=0.75,
+        edgecolor="0.3",
+        lw=0.6,
+    )
+
+    # Equal-precipitation-depth reference
+    ax2.axvline(
+        1.0,
+        color="0.35",
+        ls="-",
+        lw=1.6,
+        label="Equal depth over both basins",
+    )
+
+    # Median precipitation ratio
+    ax2.axvline(
+        v.median(),
+        color=C_DA,
+        ls="--",
+        lw=2.0,
+        label="Median %.3f" % v.median(),
+    )
+
+    ax2.set_xlabel(
+        "Coweeman basin precipitation / Castle Rock basin "
+        "precipitation"
+    )
+    ax2.set_ylabel("Number of water years")
+
+    ax2.set_title(
+        "PRISM annual precipitation over the two basins\n"
+        "WY%d to WY%d, n=%d"
+        % (
+            int(pr.year.min()),
+            int(pr.year.max()),
+            len(v),
+        ),
+        fontsize=10.5,
+    )
+
+    ax2.grid(alpha=0.3, axis="y")
+    ax2.legend(fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(PLOT_PNG_PRISM, dpi=150)
+    plt.close(fig)
+    print("Wrote", PLOT_PNG_PRISM)
 
 
 def main():
@@ -421,7 +440,8 @@ def main():
     table = build(peaks, unreg)
     table.to_csv(OUT_CSV, index=False)
     report(table)
-    plot(table)
+    plot_ratio(table)
+    plot_prism()
     print("Wrote", OUT_CSV)
 
 
