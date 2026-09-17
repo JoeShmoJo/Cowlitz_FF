@@ -347,28 +347,50 @@ SHOW_POWER_LAW_REFERENCE = False
 # --- 2009 study adopted regulated frequency curve ----------------------------
 # AEP in percent, discharge in cfs. The external check on the upper end.
 # --- the 2009 study curve ----------------------------------------------------
-# "table" is the digitized CURVE_2009 list below, which is what this script has
-# always used. "fda" reads the HEC-FDA export instead, which carries the study's
-# own uncertainty alongside the curve.
+# CURVE_2009 below is Table B-5 of the 2009 Restudy, "Cowlitz River at Castle
+# Rock peak regulated discharge-frequency curve", transcribed exactly. All 22
+# ordinates match the published table to the cfs.
 #
-# The two do NOT agree. See CAS_Reg_Unreg/data/fda_2009/ for the export and the
-# comparison. They match at the 0.05 and 0.01 percent AEPs and diverge in
-# between, by -49% at the 1.01 year and +23% near the 50 year, and 12 of the 21
-# shared ordinates put the digitized value outside the FDA 95 percent band.
-# Whichever is adopted, the uncertainty band can only be drawn around the FDA
-# curve, because it is the FDA curve those bounds belong to.
-CURVE_2009_SOURCE = "fda"
+# The HEC-FDA 2.0.2 Cowlitz study carries a DIFFERENT regulated curve for the
+# same site under "Hydrology 1 (2010)", on the same reporting grid, and it is
+# the one that has uncertainty attached. The two are not interchangeable, and
+# the reason is the operating basis.
+#
+# Ranked against the two regulated records, mean absolute error in log10:
+#
+#                      vs OBSERVED (n=51)    vs ADJUSTED, FRM only (n=41)
+#   2026 regulated        0.0748  18.8%          0.0593  14.6%
+#   2009 Table B-5        0.0819  20.8%          0.0462  11.2%
+#   2009 HEC-FDA          0.0267   6.3%          0.1040  27.1%
+#
+# Table B-5 tracks the ADJUSTED record, which is the FRM only basis this study
+# also uses, and the FDA curve tracks the OBSERVED record, which includes the
+# incidental drafting the adjustment in 5.2 exists to remove. At the 99 percent
+# AEP: 2026 gives 18,564, Table B-5 gives 21,700, FDA gives 11,000 and the
+# observed record gives about 12,600.
+#
+# So Table B-5 is the right comparison for this figure. It is the same quantity
+# on the same basis. Comparing the 2026 FRM only curve against a curve that
+# tracks historical operations would show the operating assumption, not the
+# difference between the two studies.
+CURVE_2009_SOURCE = "table"
 CURVE_2009_FDA_CSV = r"../data/fda_2009/curve_2009_regulated_fda.csv"
 
-# FDA reports its bounds at 2.5 and 97.5 percent, a 95 percent interval. The
-# memo is 90 percent everywhere else, so leaving them native puts two different
-# interval widths on one figure, which is the confusion the DQC review asked to
-# have removed. The bounds are log-symmetric about the curve to within 0.003
-# dex, so rescaling is exact rather than an approximation.
-#   "match_memo"  rescale to UNCERTAINTY_CONF_LEVEL, each side on its own sigma
-#   "native"      draw FDA's 2.5 and 97.5 percent as reported
-#   "off"         no 2009 band
-CURVE_2009_BAND = "match_memo"
+# Table B-5 is published without uncertainty. The FDA function does carry it,
+# at 2.5 and 97.5 percent off an equivalent record length of 90 years, and the
+# two curves are tabulated on the same AEP grid.
+#
+#   "fda_sigma"   TRANSFER the FDA sigma onto whichever curve is drawn, then
+#                 rescale to UNCERTAINTY_CONF_LEVEL. This is the adopted
+#                 option. It is a transfer, not the study's own stated bounds
+#                 on Table B-5, and it is defensible because the width is
+#                 driven by the 90 year record length, which is a property of
+#                 the study rather than of either curve. The bounds are
+#                 log-symmetric about the FDA curve to within 0.003 dex, so
+#                 reducing them to a sigma per ordinate loses nothing.
+#   "native"      only with CURVE_2009_SOURCE = "fda". FDA's own 95 percent.
+#   "off"         no 2009 band.
+CURVE_2009_BAND = "fda_sigma"
 
 CURVE_2009_LABEL = "2009 study, regulated"
 CURVE_2009 = [
@@ -733,48 +755,76 @@ def load_wcm_points(csv_path):
     return table.reset_index(drop=True), dropped.reset_index(drop=True)
 
 
-def curve_2009_frame():
-    """The 2009 adopted regulated curve as AEP (fraction) and cfs.
+def fda_2009_sigma():
+    """Per-ordinate log10 sigma of the 2009 curve, from the HEC-FDA bounds.
 
-    Carries lo/hi columns as well when the source is the HEC-FDA export and a
-    band is asked for. See CURVE_2009_SOURCE.
+    Returns (aep, sigma_lo, sigma_hi) or None. Each side keeps its own sigma so
+    the reported asymmetry survives the transfer.
+    """
+    if not os.path.exists(CURVE_2009_FDA_CSV):
+        return None
+    f = pd.read_csv(CURVE_2009_FDA_CSV, comment="#")
+    z_fda = stats.norm.ppf(0.975)
+    return (f["aep"].values,
+            (np.log10(f["cfs"] / f["lo_2p5"]) / z_fda).values,
+            (np.log10(f["hi_97p5"] / f["cfs"]) / z_fda).values)
+
+
+def curve_2009_frame():
+    """The 2009 regulated curve as AEP (fraction) and cfs, with a band.
+
+    Carries lo/hi columns when a band is asked for. See CURVE_2009_SOURCE for
+    why the default centre line is Table B-5 and the band is transferred.
     """
     if CURVE_2009_SOURCE == "fda":
         if not os.path.exists(CURVE_2009_FDA_CSV):
-            raise SystemExit(
-                "CURVE_2009_SOURCE = 'fda' but %s is missing. Set it to "
-                "'table' to fall back on the digitized curve."
-                % CURVE_2009_FDA_CSV)
-        fda = pd.read_csv(CURVE_2009_FDA_CSV, comment="#")
-        table = pd.DataFrame({"AEP": fda["aep"].values,
-                              "cfs": fda["cfs"].values})
-        table["AEP_pct"] = table["AEP"] * 100.0
-        if CURVE_2009_BAND != "off":
-            lo, hi = fda["lo_2p5"].values, fda["hi_97p5"].values
-            if CURVE_2009_BAND == "native":
-                table["lo"], table["hi"] = lo, hi
-                table.attrs["band_pct"] = 95
-            else:
-                # Each side keeps its own sigma, so the reported asymmetry
-                # survives the rescale instead of being averaged away.
-                z_fda = stats.norm.ppf(0.975)
-                z_ours = stats.norm.ppf(0.5 + UNCERTAINTY_CONF_LEVEL / 2.0)
-                sig_lo = np.log10(table["cfs"] / lo) / z_fda
-                sig_hi = np.log10(hi / table["cfs"]) / z_fda
-                table["lo"] = table["cfs"] * 10.0 ** (-z_ours * sig_lo)
-                table["hi"] = table["cfs"] * 10.0 ** (z_ours * sig_hi)
-                table.attrs["band_pct"] = int(
-                    round(100 * UNCERTAINTY_CONF_LEVEL))
-        print("2009      : %d ordinates from %s%s"
-              % (len(table), os.path.basename(CURVE_2009_FDA_CSV),
-                 "" if CURVE_2009_BAND == "off"
-                 else ", band at %d%%" % table.attrs["band_pct"]))
+            raise SystemExit("CURVE_2009_SOURCE = 'fda' but %s is missing."
+                             % CURVE_2009_FDA_CSV)
+        f = pd.read_csv(CURVE_2009_FDA_CSV, comment="#")
+        table = pd.DataFrame({"AEP": f["aep"].values, "cfs": f["cfs"].values})
+        source = os.path.basename(CURVE_2009_FDA_CSV)
     else:
         table = pd.DataFrame(CURVE_2009, columns=["AEP_pct", "cfs"])
         table["AEP"] = table["AEP_pct"] / 100.0
-        print("2009      : %d ordinates from the digitized CURVE_2009 table, "
-              "no band available" % len(table))
-    return table.sort_values("AEP", ascending=False).reset_index(drop=True)
+        source = "Table B-5 of the 2009 Restudy"
+    table["AEP_pct"] = table["AEP"] * 100.0
+    table = table.sort_values("AEP", ascending=False).reset_index(drop=True)
+
+    band = ""
+    if CURVE_2009_BAND == "native":
+        if CURVE_2009_SOURCE != "fda":
+            raise SystemExit(
+                "CURVE_2009_BAND = 'native' only works with "
+                "CURVE_2009_SOURCE = 'fda'. Use 'fda_sigma' to transfer the "
+                "bounds onto Table B-5.")
+        f = pd.read_csv(CURVE_2009_FDA_CSV, comment="#")
+        g = f.set_index("aep")
+        table["lo"] = g.loc[table["AEP"], "lo_2p5"].values
+        table["hi"] = g.loc[table["AEP"], "hi_97p5"].values
+        table.attrs["band_pct"] = 95
+        band = ", band at FDA's native 95%"
+    elif CURVE_2009_BAND == "fda_sigma":
+        sig = fda_2009_sigma()
+        if sig is None:
+            print("2009      : no %s, band not drawn" % CURVE_2009_FDA_CSV)
+        else:
+            aep_s, s_lo, s_hi = sig
+            # Interpolate in z, the space the curve is drawn in. The two grids
+            # are the same apart from FDA's extra 0.9999 point, so in practice
+            # this is an exact lookup.
+            z_s = stats.norm.ppf(1.0 - aep_s)
+            order = np.argsort(z_s)
+            z_t = stats.norm.ppf(1.0 - table["AEP"].values)
+            lo = np.interp(z_t, z_s[order], s_lo[order])
+            hi = np.interp(z_t, z_s[order], s_hi[order])
+            z_ours = stats.norm.ppf(0.5 + UNCERTAINTY_CONF_LEVEL / 2.0)
+            table["lo"] = table["cfs"] * 10.0 ** (-z_ours * lo)
+            table["hi"] = table["cfs"] * 10.0 ** (z_ours * hi)
+            table.attrs["band_pct"] = int(round(100 * UNCERTAINTY_CONF_LEVEL))
+            band = (", band %d%% from the FDA sigma, %.3f to %.3f dex"
+                    % (table.attrs["band_pct"], lo.min(), hi.max()))
+    print("2009      : %d ordinates from %s%s" % (len(table), source, band))
+    return table
 
 
 def interp_2009(aep, table_2009):
