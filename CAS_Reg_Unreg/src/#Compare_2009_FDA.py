@@ -95,9 +95,12 @@ FDA_CONF_LEVEL = 0.95
 
 # The appendix tables are written on the CURRENT study's AEP grid, read from
 # its own frequency table rather than restated here, so the 2009 tables sit
-# row for row beside the 2026 ones in Appendix E. Fifteen of the sixteen
-# ordinates are an exact lookup in the FDA export. Only 0.0002 is absent from
-# it and has to be interpolated, in z against log flow.
+# row for row beside the 2026 ones in Appendix E.
+#
+# An ordinate the FDA export does not carry is DROPPED rather than
+# interpolated, so every number in these tables is one the 2009 study
+# actually reported. That costs the 0.02 percent AEP row, which the FDA grid
+# skips between 0.05 and 0.01 percent.
 GRID_FROM = r"../output/freq_table_castle_rock_gage.csv"
 
 # The 2009 unregulated curve, for the Castle Rock table's Unregulated column.
@@ -238,6 +241,13 @@ def write_2009_table(key, fda, cas_fda, grid, path):
     identity the 2026 tables satisfy, so it is the local contribution the 2009
     study implies rather than anything recomputed here.
     """
+    keep = [a for a in grid
+            if np.any(np.isclose(fda["AEP"].values, a, rtol=0, atol=1e-12))]
+    dropped = [a for a in grid if a not in keep]
+    if dropped:
+        print("   %s: dropping %s, not reported by the 2009 study"
+              % (key, ", ".join("%g" % a for a in dropped)))
+    grid = np.array(keep, dtype=float)
     out = pd.DataFrame({"AEP": grid})
     out["regulated_cfs"] = at_aep(fda["AEP"], fda["cfs_2009"], grid)
     out["lower_90pct_cfs"] = at_aep(fda["AEP"], fda["lo_2009"], grid)
