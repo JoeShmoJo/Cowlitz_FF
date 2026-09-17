@@ -196,6 +196,22 @@ def build_table(fda, cur):
     return out
 
 
+def write_table(table, path):
+    """Write the appendix table with each column at its own precision.
+
+    A single float_format across the frame is wrong here: it rounds the AEP
+    column along with the flows, which turned 0.99 into 1.0 and collapsed
+    0.95 and 0.90 into the same value. AEP is written exactly and only the
+    derived columns are rounded.
+    """
+    out = table.copy()
+    for col in ("cfs_2026", "lo_2026", "hi_2026",
+                "cfs_2009", "lo_2009", "hi_2009", "diff_cfs"):
+        out[col] = out[col].round(0)
+    out["diff_pct"] = out["diff_pct"].round(1)
+    out.to_csv(path, index=False)
+
+
 def plot_location(key, pretty, table, stem):
     fig, ax = plt.subplots(figsize=FIG_SIZE)
     pct = int(round(100 * CONF_LEVEL))
@@ -272,7 +288,7 @@ def main():
         cur = read_2026(cur_csv, fcol, lcol, hcol)
         table = build_table(fda, cur)
         out_csv = os.path.join(OUT_DIR, "compare_2009_%s.csv" % key)
-        table.to_csv(out_csv, index=False, float_format="%.1f")
+        write_table(table, out_csv)
         report(pretty, table, fda)
         print("   table ", out_csv)
         plot_location(key, pretty, table,
