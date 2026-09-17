@@ -6,8 +6,12 @@
 The 2026 regulated frequency curves against the 2009 Restudy, with both
 studies' uncertainty, at every location the 2009 study exported from HEC-FDA.
 
-    output/compare_2009_<location>.csv              appendix tables
-    output/diagnostics/compare_2009_<location>.png  appendix figures
+    output/freq_table_2009_<location>.csv           appendix tables, 2009 only,
+                                                   in the same format and on
+                                                   the same AEP grid as
+                                                   freq_table_<location>.csv
+    output/diagnostics/compare_2009_<location>.png  appendix figures, both
+                                                   studies with uncertainty
 
 The Castle Rock figure is the one that goes in the main report. The other two
 are appendix only. All three are drawn the same way so they can be read
@@ -52,6 +56,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.stats import pearson3
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -88,9 +93,23 @@ CONF_LEVEL = 0.90
 # What FDA reported, so the rescale knows what it is undoing.
 FDA_CONF_LEVEL = 0.95
 
-# Only these AEPs go in the appendix tables. The full grid is in the CSVs.
-TABLE_AEPS = [0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005,
-              0.0001]
+# The appendix tables are written on the CURRENT study's AEP grid, read from
+# its own frequency table rather than restated here, so the 2009 tables sit
+# row for row beside the 2026 ones in Appendix E. Fifteen of the sixteen
+# ordinates are an exact lookup in the FDA export. Only 0.0002 is absent from
+# it and has to be interpolated, in z against log flow.
+GRID_FROM = r"../output/freq_table_castle_rock_gage.csv"
+
+# The 2009 unregulated curve, for the Castle Rock table's Unregulated column.
+# log10 mean, log10 standard deviation, skew, for the peak. These are the same
+# 2009 moments STATS_2009 in CAS_Unreg_FF/src/Frequency_Curves_And_Table.py
+# uses to draw Figure 6-1, restated here because that script runs on import
+# and cannot be imported. It is the COMPUTED curve, which is the side Section
+# 6.1 compares on. Keep the two in step if either changes.
+STATS_2009_PEAK = (4.777, 0.197, 0.193)
+
+# Console summary only. The written tables use the full grid above.
+REPORT_AEPS = [0.5, 0.1, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0001]
 
 AEP_TICKS = [0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005,
              0.002, 0.001]
@@ -196,20 +215,47 @@ def build_table(fda, cur):
     return out
 
 
-def write_table(table, path):
-    """Write the appendix table with each column at its own precision.
+def table_grid():
+    """The current study's AEP grid, so the two appendix sets line up."""
+    if not os.path.exists(GRID_FROM):
+        raise SystemExit("cannot read the AEP grid from %s" % GRID_FROM)
+    return pd.read_csv(GRID_FROM)["AEP"].values
 
-    A single float_format across the frame is wrong here: it rounds the AEP
-    column along with the flows, which turned 0.99 into 1.0 and collapsed
-    0.95 and 0.90 into the same value. AEP is written exactly and only the
-    derived columns are rounded.
+
+def unreg_2009(aep):
+    """The 2009 computed unregulated peak curve from its LP3 moments."""
+    mean, std, skew = STATS_2009_PEAK
+    return 10.0 ** (mean + pearson3.ppf(1.0 - np.asarray(aep, dtype=float),
+                                        skew) * std)
+
+
+def write_2009_table(key, fda, cas_fda, grid, path):
+    """The 2009 curve in the Appendix E format the 2026 tables use.
+
+    Castle Rock carries an Unregulated column and the downstream locations
+    carry Local, matching freq_table_*.csv exactly. Local is the downstream
+    regulated flow minus the Castle Rock regulated flow, which is the same
+    identity the 2026 tables satisfy, so it is the local contribution the 2009
+    study implies rather than anything recomputed here.
     """
-    out = table.copy()
-    for col in ("cfs_2026", "lo_2026", "hi_2026",
-                "cfs_2009", "lo_2009", "hi_2009", "diff_cfs"):
-        out[col] = out[col].round(0)
-    out["diff_pct"] = out["diff_pct"].round(1)
+    out = pd.DataFrame({"AEP": grid})
+    out["regulated_cfs"] = at_aep(fda["AEP"], fda["cfs_2009"], grid)
+    out["lower_90pct_cfs"] = at_aep(fda["AEP"], fda["lo_2009"], grid)
+    out["upper_90pct_cfs"] = at_aep(fda["AEP"], fda["hi_2009"], grid)
+    if key == "castle_rock_gage":
+        first = ("unregulated_cfs", unreg_2009(grid))
+    else:
+        first = ("local_cfs",
+                 out["regulated_cfs"].values
+                 - at_aep(cas_fda["AEP"], cas_fda["cfs_2009"], grid))
+    out.insert(1, first[0], first[1])
+    for c in out.columns:
+        if c != "AEP":
+            out[c] = out[c].round(0)
     out.to_csv(path, index=False)
+    n = int(out["regulated_cfs"].notna().sum())
+    print("   table  %s  (%d of %d ordinates)" % (path, n, len(grid)))
+    return out
 
 
 def plot_location(key, pretty, table, stem):
@@ -260,7 +306,7 @@ def report(pretty, table, fda):
           % (lo, hi, fda.attrs["asymmetry_dex"]))
     print("   %-8s %11s %11s %9s %8s  %s"
           % ("AEP", "2026", "2009", "diff", "diff %", "bands"))
-    for aep in TABLE_AEPS:
+    for aep in REPORT_AEPS:
         m = sub[np.isclose(sub["AEP"], aep)]
         if not len(m):
             continue
@@ -283,14 +329,15 @@ def main():
             os.makedirs(d)
     print("2009 HEC-FDA against the 2026 curves, %d percent bands on both"
           % int(round(100 * CONF_LEVEL)))
+    grid = table_grid()
+    cas_fda = read_fda(LOCATIONS[0][2])
     for key, pretty, fda_csv, cur_csv, fcol, lcol, hcol in LOCATIONS:
         fda = read_fda(fda_csv)
         cur = read_2026(cur_csv, fcol, lcol, hcol)
         table = build_table(fda, cur)
-        out_csv = os.path.join(OUT_DIR, "compare_2009_%s.csv" % key)
-        write_table(table, out_csv)
         report(pretty, table, fda)
-        print("   table ", out_csv)
+        write_2009_table(key, fda, cas_fda, grid,
+                         os.path.join(OUT_DIR, "freq_table_2009_%s.csv" % key))
         plot_location(key, pretty, table,
                       os.path.join(DIAG_DIR, "compare_2009_%s.png" % key))
 
