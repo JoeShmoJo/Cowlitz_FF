@@ -190,6 +190,70 @@ UNREG_FREQ_CSV = r"../../CAS_Unreg_FF/output/CAS_Unreg_frequency_table.csv"
 # Screening authority. Any water year not marked eligible here is dropped, even
 # if it is present in DATASET_CSV -- that file can be stale.
 ADJUSTED_PEAKS_CSV = r"../output/adjusted_peaks.csv"
+# The screened, SSP-ready adjusted regulated record. Plotted as points on the
+# adopted figure at median plotting positions -- DQC comment on Figure 5-5.
+ADJUSTED_PEAKS_SSP_CSV = r"../output/adjusted_peaks_ssp.csv"
+FINAL_SHOW_ADJUSTED_POINTS = True
+# The full unregulated record, used to place the adjusted regulated peaks on
+# the frequency axis.
+#
+# HOW THE ADJUSTED REGULATED PEAKS ARE PLACED ON THE FREQUENCY AXIS
+#     The DQC reviewer asked for these points to be ranked so they increase
+#     continuously, instead of each sitting at its own water year's AEP. That
+#     is the convention and it is adopted. The only question is which record
+#     length the plotting positions come from.
+#
+#     "ranked_unreg_positions" (adopted). The regulated curve has no
+#     probability axis of its own: every ordinate is transform(unreg(p)), so
+#     it inherits the 95 year unregulated record's axis. The 41 usable water
+#     years hold 41 known plotting positions in that record. The adjusted
+#     peaks are sorted largest first and given those positions in the same
+#     order. Nothing is fitted and no value changes; the largest regulated
+#     peak takes the position of the largest unregulated year among the 41,
+#     and so on down. Median observed over curve about 0.99, 17 of 41 above.
+#
+#     "assessed_span". Ranked among themselves over the 51 assessed water
+#     years, WY1974 to WY2024. The literal reading of the request. The cloud
+#     sits above the curve (about 1.05, 33 of 41 above) because that window
+#     is a flood rich slice of the record: nine of the ten largest unregulated
+#     years fall inside it, and its median unregulated peak is 72,455 cfs
+#     against 61,703 cfs for the full record. Anything ranked inside the
+#     window plots above a curve fitted to the full record, the unregulated
+#     peaks of the same years included (about 1.16, 43 of 51 above). Kept as
+#     a diagnostic; src/#Fig58_Placement_Options.py draws the comparison.
+#
+#     "unreg_record". Each peak at its own water year's position, paired by
+#     year. Centred (about 1.03) but not monotone. The version the reviewer
+#     objected to. Diagnostic only.
+#
+#     "usable_count". Ranked over the 41 usable values alone. Hands the
+#     largest value a 59 year return interval inside a 51 year window. Not
+#     recommended.
+#
+#     CAVEAT worth carrying forward. The window effect is confounded with a
+#     method change. WY1927 to WY1968 are observed USGS pre regulation peaks
+#     with a median of 53,850 cfs, while WY1974 on are reconstructed, with a
+#     median of 72,455 cfs. There are no overlap years, so the two cannot be
+#     compared directly. The step may be climate, reconstruction bias, or
+#     both. It does not change the plotting position choice, because the
+#     curve and the points are placed from the same record.
+ADJUSTED_PP_BASIS = "ranked_unreg_positions"
+ADJUSTED_PEAKS_ALL_CSV = r"../output/adjusted_peaks.csv"
+
+FULL_UNREG_RECORD_CSV = r"../../CAS_Unreg_FF/output/wy_record_ssp.csv"
+FULL_UNREG_WY_COL = "WY"
+FULL_UNREG_PEAK_COL = "Peak"
+# Plot the unregulated record on the adopted figure as well, in the unregulated
+# colour, at the same plotting positions. Both records then sit on the figure
+# on a common basis.
+#   "full"             the whole 95 year record ranked among itself, as
+#                      HEC-SSP draws it (adopted)
+#   "assessed_window"  the WY1974 to WY2024 unregulated peaks ranked among
+#                      themselves. Diagnostic only: it makes the unregulated
+#                      curve look like a poor fit to its own data, which is
+#                      the window effect and not the curve.
+FINAL_SHOW_UNREG_POINTS = True
+FINAL_UNREG_POINTS_BASIS = "full"
 ENFORCE_SCREENING = True
 
 # Historic simulated pairs from the WCM_RC run, written by
@@ -306,14 +370,18 @@ CURVE_2009 = [
 PLOTTING_BASIS = "from_curve"
 
 # SSP-style frequency axis
-AEP_TICKS = [0.999, 0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02,
+AEP_TICKS = [0.99, 0.95, 0.9, 0.8, 0.5, 0.2, 0.1, 0.05, 0.02,
              0.01, 0.005, 0.002, 0.001]
-AEP_LIMITS = (0.999, 0.0005)
+AEP_LIMITS = (0.99, 0.001)
+# Return intervals below 2 years are not labelled -- DQC comment on Figure 6-1.
+MIN_LABELLED_RETURN_INTERVAL = 2.0
 FLOW_LIMITS = (10000.0, 400000.0)
 
 # Colours kept in one place so the scatter and the frequency plot agree.
 C_UNREG = "#2c7fb8"
 C_REG = "#c0392b"
+# DQC: the unadjusted WCM_RC pairs are off by default.
+SHOW_WCM_PAIRS = False
 C_WCM = "#7d3c98"          # WCM_RC simulated pairs -- deliberately distinct
 C_SYNTH = "#d68910"        # routed synthetic members
 C_2009 = "#117a65"
@@ -341,11 +409,17 @@ FREQ_LIMIT_BASE_COL = "Value"
 FREQ_VARIANCE_COL = "VarianceLog"
 FREQ_SIGMA_CHECK_TOL = 0.15
 
-# What the FINAL combined band spans. 0.95 (97.5%/2.5%) per the reviewer's
-# formula and EM 1110-2-1619 Sec 4-4.c(1): "the range created by the mean plus
-# and minus two standard deviations spans 95% of the probability" -- the EM's
-# own rounded z=2 convention for a 95% two-sided band; this script uses the
-# exact z=1.960 (norm.ppf(0.975)) rather than the rounded 2.
+# What the FINAL combined band spans. 0.90 two-sided -> 5% in each tail, so the
+# bounds ARE the 5th and 95th percentiles and can be labelled that way. This
+# matches HEC-SSP's own reporting convention and the DQC review, which asked
+# for both bounds named from the same reference point.
+#
+# It was 0.95 (z=1.960, 2.5%/97.5%) up to Sep 2026, on EM 1110-2-1619 Sec
+# 4-4.c(1) ("mean plus and minus two standard deviations spans 95% of the
+# probability"). That is still a defensible level; the band was changed to 90%
+# so the reported limits agree with the 5%/95% labels rather than the labels
+# being adjusted to fit a 95% band. Everything below is driven off this one
+# constant -- do not relabel a column without changing it here.
 #
 # This is the ONLY confidence level that matters for the combination itself.
 # Each SOURCE below (frequency, transform) is first reduced to its own proper
@@ -355,7 +429,7 @@ FREQ_SIGMA_CHECK_TOL = 0.15
 # own levels" against each other -- that would only be valid if every source
 # happened to share the same z, and 90% (SSP's native reporting) and whatever
 # level the transform scatter is estimated at are not guaranteed to match.
-UNCERTAINTY_CONF_LEVEL = 0.95
+UNCERTAINTY_CONF_LEVEL = 0.90
 #   "prediction" : full scatter about the transform -- the next flood of this
 #                  size could have any observed shape. The design question.
 #   "mean"       : scatter / sqrt(n), the uncertainty of the fitted line only.
@@ -472,7 +546,7 @@ FINAL_SHOW_FORMULA_NOTE = False
 # Frequency axis for THIS figure only. The global AEP_LIMITS starts at 0.999,
 # which leaves a wide empty strip on the left because no curve is plotted
 # beyond 0.99. Kept separate so the diagnostic plots are not moved with it.
-FINAL_AEP_LIMITS = (0.99, 0.0005)
+FINAL_AEP_LIMITS = (0.99, 0.001)
 
 # ----------------------------------------------------------------------------
 
@@ -587,8 +661,8 @@ def transform_label(fit):
         p = fit["power"]
         return ("Power law: reg = %.4g x unreg$^{%.3f}$  (r$^2$=%.3f)"
                 % (p["a"], p["b"], p["r2"]))
-    return ("LOESS centre of mass (span %.2f, r$^2$=%.3f)"
-            % (fit["span"], fit["r2"]))
+    return ("LOESS (locally estimated scatterplot smoothing) center of mass\n"
+            "(span %.2f, r$^2$=%.3f)" % (fit["span"], fit["r2"]))
 
 
 def load_eligible_wys(csv_path):
@@ -773,7 +847,10 @@ def plot_scatter(data, fit, wcm, synth, stem):
 
         lo = [x.min(), y.min()]
         hi = [x.max(), y.max()]
-        if wcm is not None and len(wcm):
+        # The unadjusted WCM_RC pairs were drawn here as purple diamonds. They
+        # are not part of the fit and the DQC review asked for them out, so
+        # they are only plotted if explicitly switched back on.
+        if SHOW_WCM_PAIRS and wcm is not None and len(wcm):
             ax.scatter(wcm["unreg_peak"], wcm["reg_peak"], s=30, marker="D",
                        facecolor="none", edgecolor=C_WCM, lw=0.9, zorder=2,
                        label="Unadjusted%s)"
@@ -836,12 +913,28 @@ def plot_scatter(data, fit, wcm, synth, stem):
 
 
 def probability_axis(ax, ticks, limits):
-    """SSP-style normal-probability axis, AEP decreasing to the right."""
-    z_ticks = stats.norm.ppf(1.0 - np.array(ticks))
+    """SSP-style normal-probability axis, AEP decreasing to the right.
+
+    Return interval on the bottom, annual exceedance probability across the
+    top -- the same arrangement the below-confluence figures use, so the two
+    sets of curves can be read against each other. Return intervals shorter
+    than two years are left unlabelled.
+    """
+    ticks = list(ticks)
     ax.set_xlim(stats.norm.ppf(1.0 - limits[0]), stats.norm.ppf(1.0 - limits[1]))
-    ax.xaxis.set_major_locator(FixedLocator(z_ticks))
-    ax.set_xticklabels(["%g" % (t * 100) for t in ticks])
-    ax.set_xlabel("Annual exceedance probability (%)")
+
+    ri_ticks = [t for t in ticks if 1.0 / t >= MIN_LABELLED_RETURN_INTERVAL]
+    ax.xaxis.set_major_locator(FixedLocator(stats.norm.ppf(1.0 - np.array(ri_ticks))))
+    ax.set_xticklabels(["%g" % (1.0 / t) for t in ri_ticks], rotation=45,
+                       fontsize=8)
+    ax.set_xlabel("Return interval (years)")
+
+    top = ax.twiny()
+    top.set_xlim(ax.get_xlim())
+    top.xaxis.set_major_locator(FixedLocator(stats.norm.ppf(1.0 - np.array(ticks))))
+    top.set_xticklabels(["%g" % (t * 100) for t in ticks], rotation=45,
+                        fontsize=8)
+    top.set_xlabel("Annual exceedance probability (%)")
 
 
 def aep_from_unreg_curve(values, unreg_curve, aep_values):
@@ -1166,8 +1259,8 @@ def combine_uncertainty(freq, fit, reg_curve):
         Upper = RegBest + sqrt((Unreg_hi - Unreg_best)^2 + (Transform_hi - Transform_best)^2)
         Lower = RegBest - sqrt((Unreg_best - Unreg_lo)^2 + (Transform_best - Transform_lo)^2)
 
-    at UNCERTAINTY_CONF_LEVEL (0.95 two-sided -> 97.5%/2.5%, per the reviewer's
-    own example), with each side's sigma kept separate (EM 1110-2-1619 sec
+    at UNCERTAINTY_CONF_LEVEL (0.90 two-sided -> 5%/95%), with each side's
+    sigma kept separate (EM 1110-2-1619 sec
     4-4.c(1)/4-6a: upper half and lower half both treated as Normal, each with
     its own standard deviation, rather than assuming one symmetric sigma).
 
@@ -1546,6 +1639,110 @@ def write_monte_carlo_report(mc, out_path):
         f.write("\n".join(lines) + "\n")
 
 
+def median_plotting_positions(values):
+    """Median plotting position, the HEC-SSP default: (i - 0.3) / (n + 0.4),
+    with i = 1 for the largest value. Returns (aep, sorted_values)."""
+    v = np.sort(np.asarray(values, dtype=float))[::-1]
+    n = len(v)
+    i = np.arange(1, n + 1)
+    return (i - 0.3) / (n + 0.4), v
+
+
+def load_full_unreg_points():
+    """The full unregulated record at its own plotting positions."""
+    if not os.path.exists(FULL_UNREG_RECORD_CSV):
+        return None, None
+    full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+        [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+    v = np.sort(full[FULL_UNREG_PEAK_COL].values.astype(float))[::-1]
+    n = len(v)
+    aep = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
+    return aep, v
+
+
+def load_window_unreg_points():
+    """The unregulated peaks of the assessed regulated window, WY1974 to
+    WY2024, ranked among themselves at median plotting positions. The control
+    for the ranked adjusted peaks: same window, same ranking."""
+    if not (os.path.exists(FULL_UNREG_RECORD_CSV)
+            and os.path.exists(ADJUSTED_PEAKS_ALL_CSV)):
+        return None, None, None
+    allwy = pd.read_csv(ADJUSTED_PEAKS_ALL_CSV)["WY"].dropna().astype(int)
+    lo, hi = int(allwy.min()), int(allwy.max())
+    full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+        [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+    win = full[(full[FULL_UNREG_WY_COL] >= lo) & (full[FULL_UNREG_WY_COL] <= hi)]
+    aep, v = median_plotting_positions(win[FULL_UNREG_PEAK_COL].values)
+    print("   unregulated points: %d values of WY%d to WY%d ranked among "
+          "themselves" % (len(v), lo, hi))
+    return aep, v, (lo, hi)
+
+
+def load_adjusted_points(path):
+    """The screened adjusted regulated peaks placed on the frequency axis.
+
+    See ADJUSTED_PP_BASIS for why the adopted basis is not a self ranking.
+    Returns (aep, values) with the two arrays already paired element by
+    element, so the caller must not sort either one.
+    """
+    if not os.path.exists(path):
+        return None, None
+    d = pd.read_csv(path)
+    col = "adjusted_peak" if "adjusted_peak" in d.columns else d.columns[-1]
+    d = d[pd.to_numeric(d[col], errors="coerce").notna()].copy()
+    d[col] = pd.to_numeric(d[col], errors="coerce")
+    if not len(d):
+        return None, None
+
+    if ADJUSTED_PP_BASIS in ("unreg_record", "ranked_unreg_positions"):
+        if not os.path.exists(FULL_UNREG_RECORD_CSV) or "WY" not in d.columns:
+            raise SystemExit(
+                "ADJUSTED_PP_BASIS = '%s' needs %s and a WY column "
+                "in %s" % (ADJUSTED_PP_BASIS, FULL_UNREG_RECORD_CSV, path))
+        full = pd.read_csv(FULL_UNREG_RECORD_CSV)[
+            [FULL_UNREG_WY_COL, FULL_UNREG_PEAK_COL]].dropna()
+        full = full.sort_values(FULL_UNREG_PEAK_COL, ascending=False)
+        full = full.reset_index(drop=True)
+        n = len(full)
+        full["aep"] = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
+        m = d.merge(full[[FULL_UNREG_WY_COL, "aep"]],
+                    left_on="WY", right_on=FULL_UNREG_WY_COL, how="left")
+        missing = m["aep"].isna().sum()
+        if missing:
+            raise SystemExit(
+                "%d adjusted water years are absent from the unregulated "
+                "record %s, so they cannot be placed: %s"
+                % (missing, FULL_UNREG_RECORD_CSV,
+                   list(m.loc[m["aep"].isna(), "WY"].astype(int))))
+        if ADJUSTED_PP_BASIS == "ranked_unreg_positions":
+            # Sorted peaks paired with the sorted positions of the same water
+            # years: monotone, on the curve's own axis, no value changed.
+            print("   adjusted peaks: %d values ranked, at the plotting "
+                  "positions their water years hold in the %d year "
+                  "unregulated record" % (len(m), n))
+            return (np.sort(m["aep"].values),
+                    np.sort(m[col].values.astype(float))[::-1])
+        print("   adjusted peaks: %d values placed at the plotting position "
+              "each water year holds in the %d year unregulated record"
+              % (len(m), n))
+        return m["aep"].values, m[col].values
+
+    v = np.sort(d[col].values.astype(float))[::-1]
+    n = len(v)
+    if ADJUSTED_PP_BASIS == "assessed_span" and os.path.exists(ADJUSTED_PEAKS_ALL_CSV):
+        allwy = pd.read_csv(ADJUSTED_PEAKS_ALL_CSV)["WY"].dropna().astype(int)
+        span = int(allwy.max() - allwy.min() + 1)
+        if span >= len(v):
+            n = span
+            print("   adjusted peaks: %d usable values ranked over the %d year "
+                  "assessed record, WY%d to WY%d"
+                  % (len(v), n, allwy.min(), allwy.max()))
+    if n == len(v):
+        print("   adjusted peaks: %d values ranked among themselves" % n)
+    aep = (np.arange(1, len(v) + 1) - 0.3) / (n + 0.4)
+    return aep, v
+
+
 def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
     """THE adopted figure: both curves with the combined uncertainty band.
 
@@ -1571,6 +1768,32 @@ def plot_final_uncertainty(freq, fit, unc, reg_curve, table_2009, stem):
         ax.plot(stats.norm.ppf(1.0 - table_2009["AEP"].values),
                 table_2009["cfs"].values, color=C_2009, lw=1.7, ls="--",
                 zorder=4, label=CURVE_2009_LABEL)
+
+    if FINAL_SHOW_UNREG_POINTS:
+        if FINAL_UNREG_POINTS_BASIS == "assessed_window":
+            aep_u, v_u, span = load_window_unreg_points()
+            label_u = "Unregulated peaks, WY%d to WY%d ranked (n=%d)" % (
+                span[0], span[1], len(v_u)) if aep_u is not None else None
+        else:
+            aep_u, v_u = load_full_unreg_points()
+            label_u = "Unregulated record (n=%d)" % len(v_u) if aep_u is not None else None
+        if aep_u is not None:
+            ax.plot(stats.norm.ppf(1.0 - aep_u), v_u, ls="none", marker="o",
+                    ms=4.0, mfc="none", mew=1.0, color=C_UNREG, zorder=6,
+                    label=label_u)
+
+    if FINAL_SHOW_ADJUSTED_POINTS:
+        aep_pts, v_pts = load_adjusted_points(ADJUSTED_PEAKS_SSP_CSV)
+        if aep_pts is not None:
+            ax.plot(stats.norm.ppf(1.0 - aep_pts), v_pts, ls="none",
+                    marker="o", ms=4.5, mfc="none", mew=1.1, color=C_REG,
+                    zorder=6,
+                    label=("Adjusted regulated peaks, WY1974 to WY2024 ranked "
+                           "(n=%d of 51)" % len(v_pts)
+                           if ADJUSTED_PP_BASIS == "assessed_span"
+                           else "Adjusted regulated peaks, ranked (n=%d)" % len(v_pts)
+                           if ADJUSTED_PP_BASIS == "ranked_unreg_positions"
+                           else "Adjusted regulated peaks (n=%d)" % len(v_pts)))
 
     if FINAL_SHOW_SUPPORT_MARKER:
         supported = unreg_curve <= fit["x_max"]

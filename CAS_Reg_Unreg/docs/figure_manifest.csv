@@ -1,0 +1,20 @@
+figure,source,script,note
+Figure 2-1,-,-,basin map supplied by hand
+Figure 4-1,../../CAS_Unreg_FF/output/diagnostics/peakdiff_storage_regression.png,CAS_Unreg_FF/src/PeakDiff_Storage_Regression.py,
+Figure 4-2,../../CAS_Unreg_FF/output/CAS_Unreg_2026_frequency.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
+Figure 5-1,-,-,ResSim flood validation 1996 supplied by hand
+Figure 5-2,-,-,ResSim flood validation 2009 supplied by hand
+Figure 5-3,-,-,ResSim flood validation 2015 supplied by hand
+Figure 5-4,../output/diagnostics/critical_duration_adjusted_scatter.png,CAS_Reg_Unreg/src/#Critical_Duration_Adjusted.py,
+Figure 5-5,../output/diagnostics/ensemble_synthetic_events_overlay.png,CAS_Reg_Unreg/src/#Create_Synthetic_Ensembles.py,PLOTS_ONLY must stay True
+Figure 5-6,../output/diagnostics/ensemble_synthetic_event_single.png,CAS_Reg_Unreg/src/#Create_Synthetic_Ensembles.py,PLOTS_ONLY must stay True
+Figure 5-7,../output/diagnostics/transform_convergence.png,CAS_Reg_Unreg/src/#Transform_Convergence_Figure.py,
+Figure 5-8,../output/diagnostics/unreg_reg_final_uncertainty.png,CAS_Reg_Unreg/src/#Unreg_Reg_Curve.py,
+Figure 6-1,../../CAS_Unreg_FF/output/CAS_Unreg_2009_vs_2026.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
+Figure 6-2,../output/diagnostics/unreg_reg_final_curves.png,CAS_Reg_Unreg/src/#Unreg_Reg_Curve.py,name says final_curves but it carries the 2009 comparison
+Figure 7-1,../output/diagnostics/coweeman_historic_peak_ratio.png,CAS_Reg_Unreg/src/#Coweeman_HistoricPeakRatio.py,
+Figure 7-2,../output/diagnostics/below_confluence_frequency.png,CAS_Reg_Unreg/src/#BelowConfluence_FlowFrequency.py,
+Figure C-1,../../CAS_Unreg_FF/output/CAS_Unreg_freq_Peak.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
+Figure C-2,../../CAS_Unreg_FF/output/CAS_Unreg_freq_1-Day.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
+Figure C-3,../../CAS_Unreg_FF/output/CAS_Unreg_freq_3-Day.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
+Figure C-4,../../CAS_Unreg_FF/output/CAS_Unreg_freq_5-Day.png,CAS_Unreg_FF/src/Frequency_Curves_And_Table.py,
